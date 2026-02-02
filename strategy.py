@@ -400,8 +400,17 @@ class TradingStrategy:
             self.state.size = qty
             self.state.direction = Direction.LONG.value
             self.state.entry_time = datetime.now(timezone.utc).isoformat()
-            self.state.phase = Phase.SURVIVAL.value
-            self.state.stop_loss = last_30m_st
+            
+            # 推断当前持仓的阶段 (智能恢复，用于程序重启后恢复状态)
+            # 如果当前止损接近 1H ST，说明已是换轨期；否则先从生存期开始
+            if abs(position.get('entry_price', 0) - last_1h_st) < abs(position.get('entry_price', 0) - last_30m_st):
+                # 1H ST 更接近，说明已在换轨期
+                self.state.phase = Phase.HOURLY.value
+                self.state.stop_loss = last_1h_st
+            else:
+                self.state.phase = Phase.SURVIVAL.value
+                self.state.stop_loss = last_30m_st
+            
             save_state(self.state)
         
         # 判断离场信号（根据阶段看不同周期）
@@ -454,8 +463,18 @@ class TradingStrategy:
             self.state.size = qty
             self.state.direction = Direction.SHORT.value
             self.state.entry_time = datetime.now(timezone.utc).isoformat()
-            self.state.phase = Phase.SURVIVAL.value
-            self.state.stop_loss = last_30m_st
+            
+            # 推断当前持仓的阶段 (智能恢复，用于程序重启后恢复状态)
+            # 如果当前止损接近 1H ST，说明已是换轨期；否则先从生存期开始
+            api_stop = position.get('entry_price', entry_price)  # API 中的 entry_price 当做参考
+            if abs(position.get('entry_price', 0) - last_1h_st) < abs(position.get('entry_price', 0) - last_30m_st):
+                # 1H ST 更接近，说明已在换轨期
+                self.state.phase = Phase.HOURLY.value
+                self.state.stop_loss = last_1h_st
+            else:
+                self.state.phase = Phase.SURVIVAL.value
+                self.state.stop_loss = last_30m_st
+            
             save_state(self.state)
         
         # 判断离场信号（根据阶段看不同周期）
