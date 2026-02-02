@@ -15,7 +15,7 @@ class TelegramNotifier:
         self.chat_id = chat_id or os.getenv('TELEGRAM_CHAT_ID')
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
         
-    def send(self, message: str, parse_mode: str = "HTML") -> bool:
+    def send(self, message: str, parse_mode: Optional[str] = "HTML") -> bool:
         """
         发送消息到 Telegram
         
@@ -34,9 +34,12 @@ class TelegramNotifier:
         payload = {
             "chat_id": self.chat_id,
             "text": message,
-            "parse_mode": parse_mode,
             "disable_web_page_preview": True
         }
+
+        # Only include parse_mode when explicitly provided and not None
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
         
         try:
             resp = requests.post(url, json=payload, timeout=10)
@@ -55,7 +58,7 @@ class TelegramNotifier:
         将信号格式转换为 Telegram 友好格式
         """
         # 转义 HTML 特殊字符（如果需要）
-        # 目前信号已经是纯文本，直接发送
+        # 目前信号已经是纯文本，直接发送（不指定 parse_mode）
         return self.send(signal_message, parse_mode=None)
 
 

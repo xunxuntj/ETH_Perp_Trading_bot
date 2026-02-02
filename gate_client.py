@@ -112,12 +112,45 @@ class GateClient:
         resp = self.session.get(full_url, headers=headers)
         resp.raise_for_status()
         data = resp.json()
-        
-        return {
-            'total': float(data.get('total', 0)),
-            'available': float(data.get('available', 0)),
-            'unrealised_pnl': float(data.get('unrealised_pnl', 0))
-        }
+
+        # Gate.io may return a list of account entries (one per currency),
+        # e.g. [{"currency":"USDT","total":"100.0","available":"50.0",...}, ...]
+        # Handle both list and dict responses robustly.
+        def _safe_float(value):
+            try:
+                return float(value or 0)
+            except Exception:
+                return 0.0
+
+        if isinstance(data, list):
+            # prefer USDT entry; fall back to first entry
+            entry = None
+            for item in data:
+                if str(item.get('currency', '')).upper() in ('USDT', 'USD'):
+                    entry = item
+                    break
+            if entry is None and len(data) > 0:
+                entry = data[0]
+
+            if entry:
+                return {
+                    'total': _safe_float(entry.get('total', 0)),
+                    'available': _safe_float(entry.get('available', 0)),
+                    'unrealised_pnl': _safe_float(entry.get('unrealised_pnl', 0))
+                }
+            else:
+                return {'total': 0.0, 'available': 0.0, 'unrealised_pnl': 0.0}
+
+        # If it's a dict, try to parse fields directly
+        if isinstance(data, dict):
+            return {
+                'total': _safe_float(data.get('total', 0)),
+                'available': _safe_float(data.get('available', 0)),
+                'unrealised_pnl': _safe_float(data.get('unrealised_pnl', 0))
+            }
+
+        # Unknown shape
+        return {'total': 0.0, 'available': 0.0, 'unrealised_pnl': 0.0}
     
     def get_ticker(self, contract: str) -> dict:
         """获取最新价格"""
