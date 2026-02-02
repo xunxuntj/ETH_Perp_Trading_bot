@@ -185,6 +185,14 @@ class TradingStrategy:
                 equity += account.get('unrealised_pnl', 0.0)
         else:
             equity = 500  # 默认值（当 API 请求失败时）
+        # Debug output for CI/action runs when GATE_DEBUG set
+        if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
+            try:
+                print(f"[STRATEGY DEBUG] account={account}")
+                print(f"[STRATEGY DEBUG] position={position}")
+                print(f"[STRATEGY DEBUG] computed equity (available + unrealised if pos): {equity}")
+            except Exception:
+                pass
         
         # 风控检查
         risk = get_risk_amount(equity)

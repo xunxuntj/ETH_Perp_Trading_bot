@@ -9,15 +9,18 @@ import hmac
 import requests
 from typing import Optional
 import pandas as pd
+import os
 
 BASE_URL = "https://api.gateio.ws/api/v4"
 
 
 class GateClient:
-    def __init__(self, api_key: str = "", api_secret: str = ""):
+    def __init__(self, api_key: str = "", api_secret: str = "", debug: bool = False):
         self.api_key = api_key
         self.api_secret = api_secret
         self.session = requests.Session()
+        # Enable debug if parameter True or environment variable GATE_DEBUG is set
+        self.debug = bool(debug or os.getenv('GATE_DEBUG'))
     
     def _sign(self, method: str, url: str, query_string: str = "", body: str = "") -> dict:
         """生成签名请求头"""
@@ -37,6 +40,7 @@ class GateClient:
             "SIGN": sign,
             "Content-Type": "application/json"
         }
+
     
     def get_candlesticks(self, contract: str, interval: str = "30m", limit: int = 300) -> pd.DataFrame:
         """
@@ -82,6 +86,11 @@ class GateClient:
         
         headers = self._sign("GET", url_path, "", "")
         resp = self.session.get(full_url, headers=headers)
+        if self.debug:
+            try:
+                print(f"[GATE DEBUG] GET {full_url} status={resp.status_code} text={resp.text[:1000]}")
+            except Exception:
+                pass
         
         if resp.status_code == 404:
             return None
@@ -110,8 +119,34 @@ class GateClient:
         
         headers = self._sign("GET", url_path, "", "")
         resp = self.session.get(full_url, headers=headers)
+        # Debug: print request/response info to trace behavior in CI/actions
+        if self.debug:
+            try:
+                text = resp.text
+            except Exception:
+                text = '<no-text>'
+            # mask sensitive header values for printing
+            masked_headers = headers.copy()
+            if 'KEY' in masked_headers and masked_headers['KEY']:
+                masked_headers['KEY'] = masked_headers['KEY'][:4] + '...'
+            if 'SIGN' in masked_headers and masked_headers['SIGN']:
+                masked_headers['SIGN'] = masked_headers['SIGN'][:6] + '...'
+            print(f"[GATE DEBUG] GET {full_url} headers={masked_headers} status={resp.status_code}")
+            print(f"[GATE DEBUG] resp.text (first 1000 chars): {text[:1000]}")
+
         resp.raise_for_status()
-        data = resp.json()
+
+        try:
+            data = resp.json()
+        except Exception as e:
+            # If JSON decoding fails, log raw text for debugging and re-raise
+            if self.debug:
+                print(f"[GATE DEBUG] Failed to parse JSON: {e}")
+                try:
+                    print(f"[GATE DEBUG] resp.text full: {resp.text}")
+                except Exception:
+                    pass
+            raise
 
         # Gate.io may return a list of account entries (one per currency),
         # e.g. [{"currency":"USDT","total":"100.0","available":"50.0",...}, ...]
@@ -139,6 +174,8 @@ class GateClient:
                     'unrealised_pnl': _safe_float(entry.get('unrealised_pnl', 0))
                 }
             else:
+                if self.debug:
+                    print("[GATE DEBUG] get_account: no entry found in list response")
                 return {'total': 0.0, 'available': 0.0, 'unrealised_pnl': 0.0}
 
         # If it's a dict, try to parse fields directly
@@ -150,6 +187,8 @@ class GateClient:
             }
 
         # Unknown shape
+        if self.debug:
+            print(f"[GATE DEBUG] get_account: unknown response shape: {type(data)}")
         return {'total': 0.0, 'available': 0.0, 'unrealised_pnl': 0.0}
     
     def get_ticker(self, contract: str) -> dict:
