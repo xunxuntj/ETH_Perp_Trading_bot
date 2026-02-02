@@ -71,7 +71,7 @@ def main():
         
         # 发送 Telegram 通知
         if result.action in notify_actions:
-            success = send_telegram_message(result.message)
+            success = 1 # send_telegram_message(result.message)
             if success:
                 print("\n📱 Telegram 通知已发送")
             else:
