@@ -167,16 +167,24 @@ class TradingStrategy:
         # 获取账户和持仓
         try:
             account = self.client.get_account()
-            # 在全仓模式下，available 是可用余额（扣除已占用保证金）
-            # 用于计算当前可开仓的金额；total 包含已冻结和未实现盈亏
-            equity = account['available']
         except:
-            equity = 500  # 默认值
-        
+            account = None
+
         try:
             position = self.client.get_positions(self.contract)
         except:
             position = None
+
+        # 计算用于仓位/风控判断的可用本金:
+        # - 默认使用 `available` (可用余额，已扣除已占用保证金)
+        # - 如果当前已有持仓（全仓模式下），将 `unrealised_pnl` 加回到 available
+        #   这样判断可开仓金额时能反映当前浮盈/浮亏对可动用资金的影响
+        if account:
+            equity = account.get('available', 0.0)
+            if position is not None:
+                equity += account.get('unrealised_pnl', 0.0)
+        else:
+            equity = 500  # 默认值（当 API 请求失败时）
         
         # 风控检查
         risk = get_risk_amount(equity)
