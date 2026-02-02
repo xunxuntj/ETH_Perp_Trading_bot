@@ -131,6 +131,14 @@ def calculate_position_size(risk_amount: float, entry_price: float, stop_loss: f
     }
 
 
+def is_1h_tighter(last_1h_st: float, threshold: float, is_long: bool) -> bool:
+    """判断上一完整 1H ST 是否比给定阈值更紧（多: 更高, 空: 更低）"""
+    if is_long:
+        return last_1h_st > threshold
+    else:
+        return last_1h_st < threshold
+
+
 class TradingStrategy:
     def __init__(self, client: GateClient, contract: str = "ETH_USDT"):
         self.client = client
@@ -388,12 +396,12 @@ class TradingStrategy:
         """管理多仓"""
         current_price = df_30m['close'].iloc[-1]
         entry_price = self.state.entry_price or position['entry_price']
-        qty = self.state.size or abs(position['size'])
+        qty = int(self.state.size or abs(position['size']))
         last_30m_st = st_30m['supertrend'].iloc[-2]
         last_30m_dir = int(st_30m['direction'].iloc[-2])
         last_1h_st = st_1h['supertrend'].iloc[-2]
         last_1h_dir = int(st_1h['direction'].iloc[-2])
-        
+
         # 初始化状态
         if self.state.entry_price == 0:
             self.state.entry_price = entry_price
@@ -404,50 +412,46 @@ class TradingStrategy:
             self.state.stop_loss = last_30m_st
             save_state(self.state)
         else:
-            # 持仓状态已存在，推断当前阶段（程序重启后恢复）
-            # 如果当前浮盈 > buffer，说明已超过生存期
+            # 恢复场景：若已超过 buffer，则进入 LOCKED 或直接 HOURLY
             pnl = (current_price - entry_price) * qty * 0.01
             lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=True)
 
             if self.state.phase == Phase.SURVIVAL.value and pnl > LOCK_PROFIT_BUFFER:
-                # 生存期但浮盈已超过buffer，判断是否应进入锁利期或换轨期
-                # 检查当前1H ST是否比锁利阈值更紧（对多仓，1H ST更高表示更紧）
-                if last_1h_st > lock_threshold:
-                    # 1H ST更紧，直接进入换轨期
+                # 如果 1H ST 比锁利阈值更紧 -> 直接进入 HOURLY
+                if is_1h_tighter(last_1h_st, lock_threshold, is_long=True):
                     self.state.phase = Phase.HOURLY.value
                     self.state.locked_stop = self.state.stop_loss
+                    self.state.stop_loss = last_1h_st
                     if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
                         print(f"[STRATEGY DEBUG] 持仓恢复：从生存期直接跳到换轨期 (1H ST {last_1h_st:.2f} > lock_threshold {lock_threshold:.2f})")
                 else:
-                    # 1H ST更松，进入锁利期
                     self.state.phase = Phase.LOCKED.value
                     self.state.locked_stop = self.state.stop_loss
                     if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
                         print(f"[STRATEGY DEBUG] 持仓恢复：从生存期进入锁利期 (1H ST {last_1h_st:.2f} <= lock_threshold {lock_threshold:.2f})")
                 save_state(self.state)
-        
+
         # 判断离场信号（根据阶段看不同周期）
         exit_signal = False
-                # 使用锁利阈值判断：若 1H ST 比锁利阈值更紧则直接换轨
-                if last_1h_st < lock_threshold:
-        
+        exit_reason = ""
+
         if self.state.phase == Phase.HOURLY.value:
             # 换轨期：看 1H ST 变色
             if last_1h_dir == -1:
-                        print(f"[STRATEGY DEBUG] 持仓恢复：从生存期直接跳到换轨期 (1H ST {last_1h_st:.2f} < lock_threshold {lock_threshold:.2f})")
+                exit_signal = True
                 exit_reason = "1H ST 变红"
         else:
             # 生存期/锁利期：看 30m ST 变色
             if last_30m_dir == -1:
                 exit_signal = True
-                        print(f"[STRATEGY DEBUG] 持仓恢复：从生存期进入锁利期 (1H ST {last_1h_st:.2f} >= lock_threshold {lock_threshold:.2f})")
-        
+                exit_reason = "30m ST 变红"
+
         if exit_signal:
             # 检查是否满足反手开空条件
             can_reverse = (last_1h_dir == -1 and 
                           last_1h_close < last_1h_dema and 
                           last_30m_dir == -1)
-            
+
             return self._close_with_reverse_check(
                 position, entry_price, current_price, 
                 is_long=True, reason=exit_reason,
@@ -456,7 +460,7 @@ class TradingStrategy:
                 last_1h_close=last_1h_close, last_1h_dema=last_1h_dema,
                 last_1h_dir=last_1h_dir, last_30m_dir=last_30m_dir
             )
-        
+
         # 阶段管理和止损更新
         return self._update_stop_loss(entry_price, current_price, qty, last_30m_st, last_1h_st, is_long=True)
     
@@ -465,12 +469,12 @@ class TradingStrategy:
         """管理空仓"""
         current_price = df_30m['close'].iloc[-1]
         entry_price = self.state.entry_price or position['entry_price']
-        qty = self.state.size or abs(position['size'])
+        qty = int(self.state.size or abs(position['size']))
         last_30m_st = st_30m['supertrend'].iloc[-2]
         last_30m_dir = int(st_30m['direction'].iloc[-2])
         last_1h_st = st_1h['supertrend'].iloc[-2]
         last_1h_dir = int(st_1h['direction'].iloc[-2])
-        
+
         # 初始化状态
         if self.state.entry_price == 0:
             self.state.entry_price = entry_price
@@ -480,36 +484,32 @@ class TradingStrategy:
             self.state.phase = Phase.SURVIVAL.value
             self.state.stop_loss = last_30m_st
             save_state(self.state)
-            
             if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
                 print(f"[STRATEGY DEBUG] 初始化空仓: entry={entry_price:.2f}, stop_loss={last_30m_st:.2f}, qty={qty}")
         else:
-            # 持仓状态已存在，推断当前阶段（程序重启后恢复）
-            # 如果当前浮盈 > buffer，说明已超过生存期
+            # 恢复场景：若已超过 buffer，则进入 LOCKED 或直接 HOURLY
             pnl = (entry_price - current_price) * qty * 0.01
             lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=False)
-            
+
             if self.state.phase == Phase.SURVIVAL.value and pnl > LOCK_PROFIT_BUFFER:
-                # 生存期但浮盈已超过buffer，判断是否应进入锁利期或换轨期
-                # 检查当前1H ST是否比stop_loss更紧（对空仓，1H ST更高/松）
-                if last_1h_st < self.state.stop_loss:
-                    # 1H ST更紧，直接进入换轨期
+                # 如果 1H ST 比锁利阈值更紧 -> 直接进入 HOURLY
+                if is_1h_tighter(last_1h_st, lock_threshold, is_long=False):
                     self.state.phase = Phase.HOURLY.value
                     self.state.locked_stop = self.state.stop_loss
+                    self.state.stop_loss = last_1h_st
                     if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                        print(f"[STRATEGY DEBUG] 持仓恢复：从生存期直接跳到换轨期 (1H ST {last_1h_st:.2f} < stop {self.state.stop_loss:.2f})")
+                        print(f"[STRATEGY DEBUG] 持仓恢复：从生存期直接跳到换轨期 (1H ST {last_1h_st:.2f} < lock_threshold {lock_threshold:.2f})")
                 else:
-                    # 1H ST更松，进入锁利期
                     self.state.phase = Phase.LOCKED.value
                     self.state.locked_stop = self.state.stop_loss
                     if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                        print(f"[STRATEGY DEBUG] 持仓恢复：从生存期进入锁利期 (1H ST {last_1h_st:.2f} >= stop {self.state.stop_loss:.2f})")
+                        print(f"[STRATEGY DEBUG] 持仓恢复：从生存期进入锁利期 (1H ST {last_1h_st:.2f} >= lock_threshold {lock_threshold:.2f})")
                 save_state(self.state)
-        
+
         # 判断离场信号（根据阶段看不同周期）
         exit_signal = False
         exit_reason = ""
-        
+
         if self.state.phase == Phase.HOURLY.value:
             # 换轨期：看 1H ST 变色
             if last_1h_dir == 1:
@@ -520,13 +520,13 @@ class TradingStrategy:
             if last_30m_dir == 1:
                 exit_signal = True
                 exit_reason = "30m ST 变绿"
-        
+
         if exit_signal:
             # 检查是否满足反手开多条件
             can_reverse = (last_1h_dir == 1 and 
                           last_1h_close > last_1h_dema and 
                           last_30m_dir == 1)
-            
+
             return self._close_with_reverse_check(
                 position, entry_price, current_price,
                 is_long=False, reason=exit_reason,
@@ -535,10 +535,7 @@ class TradingStrategy:
                 last_1h_close=last_1h_close, last_1h_dema=last_1h_dema,
                 last_1h_dir=last_1h_dir, last_30m_dir=last_30m_dir
             )
-        
-        # 阶段管理和止损更新
-        return self._update_stop_loss(entry_price, current_price, qty, last_30m_st, last_1h_st, is_long=False)
-        
+
         # 阶段管理和止损更新
         return self._update_stop_loss(entry_price, current_price, qty, last_30m_st, last_1h_st, is_long=False)
     
@@ -695,72 +692,47 @@ class TradingStrategy:
         if self.state.phase == Phase.SURVIVAL.value:
             # 跟随 30m ST，只紧不松
             if is_long:
-
-            # 检查是否换轨：1H ST 比锁利阈值更紧（使用锁利阈值判断）
-            if is_long:
-                if last_1h_st > lock_threshold:
-                    self.state.phase = Phase.HOURLLY.value if False else Phase.HOURLY.value
-                    new_stop = last_1h_st
-            else:
-                if last_1h_st < lock_threshold:
-                    self.state.phase = Phase.HOURLY.value
-                    new_stop = last_1h_st
-                        if last_1h_st > self.state.locked_stop:
-                            if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                                print(f"[STRATEGY DEBUG]   → 立即进入换轨期: last_1h_st {last_1h_st:.2f} > locked_stop {self.state.locked_stop:.2f}")
-                            self.state.phase = Phase.HOURLY.value
-                            new_stop = last_1h_st
-                    else:
-                        if last_1h_st < self.state.locked_stop:
-                            if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                                print(f"[STRATEGY DEBUG]   → 立即进入换轨期: last_1h_st {last_1h_st:.2f} < locked_stop {self.state.locked_stop:.2f}")
-                            self.state.phase = Phase.HOURLY.value
-                            new_stop = last_1h_st
+                new_stop = max(old_stop, last_30m_st) if old_stop > 0 else last_30m_st
             else:
                 new_stop = min(old_stop, last_30m_st) if old_stop > 0 else last_30m_st
-                # 检查是否进入锁利期：按当前止损成交的盈利是否 > buffer
-                pnl_if_stop = (entry_price - new_stop) * qty * 0.01  # 空仓盈利公式
-                if pnl_if_stop > LOCK_PROFIT_BUFFER:
+
+            # 检查是否进入锁利期：按当前止损成交的盈利是否 > buffer
+            if is_long:
+                pnl_if_stop = (new_stop - entry_price) * qty * 0.01
+            else:
+                pnl_if_stop = (entry_price - new_stop) * qty * 0.01
+
+            if pnl_if_stop > LOCK_PROFIT_BUFFER:
+                if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
+                    print(f"[STRATEGY DEBUG]   → 进入锁利期: 按止损{new_stop:.2f}成交盈利{pnl_if_stop:.2f}U > buffer {LOCK_PROFIT_BUFFER}U")
+                self.state.phase = Phase.LOCKED.value
+                self.state.locked_stop = new_stop
+                # 进入锁利后立即检查是否满足换轨条件：1H ST 比锁利止损更紧
+                if is_1h_tighter(last_1h_st, self.state.locked_stop, is_long):
                     if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                        print(f"[STRATEGY DEBUG]   → 进入锁利期: 按止损{new_stop:.2f}成交盈利{pnl_if_stop:.2f}U > buffer {LOCK_PROFIT_BUFFER}U")
-                    self.state.phase = Phase.LOCKED.value
-                    self.state.locked_stop = new_stop
-                    # 进入锁利后立即检查是否满足换轨条件：1H ST 比锁利止损更紧
-                    if is_long:
-                        if last_1h_st > self.state.locked_stop:
-                            if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                                print(f"[STRATEGY DEBUG]   → 立即进入换轨期: last_1h_st {last_1h_st:.2f} > locked_stop {self.state.locked_stop:.2f}")
-                            self.state.phase = Phase.HOURLY.value
-                            new_stop = last_1h_st
-                    else:
-                        if last_1h_st < self.state.locked_stop:
-                            if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                                print(f"[STRATEGY DEBUG]   → 立即进入换轨期: last_1h_st {last_1h_st:.2f} < locked_stop {self.state.locked_stop:.2f}")
-                            self.state.phase = Phase.HOURLY.value
-                            new_stop = last_1h_st
-        
+                        print(f"[STRATEGY DEBUG]   → 立即进入换轨期: last_1h_st {last_1h_st:.2f} 更紧于 locked_stop {self.state.locked_stop:.2f}")
+                    self.state.phase = Phase.HOURLY.value
+                    new_stop = last_1h_st
+
         # ============ 锁利期 ============
         elif self.state.phase == Phase.LOCKED.value:
             # 止损锁定不动，观察 1H ST
             new_stop = self.state.locked_stop
-            
-            # 检查是否换轨：1H ST 比锁利止损更紧
-            if is_long:
-                if last_1h_st > self.state.locked_stop:
-                    self.state.phase = Phase.HOURLY.value
-                    new_stop = last_1h_st
-            else:
-                if last_1h_st < self.state.locked_stop:
-                    self.state.phase = Phase.HOURLY.value
-                    new_stop = last_1h_st
-        
+
+            # 检查是否换轨：1H ST 比当前锁定止损更紧则换轨
+            if is_1h_tighter(last_1h_st, self.state.locked_stop, is_long):
+                if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
+                    print(f"[STRATEGY DEBUG] LOCKED->HOURLY triggered: last_1h_st {last_1h_st:.2f} tighter than locked_stop {self.state.locked_stop:.2f}")
+                self.state.phase = Phase.HOURLY.value
+                new_stop = last_1h_st
+
         # ============ 换轨期 ============
         elif self.state.phase == Phase.HOURLY.value:
             # 跟随 1H ST，只紧不松
             if is_long:
-                new_stop = max(old_stop, last_1h_st)
+                new_stop = max(old_stop, last_1h_st) if old_stop > 0 else last_1h_st
             else:
-                new_stop = min(old_stop, last_1h_st)
+                new_stop = min(old_stop, last_1h_st) if old_stop > 0 else last_1h_st
         
         # 保存状态
         stop_changed = abs(new_stop - old_stop) > 0.01
