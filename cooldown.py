@@ -36,9 +36,11 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
     # 1. 检查本金
     try:
         account = client.get_account()
-        # 熔断检查用 total: 包含已占用保证金 + 未实现盈亏
-        # 这样可以捕获本金因浮损而严重缩水的情况
-        equity = account['total']
+        # 熔断检查用 available + unrealised_pnl
+        # available = 可用余额（扣除已占用保证金）
+        # unrealised_pnl = 未实现盈亏
+        # 合计反映当前真实可动用资金（包含浮盈/浮亏影响）
+        equity = account.get('available', 0.0) + account.get('unrealised_pnl', 0.0)
         
         if equity <= CIRCUIT_BREAKER_EQUITY:
             return CooldownStatus(
