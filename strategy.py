@@ -167,6 +167,8 @@ class TradingStrategy:
         # 获取账户和持仓
         try:
             account = self.client.get_account()
+            # 在全仓模式下，available 是可用余额（扣除已占用保证金）
+            # 用于计算当前可开仓的金额；total 包含已冻结和未实现盈亏
             equity = account['available']
         except:
             equity = 500  # 默认值
