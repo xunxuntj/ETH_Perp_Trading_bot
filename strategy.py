@@ -167,7 +167,7 @@ class TradingStrategy:
         # 获取账户和持仓
         try:
             account = self.client.get_account()
-            equity = account['total']
+            equity = account['available']
         except:
             equity = 500  # 默认值
         
