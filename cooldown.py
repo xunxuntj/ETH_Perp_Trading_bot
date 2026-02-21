@@ -1,6 +1,21 @@
 """
 冷静期检查模块
 通过 Gate.io API 获取交易历史，判断是否触发冷静期
+
+【冷静期规则】(参见 README.md):
+• 连续 3 笔止损 → 强制休息 48 小时
+• 本金 ≤ 350U → 熔断停手 1 周
+
+【工作原理】:
+1. 获取最近 100 笔交易历史
+2. 计算连续止损笔数
+3. 根据条件判断是否触发冷静期
+4. 保存状态以避免重复通知
+
+【通知管理】:
+• 首次触发冷静期：发送 Telegram 通知
+• 后续 30 分钟检查：不重复通知
+• 冷静期结束：恢复交易
 """
 
 import os
@@ -15,7 +30,14 @@ from config import MAX_CONSECUTIVE_LOSSES, CIRCUIT_BREAKER_EQUITY
 
 @dataclass
 class CooldownStatus:
-    """冷静期状态"""
+    """
+    冷静期状态
+    
+    触发条件：
+    • triggered=True: 冷静期已触发
+    • reason: 触发原因（连续亏损/熔断等）
+    • cooldown_hours: 冷静期时长（小时）
+    """
     triggered: bool = False
     reason: str = ""
     cooldown_hours: int = 0

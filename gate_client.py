@@ -113,7 +113,21 @@ class GateClient:
         }
     
     def get_account(self) -> dict:
-        """获取账户信息"""
+        """
+        获取账户信息
+        
+        【关键信息】：
+        API返回的字段（Gate.io全仓模式）:
+        - cross_available: 全仓可用余额（全仓账户的关键字段）
+        - available: 隔离仓可用余额
+        - total: 账户总资金
+        
+        【优先级】: cross_available > available > total
+        脚本会自动选择最合适的字段作为账户本金
+        
+        【调试】:
+        设置 DEBUG=1 环境变量可看完整账户数据输出
+        """
         url_path = "/api/v4/futures/usdt/accounts"
         full_url = f"{BASE_URL}/futures/usdt/accounts"
         

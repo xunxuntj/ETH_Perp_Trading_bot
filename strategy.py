@@ -52,7 +52,14 @@ FACE_VALUE = 0.1
 
 @dataclass
 class TradeResult:
-    """交易结果"""
+    """
+    交易结果
+    
+    关键参考文档（见项目根目录）:
+    • DEMA_ROOT_CAUSE_FIXED.md: DEMA精度优化说明（1000根K线，99.99%精度）
+    • GATEIO_API_KLINE_GUIDE.md: K线获取和处理指南
+    • README.md: 完整的策略规则和参数说明
+    """
     action: str                      # open_long/open_short/close/adjust_sl/switch_1h/hold/none
     message: str
     details: dict = None
@@ -196,6 +203,16 @@ class TradingStrategy:
     def analyze(self) -> TradeResult:
         """
         主分析函数
+        
+        策略规则（详见README.md）:
+        - 做多: 1H ST绿 + 1H收盘 > DEMA200 + 30m ST绿
+        - 做空: 1H ST红 + 1H收盘 < DEMA200 + 30m ST红
+        
+        持仓管理三阶段（详见GATEIO_API_KLINE_GUIDE.md）:
+        1. 生存期: 止损跟随 30m ST
+        2. 锁利期: 止损锁定不动，保底盈利
+        3. 换轨期: 止损跟随 1H ST
+        
         返回交易建议
         """
         # 获取数据 (使用1000根K线以获得最优DEMA精度)
