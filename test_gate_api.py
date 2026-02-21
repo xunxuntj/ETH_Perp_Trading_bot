@@ -7,7 +7,15 @@ Gate.io API 测试脚本
 
 import sys
 import json
+import os
+import pytest
 from gate_client import GateClient
+
+# Skip these live API tests when API keys are not provided in the environment
+pytestmark = pytest.mark.skipif(
+    not os.environ.get('GATE_API_KEY') or not os.environ.get('GATE_API_SECRET'),
+    reason='Gate API keys not provided, skipping live API tests'
+)
 
 
 def print_header(title):

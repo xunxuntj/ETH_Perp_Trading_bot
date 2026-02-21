@@ -44,6 +44,10 @@ class Position:
     consecutive_losses: int = 0      # 连续亏损次数
 
 
+# 合约面值（每张对应的 ETH），用于仓位/盈亏计算。测试套件使用 0.01
+FACE_VALUE = 0.1
+
+
 @dataclass
 class TradeResult:
     """交易结果"""
@@ -83,7 +87,7 @@ def calculate_lock_threshold(entry_price: float, qty: int, is_long: bool) -> flo
     空单: 止损 ≤ 入场 - Buffer / 仓位(ETH)
     多单: 止损 ≥ 入场 + Buffer / 仓位(ETH)
     """
-    position_eth = qty * 0.01
+    position_eth = qty * FACE_VALUE
     if position_eth == 0:
         return entry_price
     
@@ -97,8 +101,8 @@ def calculate_position_size(risk_amount: float, entry_price: float, stop_loss: f
     """
     计算开仓张数
     
-    公式: Qty = R / |Entry - SL| / 0.01 (向下取整)
-    Gate.io ETH 合约面值 = 0.01 ETH
+    公式: Qty = R / |Entry - SL| / FACE_VALUE (向下取整)
+    合约面值由常量 `FACE_VALUE` 指定
     
     返回: {
         "qty": 张数,
@@ -114,11 +118,11 @@ def calculate_position_size(risk_amount: float, entry_price: float, stop_loss: f
         return {"qty": 0, "sl_distance": 0, "position_eth": 0, 
                 "position_value": 0, "margin_required": 0, "actual_risk": 0}
     
-    qty = int(risk_amount / sl_distance / 0.01)  # 向下取整
-    position_eth = qty * 0.01
+    qty = int(risk_amount / sl_distance / FACE_VALUE)  # 向下取整
+    position_eth = qty * FACE_VALUE
     position_value = position_eth * entry_price
     margin_required = position_value / LEVERAGE
-    actual_risk = qty * 0.01 * sl_distance
+    actual_risk = qty * FACE_VALUE * sl_distance
     
     return {
         "qty": qty,
@@ -139,10 +143,6 @@ def is_1h_tighter(last_1h_st: float, threshold: float, is_long: bool) -> bool:
 
 
 class TradingStrategy:
-    def __init__(self, client: GateClient, contract: str = "ETH_USDT"):
-        self.client = client
-        self.contract = contract
-        self.state = load_state()
 
     def _infer_phase(self, entry_price: float, current_price: float, qty: int, 
                      last_30m_st: float, last_1h_st: float, is_long: bool) -> tuple:
@@ -152,10 +152,10 @@ class TradingStrategy:
         """
         # 计算当前浮盈
         if is_long:
-            pnl = (current_price - entry_price) * qty * 0.01
+            pnl = (current_price - entry_price) * qty * FACE_VALUE
             current_st = last_30m_st
         else:
-            pnl = (entry_price - current_price) * qty * 0.01
+            pnl = (entry_price - current_price) * qty * FACE_VALUE
             current_st = last_30m_st
 
         # 计算锁利阈值
@@ -400,7 +400,7 @@ class TradingStrategy:
         if is_long:
             # 如果满足开空条件 → 提示平多反手
             if can_short:
-                pnl = (current_price - position['entry_price']) * position['size'] * 0.01
+                pnl = (current_price - position['entry_price']) * position['size'] * FACE_VALUE
                 return TradeResult(
                     action="reverse_to_short",
                     message=f"🔄 平多反手开空！\n"
@@ -421,7 +421,7 @@ class TradingStrategy:
         if is_short:
             # 如果满足开多条件 → 提示平空反手
             if can_long:
-                pnl = (position['entry_price'] - current_price) * abs(position['size']) * 0.01
+                pnl = (position['entry_price'] - current_price) * abs(position['size']) * FACE_VALUE
                 return TradeResult(
                     action="reverse_to_long",
                     message=f"🔄 平空反手开多！\n"
@@ -480,7 +480,7 @@ class TradingStrategy:
             )
 
         # 计算浮盈
-        pnl = (current_price - entry_price) * qty * 0.01
+        pnl = (current_price - entry_price) * qty * FACE_VALUE
         lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=True)
 
         # 返回阶段和止损信息
@@ -546,7 +546,7 @@ class TradingStrategy:
             )
 
         # 计算浮盈
-        pnl = (entry_price - current_price) * qty * 0.01
+        pnl = (entry_price - current_price) * qty * FACE_VALUE
         lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=False)
 
         # 返回阶段和止损信息
@@ -581,9 +581,9 @@ class TradingStrategy:
         """平仓并检查反手条件"""
         qty = abs(position['size'])
         if is_long:
-            pnl = (current_price - entry_price) * qty * 0.01
+            pnl = (current_price - entry_price) * qty * FACE_VALUE
         else:
-            pnl = (entry_price - current_price) * qty * 0.01
+            pnl = (entry_price - current_price) * qty * FACE_VALUE
         
         if pnl < 0:
             self.state.consecutive_losses += 1
@@ -681,9 +681,9 @@ class TradingStrategy:
         """平仓"""
         qty = abs(position['size'])
         if is_long:
-            pnl = (current_price - entry_price) * qty * 0.01
+            pnl = (current_price - entry_price) * qty * FACE_VALUE
         else:
-            pnl = (entry_price - current_price) * qty * 0.01
+            pnl = (entry_price - current_price) * qty * FACE_VALUE
         
         if pnl < 0:
             self.state.consecutive_losses += 1

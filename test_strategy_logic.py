@@ -7,7 +7,7 @@
 import unittest
 from strategy import (
     is_1h_tighter, calculate_lock_threshold, calculate_position_size,
-    Phase, Direction, Position
+    Phase, Direction, Position, FACE_VALUE
 )
 
 
@@ -58,10 +58,10 @@ class TestHelpers(unittest.TestCase):
         result = calculate_position_size(risk_amount, entry_price, stop_loss)
         
         # sl_distance = 100
-        # qty = 50 / 100 / 0.01 = 5
+        # qty = 50 / 100 / FACE_VALUE = 5
         self.assertEqual(result['qty'], 5)
         self.assertAlmostEqual(result['sl_distance'], 100.0, places=1)
-        self.assertAlmostEqual(result['position_eth'], 0.05, places=2)
+        self.assertAlmostEqual(result['position_eth'], 0.5, places=2)
         self.assertAlmostEqual(result['actual_risk'], 50.0, places=1)
 
 
@@ -77,7 +77,7 @@ class TestPhaseTransitions(unittest.TestCase):
         is_long = True
         
         # 浮盈 = (2010 - 2000) * 10 * 0.01 = 1.0 U (刚好等于 BUFFER)
-        pnl = (current_price - entry_price) * qty * 0.01
+        pnl = (current_price - entry_price) * qty * FACE_VALUE
         self.assertAlmostEqual(pnl, 1.0, places=2)
         
         # lock_threshold = 2000 + 1.0 / 0.1 = 2010.0
@@ -92,7 +92,7 @@ class TestPhaseTransitions(unittest.TestCase):
         is_long = False
         
         # 浮盈 = (2000 - 1990) * 10 * 0.01 = 1.0 U
-        pnl = (entry_price - current_price) * qty * 0.01
+        pnl = (entry_price - current_price) * qty * FACE_VALUE
         self.assertAlmostEqual(pnl, 1.0, places=2)
         
         # lock_threshold = 2000 - 1.0 / 0.1 = 1990.0
@@ -259,7 +259,7 @@ class TestPnLCalculations(unittest.TestCase):
         current_price = 2050.0
         qty = 10
         
-        pnl = (current_price - entry_price) * qty * 0.01
+        pnl = (current_price - entry_price) * qty * FACE_VALUE_VALUE
         self.assertAlmostEqual(pnl, 5.0, places=2)
 
     def test_pnl_long_loss(self):
@@ -268,7 +268,7 @@ class TestPnLCalculations(unittest.TestCase):
         current_price = 1950.0
         qty = 10
         
-        pnl = (current_price - entry_price) * qty * 0.01
+        pnl = (current_price - entry_price) * qty * FACE_VALUE
         self.assertAlmostEqual(pnl, -5.0, places=2)
 
     def test_pnl_short_profit(self):
@@ -277,7 +277,7 @@ class TestPnLCalculations(unittest.TestCase):
         current_price = 1950.0
         qty = 10
         
-        pnl = (entry_price - current_price) * qty * 0.01
+        pnl = (entry_price - current_price) * qty * FACE_VALUE
         self.assertAlmostEqual(pnl, 5.0, places=2)
 
     def test_pnl_short_loss(self):
@@ -295,7 +295,7 @@ class TestPnLCalculations(unittest.TestCase):
         stop_loss = 1950.0
         qty = 10
         
-        pnl_if_stop = (stop_loss - entry_price) * qty * 0.01
+        pnl_if_stop = (stop_loss - entry_price) * qty * FACE_VALUE
         self.assertAlmostEqual(pnl_if_stop, -5.0, places=2)
 
     def test_pnl_if_stop_short(self):
@@ -304,7 +304,7 @@ class TestPnLCalculations(unittest.TestCase):
         stop_loss = 2050.0
         qty = 10
         
-        pnl_if_stop = (entry_price - stop_loss) * qty * 0.01
+        pnl_if_stop = (entry_price - stop_loss) * qty * FACE_VALUE
         self.assertAlmostEqual(pnl_if_stop, -5.0, places=2)
 
 
@@ -343,8 +343,9 @@ class TestRealWorldScenarios(unittest.TestCase):
         is_long = False
         
         # 浮盈
-        pnl = (entry_price - current_price) * qty * 0.01
-        self.assertAlmostEqual(pnl, 119.79, places=1)
+        pnl = (entry_price - current_price) * qty * FACE_VALUE
+        # Expected using FACE_VALUE (0.1):
+        self.assertAlmostEqual(pnl, 1196.1, places=1)
         
         # lock_threshold
         lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=False)

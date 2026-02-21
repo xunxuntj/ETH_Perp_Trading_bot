@@ -46,6 +46,11 @@ LOCK_PROFIT_BUFFER = float(os.environ.get("LOCK_PROFIT_BUFFER", "1"))  # 1 USDT
 # ============ 状态文件 ============
 STATE_FILE = os.environ.get("STATE_FILE", "trading_state.json")
 
+# ============ 自动化交易开关 ============
+# 关闭时：只发信号，不执行交易
+# 打开时：发信号并执行交易（开仓、调止损、平仓）
+ENABLE_AUTO_TRADING = os.environ.get("ENABLE_AUTO_TRADING", "false").lower() == "true"
+
 
 def get_risk_amount(equity: float) -> dict:
     """
