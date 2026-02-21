@@ -355,12 +355,21 @@ class TradingStrategy:
                     action="open_long",
                     message=f"""🟢 开多信号！{timing}
 
+━━━━━━━━━━ 技术指标 ━━━━━━━━━━
+【1小时线】
+• 1H ST: {last_1h_st:.2f} 🟢 绿 ✅
+• 1H 收盘: {last_1h_close:.2f}
+• 1H DEMA200: {last_1h_dema:.2f}
+• 条件: {dema_long} ✅
+
+【30分钟线】
+• 30m ST: {last_30m_st:.2f} 🟢 绿 ✅
+
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开多 {pos_info['qty']}张 @ {current_price:.2f}
 📌 设止损 @ {last_30m_st:.2f}
-━━━━━━━━━━━━━━━━━━━━━━━━━
 
-{filter_info_long}【仓位计算】
+━━━━━━━━━━ 仓位计算 ━━━━━━━━━━
 • 止损距离: {pos_info['sl_distance']:.2f}点
 • 保证金: {pos_info['margin_required']:.2f}U ({LEVERAGE}x)
 • 风险: {risk_info}
@@ -369,7 +378,11 @@ class TradingStrategy:
                         "entry": current_price,
                         "stop_loss": last_30m_st,
                         "qty": pos_info['qty'],
-                        "actual_risk": pos_info['actual_risk']
+                        "actual_risk": pos_info['actual_risk'],
+                        "1h_st": last_1h_st,
+                        "1h_close": last_1h_close,
+                        "1h_dema": last_1h_dema,
+                        "30m_st": last_30m_st
                     }
                 )
             
@@ -382,12 +395,21 @@ class TradingStrategy:
                     action="open_short",
                     message=f"""🔴 开空信号！{timing}
 
+━━━━━━━━━━ 技术指标 ━━━━━━━━━━
+【1小时线】
+• 1H ST: {last_1h_st:.2f} 🔴 红 ✅
+• 1H 收盘: {last_1h_close:.2f}
+• 1H DEMA200: {last_1h_dema:.2f}
+• 条件: {dema_short} ✅
+
+【30分钟线】
+• 30m ST: {last_30m_st:.2f} 🔴 红 ✅
+
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开空 {pos_info['qty']}张 @ {current_price:.2f}
 📌 设止损 @ {last_30m_st:.2f}
-━━━━━━━━━━━━━━━━━━━━━━━━━
 
-{filter_info_short}【仓位计算】
+━━━━━━━━━━ 仓位计算 ━━━━━━━━━━
 • 止损距离: {pos_info['sl_distance']:.2f}点
 • 保证金: {pos_info['margin_required']:.2f}U ({LEVERAGE}x)
 • 风险: {risk_info}
@@ -396,20 +418,45 @@ class TradingStrategy:
                         "entry": current_price,
                         "stop_loss": last_30m_st,
                         "qty": pos_info['qty'],
-                        "actual_risk": pos_info['actual_risk']
+                        "actual_risk": pos_info['actual_risk'],
+                        "1h_st": last_1h_st,
+                        "1h_close": last_1h_close,
+                        "1h_dema": last_1h_dema,
+                        "30m_st": last_30m_st
                     }
                 )
             
             else:
                 return TradeResult(
                     action="none",
-                    message=f"📊 无开仓信号\n"
-                            f"• 价格: {current_price:.2f}\n"
-                            f"• 1H ST: {'🟢' if last_1h_dir == 1 else '🔴'}\n"
-                            f"• 30m ST: {'🟢' if last_30m_dir == 1 else '🔴'}\n"
-                            f"• DEMA: {last_1h_dema:.2f}\n"
-                            f"• 本金: {equity:.2f}U",
-                    details={"price": current_price}
+                    message=f"""📊 无开仓信号
+
+━━━━━━━━━━ 当前价格 ━━━━━━━━━━
+• 价格: {current_price:.2f}
+
+━━━━━━━━━━ 技术指标 ━━━━━━━━━━
+【1小时线】
+• 1H ST: {last_1h_st:.2f} {'🟢 绿' if last_1h_dir == 1 else '🔴 红'}
+• 1H 收盘: {last_1h_close:.2f}
+• 1H DEMA200: {last_1h_dema:.2f}
+• 条件: {dema_long if last_1h_close > last_1h_dema else dema_short}
+
+【30分钟线】
+• 30m ST: {last_30m_st:.2f} {'🟢 绿' if last_30m_dir == 1 else '🔴 红'}
+
+━━━━━━━━━━ 账户状态 ━━━━━━━━━━
+• 本金: {equity:.2f}U
+• 风险额: {risk_amount:.2f}U""",
+                    details={
+                        "price": current_price,
+                        "1h_st": last_1h_st,
+                        "1h_st_dir": last_1h_dir,
+                        "1h_close": last_1h_close,
+                        "1h_dema": last_1h_dema,
+                        "30m_st": last_30m_st,
+                        "30m_st_dir": last_30m_dir,
+                        "equity": equity
+                    }
                 )
         
         # ============ 已持多仓 ============
@@ -559,8 +606,26 @@ class TradingStrategy:
 • 方向: 多 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
+
+━━━━━━━━━━ 技术指标 ━━━━━━━━━━
+【1小时线】
+• 1H ST: {last_1h_st:.2f} {'🟢 绿' if last_1h_dir == 1 else '🔴 红'}
+• 1H 收盘: {last_1h_close:.2f}
+• 1H DEMA200: {last_1h_dema:.2f}
+
+【30分钟线】
+• 30m ST: {last_30m_st:.2f} {'🟢 绿' if last_30m_dir == 1 else '🔴 红'}
+
 • 离场条件: {phase_exit.get(phase)}""",
-                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+                details={
+                    "phase": phase, 
+                    "stop_loss": recommended_stop, 
+                    "pnl": pnl,
+                    "1h_st": last_1h_st,
+                    "1h_close": last_1h_close,
+                    "1h_dema": last_1h_dema,
+                    "30m_st": last_30m_st
+                }
             )
 
     
@@ -667,8 +732,26 @@ class TradingStrategy:
 • 方向: 空 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
+
+━━━━━━━━━━ 技术指标 ━━━━━━━━━━
+【1小时线】
+• 1H ST: {last_1h_st:.2f} {'🟢 绿' if last_1h_dir == 1 else '🔴 红'}
+• 1H 收盘: {last_1h_close:.2f}
+• 1H DEMA200: {last_1h_dema:.2f}
+
+【30分钟线】
+• 30m ST: {last_30m_st:.2f} {'🟢 绿' if last_30m_dir == 1 else '🔴 红'}
+
 • 离场条件: {phase_exit.get(phase)}""",
-                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+                details={
+                    "phase": phase, 
+                    "stop_loss": recommended_stop, 
+                    "pnl": pnl,
+                    "1h_st": last_1h_st,
+                    "1h_close": last_1h_close,
+                    "1h_dema": last_1h_dema,
+                    "30m_st": last_30m_st
+                }
             )
 
     
