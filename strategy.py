@@ -243,14 +243,14 @@ class TradingStrategy:
         # 检查持仓状态（无缓存依赖）
         has_api_position = position is not None and position.get('size', 0) != 0
 
-        # 计算用于仓位/风控判断的可用本金:
-        # - 默认使用 `available` (可用余额，已扣除已占用保证金)
-        # - 如果当前已有持仓（全仓模式下），将 `unrealised_pnl` 加回到 available
-        #   这样判断可开仓金额时能反映当前浮盈/浮亏对可动用资金的影响
+        # 计算账户本金（用于显示和风控判断）:
+        # API返回三个字段:
+        #   - total: 账户总资金 (与Gate App显示一致)
+        #   - available: 可用余额 (已扣除已占用保证金)
+        #   - unrealised_pnl: 未平仓盈亏
+        # 使用 `total` 作为本金 (与Gate App同步)
         if account:
-            equity = account.get('available', 0.0)
-            if has_api_position:
-                equity += account.get('unrealised_pnl', 0.0)
+            equity = account.get('total', 0.0)
         else:
             equity = 500  # 默认值（当 API 请求失败时）
         # Debug output for CI/action runs when GATE_DEBUG set
