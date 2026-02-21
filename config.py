@@ -47,7 +47,21 @@ LOCK_PROFIT_BUFFER = float(os.environ.get("LOCK_PROFIT_BUFFER", "1"))  # 1 USDT
 STATE_FILE = os.environ.get("STATE_FILE", "trading_state.json")
 
 # ============ 自动化交易开关 ============
-# 关闭时：只发信号，不执行交易
+# 默认关闭（仅发信号，不执行交易），可通过环境变量开启
+ENABLE_AUTO_TRADING = os.environ.get("ENABLE_AUTO_TRADING", "false").lower() == "true"
+
+# ============ 交易执行配置 ============
+# 开仓时是否设置条件止损单（默认启用）
+AUTO_SET_STOP_LOSS = os.environ.get("AUTO_SET_STOP_LOSS", "true").lower() == "true"
+
+# 止损调整模式："tight_only" = 仅止损收紧, "both" = 收紧和放松
+STOP_LOSS_MODE = os.environ.get("STOP_LOSS_MODE", "tight_only")
+
+# 平仓模式："market" = 市价, "limit" = 限价
+CLOSE_MODE = os.environ.get("CLOSE_MODE", "market")
+
+# Telegram 通知中是否包含详细日志（模拟模式下）
+NOTIFY_DETAILS = os.environ.get("NOTIFY_DETAILS", "true").lower() == "true"
 # 打开时：发信号并执行交易（开仓、调止损、平仓）
 ENABLE_AUTO_TRADING = os.environ.get("ENABLE_AUTO_TRADING", "false").lower() == "true"
 

@@ -332,3 +332,133 @@ class GateClient:
             })
         
         return results
+    
+    def create_order(self, contract: str, size: int, price: Optional[float] = None,
+                     reduce_only: bool = False, text: str = "") -> dict:
+        """
+        下单
+        
+        Args:
+            contract: 交易对（如 "ETH_USDT"）
+            size: 数量（正=做多, 负=做空）
+            price: 价格（None 表示市价）
+            reduce_only: 是否仅减仓
+            text: 订单备注
+        
+        Returns:
+            API 返回的订单信息
+        """
+        import json
+        
+        url_path = "/api/v4/futures/usdt/orders"
+        full_url = f"{BASE_URL}/futures/usdt/orders"
+        
+        # 构建订单体
+        order = {
+            "contract": contract,
+            "size": size,
+            "reduce_only": reduce_only,
+            "text": text
+        }
+        
+        if price is not None:
+            order["price"] = str(price)
+            order["time_in_force"] = "gtc"  # Good-till-cancel
+        else:
+            order["price"] = "market"
+            order["time_in_force"] = "ioc"  # Immediate-or-cancel
+        
+        body = json.dumps(order)
+        headers = self._sign("POST", url_path, "", body)
+        
+        resp = self.session.post(full_url, data=body, headers=headers)
+        resp.raise_for_status()
+        
+        return resp.json()
+    
+    def cancel_orders(self, contract: str, side: Optional[str] = None, text: str = "") -> list:
+        """
+        取消订单
+        
+        Args:
+            contract: 交易对
+            side: "buy" 或 "sell" 或 None（取消该交易对的所有订单）
+            text: 订单备注（取消指定备注的订单）
+        
+        Returns:
+            取消的订单列表
+        """
+        url_path = "/api/v4/futures/usdt/orders"
+        full_url = f"{BASE_URL}/futures/usdt/orders"
+        
+        params = {"contract": contract}
+        if side:
+            params["side"] = side
+        if text:
+            params["text"] = text
+        
+        # 构建查询字符串
+        query_parts = [f"{k}={v}" for k, v in params.items()]
+        query_string = "&".join(query_parts)
+        
+        headers = self._sign("DELETE", url_path, query_string, "")
+        resp = self.session.delete(full_url, params=params, headers=headers)
+        resp.raise_for_status()
+        
+        return resp.json()
+    
+    def get_orders(self, contract: str, status: str = "open", limit: int = 100) -> list:
+        """
+        获取订单列表
+        
+        Args:
+            contract: 交易对
+            status: "open" / "finished"
+            limit: 限制数量
+        
+        Returns:
+            订单列表
+        """
+        url_path = "/api/v4/futures/usdt/orders"
+        full_url = f"{BASE_URL}/futures/usdt/orders"
+        
+        params = {
+            "contract": contract,
+            "status": status,
+            "limit": limit
+        }
+        
+        query_parts = [f"{k}={v}" for k, v in params.items()]
+        query_string = "&".join(query_parts)
+        
+        headers = self._sign("GET", url_path, query_string, "")
+        resp = self.session.get(full_url, params=params, headers=headers)
+        
+        if resp.status_code != 200:
+            return []
+        
+        return resp.json()
+    
+    def update_position_margin(self, contract: str, change: float) -> dict:
+        """
+        调整保证金（用于杠杆调整）
+        
+        Args:
+            contract: 交易对
+            change: 增加的保证金额度（USDT），负数表示减少
+        
+        Returns:
+            API 返回结果
+        """
+        import json
+        
+        url_path = "/api/v4/futures/usdt/positions/ETH_USDT/margin"
+        full_url = f"{BASE_URL}/futures/usdt/positions/{contract}/margin"
+        
+        body = json.dumps({"change": str(change)})
+        headers = self._sign("POST", url_path, "", body)
+        
+        resp = self.session.post(full_url, data=body, headers=headers)
+        resp.raise_for_status()
+        
+        return resp.json()
