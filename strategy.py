@@ -202,6 +202,13 @@ class TradingStrategy:
         df_30m = self.client.get_candlesticks(self.contract, "30m", 300)
         df_1h = self.client.get_candlesticks(self.contract, "1h", 300)
         
+        # DEBUG: 记录K线时间戳和数据
+        if os.getenv('DEBUG_KLINE'):
+            print(f"[DEBUG KLINE] 1H最后两根K线时间戳:")
+            print(f"  iloc[-2] (上一根完整): {df_1h.index[-2]} close={df_1h['close'].iloc[-2]:.2f}")
+            print(f"  iloc[-1] (当前形成中): {df_1h.index[-1]} close={df_1h['close'].iloc[-1]:.2f}")
+            print(f"[DEBUG KLINE] 30m最后K线时间: {df_30m.index[-1]}")
+        
         # 计算指标 (使用已收盘的K线)
         st_30m = calculate_supertrend(df_30m, SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER)
         st_1h = calculate_supertrend(df_1h, SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER)

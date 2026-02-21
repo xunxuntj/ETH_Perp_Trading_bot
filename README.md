@@ -54,7 +54,18 @@
 - 连续 3 笔止损 → 强制休息 48 小时
 - 本金 ≤ 350U → 停手 1 周
 
-## 🚀 快速开始
+## � 文档导航
+
+| 文档 | 用途 |
+|------|------|
+| [DEMA_QUICK_CHECKUP.md](DEMA_QUICK_CHECKUP.md) | **🔍 DEMA值差异快速排查** |
+| [DEMA_DIAGNOSIS_REPORT.md](DEMA_DIAGNOSIS_REPORT.md) | 完整诊断报告和解决方案 |
+| [DEMA_DIFFERENCE_DIAGNOSIS.md](DEMA_DIFFERENCE_DIAGNOSIS.md) | 详细诊断指南 |
+| [LOGGING_ENHANCEMENT_GUIDE.md](LOGGING_ENHANCEMENT_GUIDE.md) | 日志系统说明 |
+| [SIGNAL_FIX_GUIDE.md](SIGNAL_FIX_GUIDE.md) | 信号计算指南 |
+| [STOP_LOSS_TRACKING_SOLUTION.md](STOP_LOSS_TRACKING_SOLUTION.md) | 止损追踪说明 |
+
+## �🚀 快速开始
 
 ### 1. 克隆仓库
 

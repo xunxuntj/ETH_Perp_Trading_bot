@@ -103,11 +103,35 @@ def calculate_dema(series: pd.Series, period: int = 200) -> pd.Series:
     """
     计算 DEMA (Double Exponential Moving Average)
     DEMA = 2 * EMA(price, N) - EMA(EMA(price, N), N)
+    
+    使用标准EMA算法: alpha = 2 / (period + 1)
+    与TradingView ta.ema() 完全对齐
     """
     ema1 = series.ewm(span=period, adjust=False).mean()
     ema2 = ema1.ewm(span=period, adjust=False).mean()
     dema = 2 * ema1 - ema2
     return dema
+
+
+def calculate_dema_debug(df: pd.DataFrame, period: int = 200) -> dict:
+    """
+    DEMA计算调试 - 返回详细的中间值用于诊断
+    """
+    close = df['close']
+    ema1 = close.ewm(span=period, adjust=False).mean()
+    ema2 = ema1.ewm(span=period, adjust=False).mean()
+    dema = 2 * ema1 - ema2
+    
+    return {
+        'dema': dema,
+        'ema1': ema1,
+        'ema2': ema2,
+        'last_close': close.iloc[-2],
+        'last_ema1': ema1.iloc[-2],
+        'last_ema2': ema2.iloc[-2],
+        'last_dema': dema.iloc[-2],
+        'timestamp': df.index[-2] if hasattr(df.index, '__getitem__') else None
+    }
 
 
 def detect_color_change(directions: pd.Series) -> dict:
