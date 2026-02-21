@@ -232,9 +232,10 @@ class TradingStrategy:
         # 获取账户和持仓
         try:
             account = self.client.get_account()
+            # 总是打印account信息便于调试
+            print(f"\n[ACCOUNT INFO] 原始API返回: {account}")
         except Exception as e:
-            if os.getenv('DEBUG'):
-                print(f"[STRATEGY DEBUG] get_account() failed: {e}")
+            print(f"[ERROR] get_account() failed: {e}")
             account = None
 
         try:
@@ -248,44 +249,24 @@ class TradingStrategy:
         has_api_position = position is not None and position.get('size', 0) != 0
 
         # 计算账户本金（用于显示和风控判断）:
-        # API返回三个字段:
-        #   - total: 账户总资金 (与Gate App显示一致)
-        #   - available: 可用余额 (已扣除已占用保证金)
-        #   - unrealised_pnl: 未平仓盈亏
-        # 使用 `total` 作为本金 (与Gate App同步)
+        # gate_client.get_account() 返回的 'total' 已经是处理后的结果:
+        #   优先级: cross_available (全仓) > available (隔离) > total > equity
+        # 这里直接使用即可
         equity = 500  # 默认值
-        equity_from_api = False
         if account is not None:
-            available = account.get('available', 0.0)
             total = account.get('total', 0.0)
-            unrealised_pnl = account.get('unrealised_pnl', 0.0)
+            available = account.get('available', 0.0)
+            
+            print(f"[ACCOUNT PARSE] total={total}, available={available}")
             
             if total > 0:
                 equity = total
-                equity_from_api = True
-            elif available > 0:
-                # 如果total为0但available大于0，use available as fallback
-                equity = available
-                equity_from_api = True
-                if os.getenv('DEBUG'):
-                    print(f"[STRATEGY DEBUG] account.total is 0, fallback to available: {available}")
+                print(f"[FINAL EQUITY] 本金取值: {equity}\n")
             else:
-                # 都是0，输出警告
-                if os.getenv('DEBUG') or not equity_from_api:
-                    print(f"[STRATEGY DEBUG] account data: total={total}, available={available}, unrealised_pnl={unrealised_pnl}")
-                    print(f"[STRATEGY DEBUG] All account fields are 0, using default {equity}")
+                print(f"[ACCOUNT WARNING] account.total为0，account={account}")
+                equity = 500
         else:
-            if os.getenv('DEBUG'):
-                print(f"[STRATEGY DEBUG] account is None, using default 500")
-        
-        # Debug output for CI/action runs when GATE_DEBUG set
-        if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-            try:
-                print(f"[STRATEGY DEBUG] full account object: {account}")
-                print(f"[STRATEGY DEBUG] position={position}")
-                print(f"[STRATEGY DEBUG] final equity for risk check: {equity}")
-            except Exception:
-                pass
+            print(f"[ACCOUNT ERROR] account是None, 使用默认值500\n")
         
         # 风控检查
         risk = get_risk_amount(equity)

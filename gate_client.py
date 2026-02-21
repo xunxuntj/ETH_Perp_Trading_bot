@@ -138,6 +138,9 @@ class GateClient:
 
         try:
             data = resp.json()
+            # 总是打印原始数据，便于诊断
+            import sys
+            print(f"[GATE RAW ACCOUNT] {data}", file=sys.stderr)
         except Exception as e:
             # If JSON decoding fails, log raw text for debugging and re-raise
             if self.debug:
@@ -173,16 +176,31 @@ class GateClient:
             if entry:
                 if self.debug:
                     print(f"[GATE DEBUG] get_account entry fields: {entry.keys()}")
-                # Try multiple field name variations
-                total = _safe_float(entry.get('total', entry.get('equity', entry.get('wallet_balance', 0))))
+                
+                # Gate.io返回的字段优先级:
+                # 1. cross_available (全仓模式的可用余额) - 最准确
+                # 2. available (隔离仓的可用余额)
+                # 3. total (账户总资金)
+                # 4. equity (权益)
+                cross_available = _safe_float(entry.get('cross_available', 0))
                 available = _safe_float(entry.get('available', entry.get('free', 0)))
-                unrealised_pnl = _safe_float(entry.get('unrealised_pnl', entry.get('unrealized_pnl', 0)))
+                total = _safe_float(entry.get('total', entry.get('equity', entry.get('wallet_balance', 0))))
+                unrealised_pnl = _safe_float(entry.get('unrealised_pnl', entry.get('unrealized_pnl', entry.get('cross_unrealised_pnl', 0))))
+                
+                # 选择最合适的本金字段
+                if cross_available > 0:
+                    final_total = cross_available  # 全仓模式，用cross_available
+                elif available > 0:
+                    final_total = available  # 隔离仓模式或cross_available不存在
+                else:
+                    final_total = total  # 其他情况
                 
                 if self.debug:
-                    print(f"[GATE DEBUG] extracted: total={total}, available={available}, unrealised_pnl={unrealised_pnl}")
+                    print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, total={total}, unrealised_pnl={unrealised_pnl}")
+                    print(f"[GATE DEBUG] selected total field: {final_total}")
                 
                 return {
-                    'total': total,
+                    'total': final_total,
                     'available': available,
                     'unrealised_pnl': unrealised_pnl
                 }
@@ -195,16 +213,27 @@ class GateClient:
         if isinstance(data, dict):
             if self.debug:
                 print(f"[GATE DEBUG] get_account dict fields: {data.keys()}")
-            # Try multiple field name variations
-            total = _safe_float(data.get('total', data.get('equity', data.get('wallet_balance', 0))))
+            
+            # Gate.io返回的字段优先级:
+            cross_available = _safe_float(data.get('cross_available', 0))
             available = _safe_float(data.get('available', data.get('free', 0)))
-            unrealised_pnl = _safe_float(data.get('unrealised_pnl', data.get('unrealized_pnl', 0)))
+            total = _safe_float(data.get('total', data.get('equity', data.get('wallet_balance', 0))))
+            unrealised_pnl = _safe_float(data.get('unrealised_pnl', data.get('unrealized_pnl', data.get('cross_unrealised_pnl', 0))))
+            
+            # 选择最合适的本金字段
+            if cross_available > 0:
+                final_total = cross_available
+            elif available > 0:
+                final_total = available
+            else:
+                final_total = total
             
             if self.debug:
-                print(f"[GATE DEBUG] extracted: total={total}, available={available}, unrealised_pnl={unrealised_pnl}")
+                print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, total={total}, unrealised_pnl={unrealised_pnl}")
+                print(f"[GATE DEBUG] selected total field: {final_total}")
             
             return {
-                'total': total,
+                'total': final_total,
                 'available': available,
                 'unrealised_pnl': unrealised_pnl
             }
