@@ -3,7 +3,9 @@
 通过 Gate.io API 获取交易历史，判断是否触发冷静期
 """
 
-from datetime import datetime, timezone
+import os
+import json
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from dataclasses import dataclass
 
@@ -20,6 +22,34 @@ class CooldownStatus:
     consecutive_losses: int = 0
     last_loss_time: Optional[datetime] = None
     details: str = ""
+    can_trade_time: Optional[datetime] = None  # 何时可以开单
+    should_notify: bool = False  # 是否应该推送通知
+
+
+# 冷静期通知状态文件
+COOLDOWN_NOTIFY_STATE_FILE = "cooldown_notify_state.json"
+
+
+def load_cooldown_notify_state() -> dict:
+    """加载冷静期通知状态"""
+    if os.path.exists(COOLDOWN_NOTIFY_STATE_FILE):
+        try:
+            with open(COOLDOWN_NOTIFY_STATE_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {"notified": False, "triggered_at": None, "notify_count": 0}
+
+
+def save_cooldown_notify_state(state: dict):
+    """保存冷静期通知状态"""
+    with open(COOLDOWN_NOTIFY_STATE_FILE, 'w') as f:
+        json.dump(state, f, indent=2)
+
+
+def reset_cooldown_notify_state():
+    """重置冷静期通知状态（冷静期结束时调用）"""
+    save_cooldown_notify_state({"notified": False, "triggered_at": None, "notify_count": 0})
 
 
 def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownStatus:
@@ -32,6 +62,8 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
     
     返回: CooldownStatus
     """
+    notify_state = load_cooldown_notify_state()
+    now = datetime.now(timezone.utc)
     
     # 1. 检查本金
     try:
@@ -43,11 +75,24 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
         equity = account.get('available', 0.0) + account.get('unrealised_pnl', 0.0)
         
         if equity <= CIRCUIT_BREAKER_EQUITY:
+            can_trade_time = now + timedelta(hours=168)
+            
+            # 判断是否需要推送
+            should_notify = not notify_state["notified"]
+            if should_notify:
+                notify_state["notified"] = True
+                notify_state["triggered_at"] = now.isoformat()
+                notify_state["notify_count"] = 1
+                save_cooldown_notify_state(notify_state)
+            
             return CooldownStatus(
                 triggered=True,
                 reason="capital_circuit_breaker",
                 cooldown_hours=168,  # 1 周
-                details=f"本金 {equity:.2f}U ≤ {CIRCUIT_BREAKER_EQUITY}U，停手 1 周"
+                can_trade_time=can_trade_time,
+                should_notify=should_notify,
+                details=f"本金 {equity:.2f}U ≤ {CIRCUIT_BREAKER_EQUITY}U，停手 1 周\n"
+                        f"可开单时间: {can_trade_time.strftime('%Y-%m-%d %H:%M UTC')}"
             )
     except Exception as e:
         # API 调用失败，继续检查其他条件
@@ -58,6 +103,10 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
         closes = client.get_position_closes(contract, limit=10)
         
         if not closes:
+            # 冷静期已解除，重置状态
+            if notify_state["notified"]:
+                reset_cooldown_notify_state()
+            
             return CooldownStatus(
                 triggered=False,
                 details="无平仓记录"
@@ -81,28 +130,46 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
         if consecutive_losses >= MAX_CONSECUTIVE_LOSSES:
             # 检查是否已过 48 小时
             if last_loss_time:
-                now = datetime.now(timezone.utc)
                 hours_since = (now - last_loss_time).total_seconds() / 3600
                 
                 if hours_since < 48:
+                    can_trade_time = last_loss_time + timedelta(hours=48)
+                    
+                    # 判断是否需要推送：仅在首次进入冷静期时推送
+                    should_notify = not notify_state["notified"]
+                    if should_notify:
+                        notify_state["notified"] = True
+                        notify_state["triggered_at"] = now.isoformat()
+                        notify_state["notify_count"] = 1
+                        save_cooldown_notify_state(notify_state)
+                    
                     return CooldownStatus(
                         triggered=True,
                         reason="consecutive_loss",
                         cooldown_hours=48,
                         consecutive_losses=consecutive_losses,
                         last_loss_time=last_loss_time,
+                        can_trade_time=can_trade_time,
+                        should_notify=should_notify,
                         details=f"连续 {consecutive_losses} 笔亏损，需休息 48 小时\n"
                                 f"最后亏损: {last_loss_time.strftime('%Y-%m-%d %H:%M UTC')}\n"
                                 f"已过: {hours_since:.1f} 小时\n"
-                                f"剩余: {48 - hours_since:.1f} 小时"
+                                f"剩余: {48 - hours_since:.1f} 小时\n"
+                                f"✅ 可开单时间: {can_trade_time.strftime('%Y-%m-%d %H:%M UTC')}"
                     )
                 else:
-                    # 已过 48 小时，冷静期结束
+                    # 已过 48 小时，冷静期结束，重置状态
+                    reset_cooldown_notify_state()
+                    
                     return CooldownStatus(
                         triggered=False,
                         consecutive_losses=consecutive_losses,
-                        details=f"连续 {consecutive_losses} 笔亏损，但已过 48 小时冷静期"
+                        details=f"连续 {consecutive_losses} 笔亏损，但已过 48 小时冷静期 ✅ 可以开单"
                     )
+        
+        # 未触发冷静期，重置通知状态
+        if notify_state["notified"]:
+            reset_cooldown_notify_state()
         
         # 未触发冷静期
         return CooldownStatus(

@@ -266,13 +266,27 @@ class TradingStrategy:
         cooldown = check_cooldown(self.client, self.contract)
         
         if cooldown.triggered:
+            # 仅在首次进入冷静期时推送通知（should_notify=True）
+            # 之后每30分钟的检查不再推送，避免重复信息轰炸
+            
+            if cooldown.should_notify:
+                # 首次触发冷静期，发送通知
+                action = "cooldown"
+                message = f"⚠️ 冷静期已触发！\n{cooldown.details}"
+            else:
+                # 仍在冷静期，但已通知过，不再推送（避免重复）
+                action = "none"
+                message = f"⏸️ 冷静期中... {cooldown.details}"
+            
             return TradeResult(
-                action="cooldown",
-                message=f"⚠️ 冷静期！\n{cooldown.details}",
+                action=action,
+                message=message,
                 details={
                     "reason": cooldown.reason,
                     "cooldown_hours": cooldown.cooldown_hours,
-                    "consecutive_losses": cooldown.consecutive_losses
+                    "consecutive_losses": cooldown.consecutive_losses,
+                    "can_trade_time": cooldown.can_trade_time.isoformat() if cooldown.can_trade_time else None,
+                    "should_notify": cooldown.should_notify
                 }
             )
         
