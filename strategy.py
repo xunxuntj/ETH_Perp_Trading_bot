@@ -5,6 +5,7 @@ V9.6-Exec SOP 实现
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass, asdict
@@ -18,6 +19,7 @@ from config import (
     LEVERAGE, CIRCUIT_BREAKER_EQUITY, get_risk_amount,
     LOCK_PROFIT_BUFFER
 )
+from position_state import update_position_state, clear_position_state
 from indicators import calculate_supertrend, calculate_dema
 from gate_client import GateClient
 
@@ -497,6 +499,16 @@ class TradingStrategy:
         pnl = (current_price - entry_price) * qty * FACE_VALUE
         lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=True)
 
+        # 检查持仓状态变化 (阶段和止损)
+        current_time = time.time()
+        has_change, change_type = update_position_state(
+            direction="long",
+            phase=phase,
+            stop_loss=recommended_stop,
+            entry_price=entry_price,
+            current_time=current_time
+        )
+
         # 返回阶段和止损信息
         phase_names = {
             Phase.SURVIVAL.value: "🔵 生存期",
@@ -509,15 +521,47 @@ class TradingStrategy:
             Phase.HOURLY.value: "1H ST 变红"
         }
 
-        return TradeResult(
-            action="hold",
-            message=f"""✅ 持仓中
+        # 根据状态变化返回不同的 action
+        if change_type == "stop_updated":
+            return TradeResult(
+                action="stop_updated",
+                message=f"""⚠️  止损已调整
+• 方向: 多 | 阶段: {phase_names.get(phase)}
+• 入场: {entry_price:.2f} | 当前: {current_price:.2f}
+• 新止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U""",
+                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+            )
+        elif change_type == "enter_locked":
+            return TradeResult(
+                action="enter_locked",
+                message=f"""🟡 已进入锁利期
+• 方向: 多 | 阶段: {phase_names.get(phase)}
+• 入场: {entry_price:.2f} | 当前: {current_price:.2f}
+• 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
+• 说明: 浮盈已超过 50U，切换至锁利策略""",
+                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+            )
+        elif change_type == "switch_1h":
+            return TradeResult(
+                action="switch_1h",
+                message=f"""🟣 已切换至小时线轨道
+• 方向: 多 | 阶段: {phase_names.get(phase)}
+• 入场: {entry_price:.2f} | 当前: {current_price:.2f}
+• 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
+• 说明: 1H ST已转向上升，以 1H ST 作为止损参考""",
+                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+            )
+        else:
+            # 正常持仓，无状态变化
+            return TradeResult(
+                action="hold",
+                message=f"""✅ 持仓中
 • 方向: 多 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
 • 离场条件: {phase_exit.get(phase)}""",
-            details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
-        )
+                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+            )
 
     
     def _manage_short_position(self, position, df_30m, df_1h, st_30m, st_1h,
@@ -563,6 +607,16 @@ class TradingStrategy:
         pnl = (entry_price - current_price) * qty * FACE_VALUE
         lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=False)
 
+        # 检查持仓状态变化 (阶段和止损)
+        current_time = time.time()
+        has_change, change_type = update_position_state(
+            direction="short",
+            phase=phase,
+            stop_loss=recommended_stop,
+            entry_price=entry_price,
+            current_time=current_time
+        )
+
         # 返回阶段和止损信息
         phase_names = {
             Phase.SURVIVAL.value: "🔵 生存期",
@@ -575,15 +629,47 @@ class TradingStrategy:
             Phase.HOURLY.value: "1H ST 变绿"
         }
 
-        return TradeResult(
-            action="hold",
-            message=f"""✅ 持仓中
+        # 根据状态变化返回不同的 action
+        if change_type == "stop_updated":
+            return TradeResult(
+                action="stop_updated",
+                message=f"""⚠️  止损已调整
+• 方向: 空 | 阶段: {phase_names.get(phase)}
+• 入场: {entry_price:.2f} | 当前: {current_price:.2f}
+• 新止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U""",
+                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+            )
+        elif change_type == "enter_locked":
+            return TradeResult(
+                action="enter_locked",
+                message=f"""🟡 已进入锁利期
+• 方向: 空 | 阶段: {phase_names.get(phase)}
+• 入场: {entry_price:.2f} | 当前: {current_price:.2f}
+• 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
+• 说明: 浮盈已超过 50U，切换至锁利策略""",
+                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+            )
+        elif change_type == "switch_1h":
+            return TradeResult(
+                action="switch_1h",
+                message=f"""🟣 已切换至小时线轨道
+• 方向: 空 | 阶段: {phase_names.get(phase)}
+• 入场: {entry_price:.2f} | 当前: {current_price:.2f}
+• 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
+• 说明: 1H ST已转向下降，以 1H ST 作为止损参考""",
+                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+            )
+        else:
+            # 正常持仓，无状态变化
+            return TradeResult(
+                action="hold",
+                message=f"""✅ 持仓中
 • 方向: 空 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
 • 离场条件: {phase_exit.get(phase)}""",
-            details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
-        )
+                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+            )
 
     
     def _close_with_reverse_check(self, position, entry_price, current_price, 
@@ -660,6 +746,9 @@ class TradingStrategy:
             )
             
             self._reset_state()
+            # 清除旧持仓状态（平仓时调用，新持仓会在下一个周期生成新状态）
+            direction_key = "long" if is_long else "short"
+            clear_position_state(direction_key)
             
             return TradeResult(
                 action=f"close_and_reverse_{reverse_direction}",
@@ -676,6 +765,9 @@ class TradingStrategy:
         else:
             # 只平仓，不反手
             self._reset_state()
+            # 清除持仓状态（平仓时调用）
+            direction_key = "long" if is_long else "short"
+            clear_position_state(direction_key)
             
             # 区分不反手的原因
             if cooldown.triggered:
@@ -705,6 +797,8 @@ class TradingStrategy:
             self.state.consecutive_losses = 0
         
         direction = "多" if is_long else "空"
+        direction_key = "long" if is_long else "short"
+        
         result = TradeResult(
             action="close",
             message=f"🛑 平{direction}！{reason}\n"
@@ -714,6 +808,8 @@ class TradingStrategy:
             details={"pnl": pnl, "reason": reason}
         )
         self._reset_state()
+        # 清除持仓状态（平仓时调用）
+        clear_position_state(direction_key)
         return result
     
     def _reset_state(self):
