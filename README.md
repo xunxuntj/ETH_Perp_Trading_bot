@@ -55,14 +55,36 @@
 - 连续 3 笔止损 → 强制休息 48 小时
 - 本金 ≤ 350U → 停手 1 周
 
-## � 文档导航
+## 📚 文档导航
+
+**第一步 - 必读文档** (选择你的角色)
+
+| 你是... | 推荐文档 | 用时 |
+|--------|--------|------|
+| 🚀 完全新手 | [QUICK_START.md](QUICK_START.md) + [CONFIGURATION.md](CONFIGURATION.md) | 20min |
+| 💼 交易员 | [CONFIGURATION.md](CONFIGURATION.md) + [SIGNAL_LOGIC_QUICK_REFERENCE.md](SIGNAL_LOGIC_QUICK_REFERENCE.md) | 30min |
+| 👨‍💻 开发者 | [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md) + [TESTING.md](TESTING.md) | 30min |
+| 🌐 DevOps | [DEPLOYMENT.md](DEPLOYMENT.md) | 15min |
+
+**第二步 - 深入理解**
 
 | 文档 | 用途 |
 |------|------|
-| [LOGGING_ENHANCEMENT_GUIDE.md](LOGGING_ENHANCEMENT_GUIDE.md) | 日志系统说明 |
-| [SIGNAL_FIX_GUIDE.md](SIGNAL_FIX_GUIDE.md) | 信号计算指南 |
-| [STOP_LOSS_TRACKING_SOLUTION.md](STOP_LOSS_TRACKING_SOLUTION.md) | 止损追踪说明 |
-| [DEMA_ROOT_CAUSE_FIXED.md](DEMA_ROOT_CAUSE_FIXED.md) | DEMA 精度优化总结 |
+| [配置参数完全指南](CONFIGURATION.md) | 18 个参数 + 推荐值 + 示例 |
+| [部署方案详解](DEPLOYMENT.md) | GitHub Actions/VPS/Docker/本地 |
+| [交易信号详解](SIGNAL_LOGIC_QUICK_REFERENCE.md) | 进场/平仓/风险控制 |
+| [系统架构](SYSTEM_ARCHITECTURE.md) | 模块设计和数据流 |
+| [止损逻辑详解](STOPLOSS_TIGHTENING_MECHANISM.md) | 止损追踪和调整机制 |
+| [持仓流程图解](STOPLOSS_FLOW_DIAGRAM.md) | 三阶段持仓转换 |
+| [测试指南](TESTING.md) | 9 个测试模块 |
+
+**第三步 - 社区贡献 & 项目信息**
+
+| 文档 | 用途 |
+|------|------|
+| [贡献指南](CONTRIBUTING.md) | 如何为项目做出贡献 |
+| [发布准备](RELEASE_READY.md) | 项目完整性检查 |
+| [项目状态](PROJECT_STATUS.md) | 完成度统计和质量指标 |
 
 ## �🚀 快速开始
 
@@ -72,92 +94,116 @@
 ✅ **账户金额修复** - 自动识别全仓模式（`cross_available`字段），正确显示账户本金
 ✅ **完整DEBUG日志** - 脚本运行时自动输出账户信息便于排查问题
 
-### 1. 克隆仓库
+### ⏱️ 3阶段快速启动
 
+**第1步: 环境配置 (5分钟)**
 ```bash
+# 克隆仓库
 git clone https://github.com/yourusername/eth-trading-bot.git
 cd eth-trading-bot
-```
 
-### 2. 安装依赖
-
-```bash
+# 安装依赖
 pip install -r requirements.txt
-```
 
-### 3. 配置环境变量
+# 配置 API（见下文 "环境变量" 章节）
+export GATE_API_KEY="your_key"
+export GATE_API_SECRET="your_secret"
+export TELEGRAM_BOT_TOKEN="your_token"
+export TELEGRAM_CHAT_ID="your_chat_id"
 
-```bash
-export GATE_API_KEY="your_gate_api_key"
-export GATE_API_SECRET="your_gate_api_secret"
-export TELEGRAM_BOT_TOKEN="your_telegram_bot_token"
-export TELEGRAM_CHAT_ID="your_telegram_chat_id"
-```
-
-### 4. 运行
-
-```bash
+# 运行
 python main.py
 ```
 
-## ⚙️ 配置参数
+**第2步: 信号验证 (1-2周)**
+- 运行在模拟模式验证信号准确性
+- 详见 [快速开始指南](QUICK_START.md)
 
-编辑 `config.py` 自定义参数：
+**第3步: 启用自动交易**
+- 验证完成后，设置 `ENABLE_AUTO_TRADING=true`
+- 详见 [部署指南](DEPLOYMENT.md)
 
-```python
-# 交易对
-CONTRACT = "ETH_USDT"
+## 🔧 环境变量配置
 
-# SuperTrend 参数
-SUPERTREND_PERIOD = 10
-SUPERTREND_MULTIPLIER = 3.0
+**必需的环境变量**:
 
-# DEMA 周期
-DEMA_PERIOD = 200
+| 变量 | 说明 | 获取方式 |
+|------|------|---------|
+| `GATE_API_KEY` | Gate.io API密钥 | [Gate.io 账户设置](https://www.gate.io/myaccount/apimanagement) |
+| `GATE_API_SECRET` | Gate.io API密钥对 | 同上 |
+| `TELEGRAM_BOT_TOKEN` | Telegram 机器人 Token | [@BotFather](https://t.me/botfather) 创建 |
+| `TELEGRAM_CHAT_ID` | Telegram 聊天 ID | 向你的 Bot 发送 `/start` 获取 |
 
-# 杠杆倍数
-LEVERAGE = 10
+**可选的环境变量** (详见 [配置参数文档](CONFIGURATION.md)):
 
-# 风险参数
-FIXED_RISK_AMOUNT = 10.0      # 固定风险金额
-RISK_PERCENT = 0.02           # 百分比风险 (2%)
-CIRCUIT_BREAKER_EQUITY = 350  # 熔断本金阈值
-MAX_CONSECUTIVE_LOSSES = 3    # 最大连续亏损次数
-LOCK_PROFIT_BUFFER = 1.0      # 锁利缓冲 (U)
+```bash
+# 风险管理
+export RISK_MODE="fixed"              # 固定/百分比模式
+export RISK_FIXED_AMOUNT="10"         # 固定风险金额(U)
+export RISK_PERCENT="0.02"            # 百分比风险(2%)
+
+# 自动交易
+export ENABLE_AUTO_TRADING="false"    # 启用自动交易(默认false-模拟)
+export AUTO_SET_STOP_LOSS="true"      # 自动设置止损
+export STOP_LOSS_MODE="tight_only"    # 止损模式
+
+# 通知
+export NOTIFY_DETAILS="true"          # 发送详细日志
 ```
 
-## 🔔 Telegram 通知设置
+**>> 详细配置说明见 [配置参数完全指南](CONFIGURATION.md)**
 
-### 创建 Bot
+## ⚙️ 策略参数调整
 
-1. 在 Telegram 中找到 [@BotFather](https://t.me/BotFather)
-2. 发送 `/newbot` 创建新 Bot
-3. 保存获得的 Bot Token
+编辑 `config.py` 自定义指标参数：
 
-### 获取 Chat ID
+```python
+# 技术指标
+SUPERTREND_PERIOD = 10         # SuperTrend周期
+SUPERTREND_MULTIPLIER = 3.0    # SuperTrend倍数
+DEMA_PERIOD = 200              # DEMA移动平均周期
 
-1. 向你的 Bot 发送任意消息
-2. 访问: `https://api.telegram.org/bot<TOKEN>/getUpdates`
-3. 在返回的 JSON 中找到 `chat.id`
+# 交易配置
+LEVERAGE = 10                  # 杠杆倍数
+CONTRACT = "ETH_USDT"          # 交易对
 
-## 🤖 GitHub Actions 自动化
+# 风险控制
+CIRCUIT_BREAKER_EQUITY = 350   # 熔断本金阈值
+MAX_CONSECUTIVE_LOSSES = 3     # 连续亏损熔断
+LOCK_PROFIT_BUFFER = 1         # 锁利缓冲(U)
+```
 
-### 配置 Secrets
+**>> 建议保持默认参数，仅调整风险相关参数**
 
-在仓库 **Settings → Secrets and variables → Actions** 添加：
+## 🤖 GitHub Actions 自动化（推荐）
 
-| Secret | 说明 |
-|--------|------|
-| `GATE_API_KEY` | Gate.io API Key |
-| `GATE_API_SECRET` | Gate.io API Secret |
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token |
-| `TELEGRAM_CHAT_ID` | Telegram Chat ID |
+本项目支持免费的 GitHub Actions 自动化，**无需自己管理服务器**！
 
-### 调度频率
+### 配置步骤
 
-默认每 30 分钟运行一次（整点和半点）。
+1. **Fork 本仓库** → 点击右上角 "Fork"
 
-修改 `.github/workflows/trading.yml` 中的 cron 表达式可调整频率。
+2. **配置 Secrets**
+   - 进入仓库 → Settings → Secrets and variables → Actions
+   - 点击 "New repository secret"，添加以下 4 个 Secrets:
+
+| Secret 名称 | 值 |
+|------------|-----|
+| `GATE_API_KEY` | 你的 API Key |
+| `GATE_API_SECRET` | 你的 API Secret |
+| `TELEGRAM_BOT_TOKEN` | 你的 Bot Token |
+| `TELEGRAM_CHAT_ID` | 你的 Chat ID |
+
+3. **启用工作流**
+   - 进入 Actions 标签
+   - 找到 "ETH Trading Bot Scheduler"
+   - 点击 "Enable workflow"
+
+**工作流默认设置**:
+- ⏱️ 每 30 分钟运行一次
+- 🔧 模拟模式 (ENABLE_AUTO_TRADING=false)
+
+**>> 详细配置见 [部署指南](DEPLOYMENT.md#方案-1️⃣-github-actions推荐)**
 
 ## 📱 信号示例
 
@@ -205,19 +251,66 @@ LOCK_PROFIT_BUFFER = 1.0      # 锁利缓冲 (U)
 
 ```
 eth-trading-bot/
-├── .github/
-│   └── workflows/
-│       └── trading.yml      # GitHub Actions 配置
-├── config.py                # 策略参数配置
-├── gate_client.py           # Gate.io API 客户端
-├── indicators.py            # 技术指标 (SuperTrend, DEMA)
-├── strategy.py              # 交易策略核心逻辑
-├── cooldown.py              # 冷静期检查
-├── telegram_notifier.py     # Telegram 通知
-├── main.py                  # 主程序入口
-├── requirements.txt         # Python 依赖
-└── README.md
+├── .github/workflows/
+│   └── trading.yml              # GitHub Actions 工作流配置
+├── tests/                       # 单元测试和集成测试
+│   ├── test_strategy_logic.py   # 策略信号测试
+│   ├── test_position_state.py   # 持仓状态测试  
+│   ├── test_stop_loss_integration.py  # 止损追踪测试
+│   ├── test_trading_executor.py # 交易执行测试
+│   └── ...
+├── config.py                    # 策略参数配置
+├── gate_client.py               # Gate.io API 客户端
+├── indicators.py                # 技术指标 (SuperTrend, DEMA)
+├── strategy.py                  # 交易策略核心逻辑
+├── execution_flow.py            # 完整交易流程编排
+├── position_state.py            # 持仓状态管理
+├── cooldown.py                  # 冷静期机制
+├── trading_executor.py          # 交易执行器
+├── telegram_notifier.py         # Telegram 通知
+├── main.py                      # 主程序入口 (每 30min 运行)
+├── requirements.txt             # Python 依赖
+├── README.md                    # 本文件
+├── CONFIGURATION.md             # 配置参数详细指南 ⭐ 必读
+├── DEPLOYMENT.md                # 部署指南 (GitHub Actions / VPS / Docker)
+├── TESTING.md                   # 测试指南
+├── QUICK_START.md               # 快速开始 (5分钟)
+└── LICENSE                      # MIT 许可证
 ```
+
+## 🎯 使用建议
+
+### 第一次使用？推荐流程
+
+1. **阅读 [快速开始指南](QUICK_START.md)** - 5 分钟了解整个流程
+2. **本地测试** - 按流程运行脚本，观察信号准确性（1-2周）
+3. **配置环境变量** - 根据账户规模调整 [配置参数](CONFIGURATION.md)
+4. **选择部署方案** - [GitHub Actions](DEPLOYMENT.md#方案-1️⃣-github-actions推荐)（推荐）或 [VPS](DEPLOYMENT.md#方案-2️⃣-vps-服务器)
+5. **启用自动交易** - 设置 `ENABLE_AUTO_TRADING=true` 并使用小仓位验证  
+6. **监控和优化** - 根据实际运行情况调整参数
+
+### 我想...
+
+- 🚀 **快速启动** → [快速开始指南](QUICK_START.md)
+- 🔧 **调整参数** → [配置参数完全指南](CONFIGURATION.md)
+- 🌐 **部署到生产** → [部署指南](DEPLOYMENT.md)
+- 🧪 **运行测试** → [测试指南](TESTING.md)
+- 📊 **理解策略** → [信号逻辑详解](SIGNAL_LOGIC_QUICK_REFERENCE.md)
+- 🏗️ **了解架构** → [系统架构文档](SYSTEM_ARCHITECTURE.md)
+
+## ✅ 部署前检查清单
+
+启动自动交易前，请确认完成以下各项：
+
+- [ ] 阅读并理解 [快速开始指南](QUICK_START.md)
+- [ ] 理解 [配置参数](CONFIGURATION.md) 及其含义
+- [ ] 获取 Gate.io API Key 并验证权限
+- [ ] 获取 Telegram Bot Token 和 Chat ID
+- [ ] 本地运行脚本至少 1 周，验证信号准确性
+- [ ] 理解 [风险管理规则](CONFIGURATION.md#-风险管理配置)
+- [ ] 选择合适的 [部署方案](DEPLOYMENT.md)
+- [ ] 理解 **加密货币交易的高风险性**，准备好可能的亏损
+- [ ] **使用小仓位进行验证**，不要一上来就投入大资金
 
 ## ⚠️ 免责声明
 
