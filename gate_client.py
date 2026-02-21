@@ -157,6 +157,9 @@ class GateClient:
             except Exception:
                 return 0.0
 
+        if self.debug:
+            print(f"[GATE DEBUG] get_account raw data: {data}")
+
         if isinstance(data, list):
             # prefer USDT entry; fall back to first entry
             entry = None
@@ -168,10 +171,20 @@ class GateClient:
                 entry = data[0]
 
             if entry:
+                if self.debug:
+                    print(f"[GATE DEBUG] get_account entry fields: {entry.keys()}")
+                # Try multiple field name variations
+                total = _safe_float(entry.get('total', entry.get('equity', entry.get('wallet_balance', 0))))
+                available = _safe_float(entry.get('available', entry.get('free', 0)))
+                unrealised_pnl = _safe_float(entry.get('unrealised_pnl', entry.get('unrealized_pnl', 0)))
+                
+                if self.debug:
+                    print(f"[GATE DEBUG] extracted: total={total}, available={available}, unrealised_pnl={unrealised_pnl}")
+                
                 return {
-                    'total': _safe_float(entry.get('total', 0)),
-                    'available': _safe_float(entry.get('available', 0)),
-                    'unrealised_pnl': _safe_float(entry.get('unrealised_pnl', 0))
+                    'total': total,
+                    'available': available,
+                    'unrealised_pnl': unrealised_pnl
                 }
             else:
                 if self.debug:
@@ -180,10 +193,20 @@ class GateClient:
 
         # If it's a dict, try to parse fields directly
         if isinstance(data, dict):
+            if self.debug:
+                print(f"[GATE DEBUG] get_account dict fields: {data.keys()}")
+            # Try multiple field name variations
+            total = _safe_float(data.get('total', data.get('equity', data.get('wallet_balance', 0))))
+            available = _safe_float(data.get('available', data.get('free', 0)))
+            unrealised_pnl = _safe_float(data.get('unrealised_pnl', data.get('unrealized_pnl', 0)))
+            
+            if self.debug:
+                print(f"[GATE DEBUG] extracted: total={total}, available={available}, unrealised_pnl={unrealised_pnl}")
+            
             return {
-                'total': _safe_float(data.get('total', 0)),
-                'available': _safe_float(data.get('available', 0)),
-                'unrealised_pnl': _safe_float(data.get('unrealised_pnl', 0))
+                'total': total,
+                'available': available,
+                'unrealised_pnl': unrealised_pnl
             }
 
         # Unknown shape

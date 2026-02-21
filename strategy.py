@@ -232,12 +232,16 @@ class TradingStrategy:
         # 获取账户和持仓
         try:
             account = self.client.get_account()
-        except:
+        except Exception as e:
+            if os.getenv('DEBUG'):
+                print(f"[STRATEGY DEBUG] get_account() failed: {e}")
             account = None
 
         try:
             position = self.client.get_positions(self.contract)
-        except:
+        except Exception as e:
+            if os.getenv('DEBUG'):
+                print(f"[STRATEGY DEBUG] get_positions() failed: {e}")
             position = None
 
         # 检查持仓状态（无缓存依赖）
@@ -249,16 +253,37 @@ class TradingStrategy:
         #   - available: 可用余额 (已扣除已占用保证金)
         #   - unrealised_pnl: 未平仓盈亏
         # 使用 `total` 作为本金 (与Gate App同步)
-        if account:
-            equity = account.get('total', 0.0)
+        equity = 500  # 默认值
+        equity_from_api = False
+        if account is not None:
+            available = account.get('available', 0.0)
+            total = account.get('total', 0.0)
+            unrealised_pnl = account.get('unrealised_pnl', 0.0)
+            
+            if total > 0:
+                equity = total
+                equity_from_api = True
+            elif available > 0:
+                # 如果total为0但available大于0，use available as fallback
+                equity = available
+                equity_from_api = True
+                if os.getenv('DEBUG'):
+                    print(f"[STRATEGY DEBUG] account.total is 0, fallback to available: {available}")
+            else:
+                # 都是0，输出警告
+                if os.getenv('DEBUG') or not equity_from_api:
+                    print(f"[STRATEGY DEBUG] account data: total={total}, available={available}, unrealised_pnl={unrealised_pnl}")
+                    print(f"[STRATEGY DEBUG] All account fields are 0, using default {equity}")
         else:
-            equity = 500  # 默认值（当 API 请求失败时）
+            if os.getenv('DEBUG'):
+                print(f"[STRATEGY DEBUG] account is None, using default 500")
+        
         # Debug output for CI/action runs when GATE_DEBUG set
         if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
             try:
-                print(f"[STRATEGY DEBUG] account={account}")
+                print(f"[STRATEGY DEBUG] full account object: {account}")
                 print(f"[STRATEGY DEBUG] position={position}")
-                print(f"[STRATEGY DEBUG] computed equity (available + unrealised if pos): {equity}")
+                print(f"[STRATEGY DEBUG] final equity for risk check: {equity}")
             except Exception:
                 pass
         
@@ -266,10 +291,16 @@ class TradingStrategy:
         risk = get_risk_amount(equity)
         
         if risk['status'] == 'circuit_breaker':
+            # 如果equity异常（<=0），输出调试信息
+            debug_msg = ""
+            if equity <= 0:
+                debug_msg = f"\n\n[DEBUG] account={account}\n[DEBUG] equity={equity}"
+                print(f"[STRATEGY] WARNING: equity is {equity}, account={account}")
+            
             return TradeResult(
                 action="circuit_breaker",
-                message=f"⚠️ 熔断！{risk['message']}，停手一周",
-                details={"equity": equity}
+                message=f"⚠️ 熔断！{risk['message']}，停手一周{debug_msg}",
+                details={"equity": equity, "account": account}
             )
         
         # 通过 API 检查连续亏损（从交易历史获取）
