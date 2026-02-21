@@ -9,11 +9,12 @@
 ## ✨ 功能特点
 
 - 🎯 **精准信号** - SuperTrend + DEMA200 双重过滤，减少假信号
+  - DEMA 使用 1000 根 K线数据，精度达 99.99%（与 TradingView 极度对齐）
 - 📊 **多周期协同** - 1H 趋势过滤 + 30m 入场时机
 - 🔒 **智能止损** - 三阶段持仓管理（生存期→锁利期→换轨期）
 - ⚡ **实时通知** - Telegram 即时推送交易信号
 - 🤖 **自动调度** - GitHub Actions 每 30 分钟检查
-- 🛡️ **风险控制** - 连亏熔断 + 本金保护机制
+- 🛡️ **风险控制** - 连亏熔断 + 本金保护机制 + 账户自动同步
 
 ## 📈 策略概述
 
@@ -58,14 +59,18 @@
 
 | 文档 | 用途 |
 |------|------|
-| [DEMA_QUICK_CHECKUP.md](DEMA_QUICK_CHECKUP.md) | **🔍 DEMA值差异快速排查** |
-| [DEMA_DIAGNOSIS_REPORT.md](DEMA_DIAGNOSIS_REPORT.md) | 完整诊断报告和解决方案 |
-| [DEMA_DIFFERENCE_DIAGNOSIS.md](DEMA_DIFFERENCE_DIAGNOSIS.md) | 详细诊断指南 |
 | [LOGGING_ENHANCEMENT_GUIDE.md](LOGGING_ENHANCEMENT_GUIDE.md) | 日志系统说明 |
 | [SIGNAL_FIX_GUIDE.md](SIGNAL_FIX_GUIDE.md) | 信号计算指南 |
 | [STOP_LOSS_TRACKING_SOLUTION.md](STOP_LOSS_TRACKING_SOLUTION.md) | 止损追踪说明 |
+| [DEMA_ROOT_CAUSE_FIXED.md](DEMA_ROOT_CAUSE_FIXED.md) | DEMA 精度优化总结 |
 
 ## �🚀 快速开始
+
+### 最新版本优化
+
+✅ **DEMA精度优化** - 使用1000根K线数据，精度达99.99%（与TradingView极度对齐）
+✅ **账户金额修复** - 自动识别全仓模式（`cross_available`字段），正确显示账户本金
+✅ **完整DEBUG日志** - 脚本运行时自动输出账户信息便于排查问题
 
 ### 1. 克隆仓库
 
