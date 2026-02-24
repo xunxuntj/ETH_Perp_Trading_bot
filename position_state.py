@@ -56,7 +56,7 @@ def update_position_state(direction: str, phase: str, stop_loss: float, entry_pr
     更新持仓状态，检测是否有变化
     
     返回: (has_change, change_type)
-    change_type: "", "stop_updated", "enter_locked", "switch_1h", "phase_changed"
+    change_type: "", "stop_updated", "enter_locked", "switch_1h", "phase_changed", "new_position"
     """
     state = load_position_state()
     
@@ -65,8 +65,12 @@ def update_position_state(direction: str, phase: str, stop_loss: float, entry_pr
     
     change_type = ""
     
+    # 如果是新持仓（position_state.json中没有该方向的记录）
+    # 手动开仓或冷却期结束后的首次信号检测时会触发这个条件
+    if not prev_state:
+        change_type = "stop_updated"  # 新持仓时发送止损通知
     # 检查止损是否有变化 (差异超过 0.01)
-    if prev_state and abs(prev_state.get('stop_loss', 0) - stop_loss) > 0.01:
+    elif abs(prev_state.get('stop_loss', 0) - stop_loss) > 0.01:
         change_type = "stop_updated"
     
     # 检查阶段是否有变化
