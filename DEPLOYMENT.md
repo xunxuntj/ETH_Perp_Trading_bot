@@ -17,88 +17,92 @@
 
 | 方案 | 难度 | 成本 | 是否7x24 | 推荐场景 |
 |------|------|------|---------|---------|
-| Railway + cronjob.org | ⭐⭐ | 免费(有额度) | ✅ | 免费稳定定时触发 |
+| Railway Cron Jobs | ⭐⭐ | 免费(有额度) | ✅ | 免费稳定自动执行 |
 | 本地开发机 | ⭐ | 无 | ❌ | 测试验证 |
 | VPS 服务器 | ⭐⭐ | $3-10/月 | ✅ | 生产环境 |
 | GitHub Actions | ⭐⭐ | 免费 | ✅ | 备选方案 |
 | Docker 容器 | ⭐⭐⭐ | $3-20/月 | ✅ | 高级用户 |
 
-**推荐**: 🏆 Railway API + cronjob.org（免费、可控、触发稳定）
+**推荐**: 🏆 Railway Cron Jobs（免费、原生支持、配置简单）
 
 ---
 
-## 方案 1️⃣: Railway API + cronjob.org（推荐 ⭐⭐⭐⭐⭐）
+## 方案 1️⃣: Railway Cron Jobs（推荐 ⭐⭐⭐⭐⭐）
 
-将脚本部署为 HTTP API（Railway 常驻），由 cronjob.org 每 30 分钟调用一次 `/run`。
+Railway 原生支持 Cron Jobs，无需 API 封装或外部定时器，直接运行 `python main.py`。
 
 ### 1.1 前置准备
 
-1. Railway 账户（免费计划）
-2. cronjob.org 账户（免费）
-3. 本仓库已包含 API 入口文件：`api_server.py`
-4. 启动命令已配置：`Procfile`
+1. Railway 账户（免费计划即可）
+2. 本仓库已包含 `railway.toml` 配置文件
 
 ### 1.2 Railway 部署
 
-1. 在 Railway 创建项目并连接本仓库
-2. 部署分支选择 `main`
-3. Railway 启动命令（默认读取 `Procfile`）：
+1. **创建项目**
+   - 在 [Railway](https://railway.app) 创建新项目
+   - 选择 "Deploy from GitHub repo"
+   - 连接本仓库，选择 `main` 分支
 
-```bash
-uvicorn api_server:app --host 0.0.0.0 --port $PORT
-```
+2. **Railway 自动识别配置**
+   - Railway 会自动读取 `railway.toml`
+   - Cron Job 自动配置为每 30 分钟运行
 
-### 1.3 配置 Railway 环境变量
+### 1.3 配置环境变量
 
-在 Railway Variables 添加：
+在 Railway Variables 中添加：
 
 | 变量 | 说明 |
 |------|------|
-| `API_KEY` | API 调用鉴权密钥（cronjob.org 使用） |
 | `GATE_API_KEY` | Gate.io API Key |
 | `GATE_API_SECRET` | Gate.io API Secret |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot Token |
 | `TELEGRAM_CHAT_ID` | Telegram Chat ID |
 | `ENABLE_AUTO_TRADING` | `true/false`，默认 `false` |
-| `MIN_INTERVAL_SECONDS` | 触发最小间隔秒数（默认 `60`） |
 
-### 1.4 API 说明
+其他可选配置见 [CONFIGURATION.md](CONFIGURATION.md)。
 
-- `GET /health`：健康检查
-- `POST /run`：执行一次完整策略流程
-- Header 鉴权：`X-API-Key: <API_KEY>`
-- 并发保护：运行中重复触发返回 `already_running`
-- 频率保护：小于最小间隔返回 `too_frequent`
+### 1.4 railway.toml 配置说明
 
-### 1.5 cronjob.org 配置（每 30 分钟）
+```toml
+# Railway Cron Job 配置
+[[crons]]
+schedule = "*/30 * * * *"  # 每 30 分钟
+command = "python main.py"
+```
 
-创建一个 CronJob：
+**修改运行频率**：
+- `*/30 * * * *` - 每 30 分钟（当前）
+- `0 * * * *` - 每小时整点
+- `0 */2 * * *` - 每 2 小时
+- `0 0 * * *` - 每天 00:00 UTC
 
-- URL: `https://<你的-railway-域名>/run`
-- Method: `POST`
-- Header: `X-API-Key: <你的 API_KEY>`
-- Schedule: `*/30 * * * *`
+### 1.5 验证部署
 
-### 1.6 验证流程
+1. **查看部署日志**
+   - Railway Dashboard → Deployments
+   - 点击最新部署查看日志
 
-1. 浏览器访问 `https://<域名>/health`，返回 `{"ok": true, ...}`
-2. 在 cronjob.org 执行一次手动触发
-3. 检查 Railway 日志是否出现一次完整策略运行
-4. 检查 Telegram 是否收到对应通知
+2. **查看 Cron 执行**
+   - Railway Dashboard → Cron Jobs
+   - 查看执行历史和日志
 
-### 1.7 故障排查
+3. **验证通知**
+   - 等待下一次 Cron 触发（最多 30 分钟）
+   - 检查 Telegram 是否收到消息
 
-**问题**: `/run` 返回 401
-- **原因**: `X-API-Key` 与 Railway `API_KEY` 不一致
-- **解决**: 核对 Header 与 Railway Variables
+### 1.6 故障排查
 
-**问题**: `/run` 返回 `already_running`
-- **原因**: 上一次触发尚未执行完成
-- **解决**: 等待本次执行结束后再触发
+**问题**: Cron Job 不执行
+- **原因**: railway.toml 配置错误或部署失败
+- **解决**: 检查部署日志，确认 railway.toml 格式正确
 
-**问题**: `/run` 返回 `too_frequent`
-- **原因**: 触发频率小于 `MIN_INTERVAL_SECONDS`
-- **解决**: 放宽触发频率或调小 `MIN_INTERVAL_SECONDS`
+**问题**: 脚本运行但无信号
+- **原因**: 环境变量未配置或市场无信号
+- **解决**: 检查 Railway Variables，查看执行日志
+
+**问题**: Telegram 无通知
+- **原因**: Token 或 Chat ID 错误
+- **解决**: 核对 Telegram 配置，手动测试 Bot
 
 ---
 
@@ -444,10 +448,9 @@ screen -ls
 - [ ] GATE_API_SECRET 正确
 - [ ] TELEGRAM_BOT_TOKEN 正确
 - [ ] TELEGRAM_CHAT_ID 正确
-- [ ] API_KEY 已设置（Railway API 部署需要）
 - [ ] 在模拟模式运行至少 1 周验证信号
 - [ ] 理解风险、杠杆和资金管理
-- [ ] 有应急停止的方法（暂停 cronjob 或下线 Railway 服务）
+- [ ] 有应急停止的方法（Railway Cron 可暂停或删除项目）
 
 ---
 
@@ -465,7 +468,7 @@ screen -ls
 **A**: 
 - **本地**: 不需要在远程服务器存储 API Key，更安全
 - **VPS**: 需要小心管理 Secrets，但支持 7x24 运行
-- **Railway**: 平台托管变量，配合 `API_KEY` 鉴权，适合免费轻量部署
+- **Railway**: 平台托管变量，免费计划支持 Cron Jobs，配置简单
 
 ### Q: 可以同时在多个 VPS 上运行脚本吗？
 
@@ -486,14 +489,18 @@ screen -ls
 ### Q: 如何停止脚本？
 
 **A**:
-- Railway + cronjob.org: 暂停 cron 任务或删除 `/run` 调用
+- Railway Cron Jobs: 在 Railway Dashboard 暂停或删除项目
 - VPS Cron: `crontab -e` 注释掉对应行
 - VPS SystemD: `sudo systemctl stop trading-bot.service`
 - Docker: `docker-compose stop`
 
+### Q: Railway Cron Jobs 免费计划有限制吗？
+
+**A**: Railway 免费计划有一定的执行时间限制（具体见 Railway 官网），但对于每 30 分钟跑几秒的脚本来说通常足够。
+
 ### Q: GitHub Actions 还能用吗？
 
-**A**: 可以。仓库保留了 GitHub Actions 工作流配置，你可按需启用；但当前文档主推荐是 Railway API + cronjob.org。
+**A**: 可以。仓库保留了 GitHub Actions 工作流配置，你可按需启用；但当前文档主推荐是 Railway Cron Jobs。
 
 ---
 

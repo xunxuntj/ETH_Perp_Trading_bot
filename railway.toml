@@ -1,0 +1,13 @@
+# Railway Cron Job 配置
+# 文档: https://docs.railway.app/reference/cron-jobs
+
+[build]
+
+[deploy]
+startCommand = "echo 'Railway Cron mode - no web service needed'"
+restartPolicyType = "never"
+
+# Cron Job: 每 30 分钟执行一次交易策略
+[[crons]]
+schedule = "*/30 * * * *"
+command = "python main.py"
