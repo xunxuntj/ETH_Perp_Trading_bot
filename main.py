@@ -27,11 +27,12 @@ from execution_flow import ExecutionFlow
 from telegram_notifier import send_telegram_message
 
 
-def main():
+def run_once():
     # 检查 API 配置
     if not GATE_API_KEY or not GATE_API_SECRET:
-        print("❌ 请设置 GATE_API_KEY 和 GATE_API_SECRET 环境变量")
-        sys.exit(1)
+        error_msg = "❌ 请设置 GATE_API_KEY 和 GATE_API_SECRET 环境变量"
+        print(error_msg)
+        return {"ok": False, "error": error_msg}
     
     now = datetime.now(timezone.utc)
     print(f"🕐 {now.strftime('%Y-%m-%d %H:%M:%S UTC')}")
@@ -116,6 +117,13 @@ def main():
                 print(f"⚠️ 保存执行日志失败: {str(e)}")
         
         print("\n✅ 完成")
+        return {
+            "ok": True,
+            "strategy_action": strategy_action,
+            "trade_executed": trade_executed,
+            "message": message,
+            "trade_details": trade_details,
+        }
         
     except Exception as e:
         error_msg = f"❌ 脚本错误: {str(e)}"
@@ -126,6 +134,13 @@ def main():
         
         # 错误也发送通知
         send_telegram_message(f"⚠️ ETH交易脚本错误\n\n{error_msg}")
+
+        return {"ok": False, "error": error_msg}
+
+
+def main():
+    result = run_once()
+    if not result.get("ok"):
         sys.exit(1)
 
 

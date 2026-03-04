@@ -13,7 +13,7 @@
 - 📊 **多周期协同** - 1H 趋势过滤 + 30m 入场时机
 - 🔒 **智能止损** - 三阶段持仓管理（生存期→锁利期→换轨期）
 - ⚡ **实时通知** - Telegram 即时推送交易信号
-- 🤖 **自动调度** - GitHub Actions 每 30 分钟检查
+- 🤖 **自动调度** - Railway API + cronjob.org 每 30 分钟触发
 - 🛡️ **风险控制** - 连亏熔断 + 本金保护机制 + 账户自动同步
 
 ## 📈 策略概述
@@ -175,35 +175,51 @@ LOCK_PROFIT_BUFFER = 1         # 锁利缓冲(U)
 
 **>> 建议保持默认参数，仅调整风险相关参数**
 
-## 🤖 GitHub Actions 自动化（推荐）
+## 🚂 Railway API 部署（推荐）
 
-本项目支持免费的 GitHub Actions 自动化，**无需自己管理服务器**！
+当前推荐将脚本部署为 API，由 cronjob.org 定时调用，实现稳定的每 30 分钟运行一次。
 
-### 配置步骤
+### 已内置的 API 能力
 
-1. **Fork 本仓库** → 点击右上角 "Fork"
+- `GET /health`：健康检查
+- `POST /run`：触发一次完整策略流程（等价于运行一次 `python main.py`）
+- Header 鉴权：`X-API-Key: <你的 API_KEY>`
+- 防重入：执行中再次触发会返回 `already_running`
+- 防频繁触发：默认 60 秒内重复触发会返回 `too_frequent`
 
-2. **配置 Secrets**
-   - 进入仓库 → Settings → Secrets and variables → Actions
-   - 点击 "New repository secret"，添加以下 4 个 Secrets:
+### Railway 配置步骤
 
-| Secret 名称 | 值 |
-|------------|-----|
-| `GATE_API_KEY` | 你的 API Key |
-| `GATE_API_SECRET` | 你的 API Secret |
-| `TELEGRAM_BOT_TOKEN` | 你的 Bot Token |
-| `TELEGRAM_CHAT_ID` | 你的 Chat ID |
+1. 新建 Railway 项目并连接本仓库
+2. 确认启动命令（已在 `Procfile` 中配置）：
 
-3. **启用工作流**
-   - 进入 Actions 标签
-   - 找到 "ETH Trading Bot Scheduler"
-   - 点击 "Enable workflow"
+```bash
+uvicorn api_server:app --host 0.0.0.0 --port $PORT
+```
 
-**工作流默认设置**:
-- ⏱️ 每 30 分钟运行一次
-- 🔧 模拟模式 (ENABLE_AUTO_TRADING=false)
+3. 在 Railway Variables 中配置环境变量：
 
-**>> 详细配置见 [部署指南](DEPLOYMENT.md#方案-1️⃣-github-actions推荐)**
+| 变量 | 说明 |
+|------|------|
+| `API_KEY` | API 调用鉴权密钥（给 cronjob.org 使用） |
+| `GATE_API_KEY` | Gate.io API Key |
+| `GATE_API_SECRET` | Gate.io API Secret |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token |
+| `TELEGRAM_CHAT_ID` | Telegram Chat ID |
+| `ENABLE_AUTO_TRADING` | `true/false`，默认 `false` |
+| `MIN_INTERVAL_SECONDS` | 最小触发间隔秒数（默认 `60`） |
+
+### cronjob.org 调用示例
+
+- Method: `POST`
+- URL: `https://<你的 railway 域名>/run`
+- Header: `X-API-Key: <你的 API_KEY>`
+- Schedule: 每 30 分钟
+
+## 🤖 GitHub Actions 自动化（可选/历史方案）
+
+仓库保留 GitHub Actions 工作流配置，可按需启用；如果你已迁移到 Railway，可保持停用状态。
+
+**>> 详细配置见 [部署指南](DEPLOYMENT.md)**
 
 ## 📱 信号示例
 
@@ -269,6 +285,8 @@ eth-trading-bot/
 ├── trading_executor.py          # 交易执行器
 ├── telegram_notifier.py         # Telegram 通知
 ├── main.py                      # 主程序入口 (每 30min 运行)
+├── api_server.py                # FastAPI 服务入口 (/health, /run)
+├── Procfile                     # Railway 启动命令
 ├── requirements.txt             # Python 依赖
 ├── README.md                    # 本文件
 ├── CONFIGURATION.md             # 配置参数详细指南 ⭐ 必读
@@ -285,7 +303,7 @@ eth-trading-bot/
 1. **阅读 [快速开始指南](QUICK_START.md)** - 5 分钟了解整个流程
 2. **本地测试** - 按流程运行脚本，观察信号准确性（1-2周）
 3. **配置环境变量** - 根据账户规模调整 [配置参数](CONFIGURATION.md)
-4. **选择部署方案** - [GitHub Actions](DEPLOYMENT.md#方案-1️⃣-github-actions推荐)（推荐）或 [VPS](DEPLOYMENT.md#方案-2️⃣-vps-服务器)
+4. **选择部署方案** - [Railway API + cronjob](DEPLOYMENT.md)（推荐）或其他方案
 5. **启用自动交易** - 设置 `ENABLE_AUTO_TRADING=true` 并使用小仓位验证  
 6. **监控和优化** - 根据实际运行情况调整参数
 
