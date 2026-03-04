@@ -17,92 +17,116 @@
 
 | 方案 | 难度 | 成本 | 是否7x24 | 推荐场景 |
 |------|------|------|---------|---------|
-| Railway Cron Jobs | ⭐⭐ | 免费(有额度) | ✅ | 免费稳定自动执行 |
 | 本地开发机 | ⭐ | 无 | ❌ | 测试验证 |
 | VPS 服务器 | ⭐⭐ | $3-10/月 | ✅ | 生产环境 |
-| GitHub Actions | ⭐⭐ | 免费 | ✅ | 备选方案 |
+| GitHub Actions | ⭐⭐ | 免费 | ✅ | 最简便 |
 | Docker 容器 | ⭐⭐⭐ | $3-20/月 | ✅ | 高级用户 |
 
-**推荐**: 🏆 Railway Cron Jobs（免费、原生支持、配置简单）
+**推荐**: 🏆 GitHub Actions（最简单、免费、可靠）
 
 ---
 
-## 方案 1️⃣: Railway Cron Jobs（推荐 ⭐⭐⭐⭐⭐）
+## 方案 1️⃣: GitHub Actions（推荐 ⭐⭐⭐⭐⭐）
 
-Railway 原生支持 Cron Jobs，无需 API 封装或外部定时器，直接运行 `python main.py`。
+最简单、最便宜、最稳定的方案，完全免费。
 
 ### 1.1 前置准备
 
-1. Railway 账户（免费计划即可）
-2. 本仓库已包含 `railway.toml` 配置文件
+1. **Fork 本仓库** 到您的 GitHub 账户
+   ```bash
+   # 在 GitHub 网页上点击 "Fork"
+   ```
 
-### 1.2 Railway 部署
+2. **获取 Secrets**:
+   - Gate.io 的 API Key 和 Secret（见 [CONFIGURATION.md](CONFIGURATION.md)）
+   - Telegram Bot Token 和 Chat ID（下文获取）
 
-1. **创建项目**
-   - 在 [Railway](https://railway.app) 创建新项目
-   - 选择 "Deploy from GitHub repo"
-   - 连接本仓库，选择 `main` 分支
+### 1.2 配置环境变量（Secrets）
 
-2. **Railway 自动识别配置**
-   - Railway 会自动读取 `railway.toml`
-   - Cron Job 自动配置为每 30 分钟运行
+1. 打开您 fork 的仓库 → Settings → Secrets and variables → Actions
+2. 点击 "New repository secret"，添加以下 Secrets：
 
-### 1.3 配置环境变量
+| Secret 名称 | 值 | 获取方式 |
+|------------|-----|---------|
+| `GATE_API_KEY` | 您的 API Key | Gate.io 账户设置 |
+| `GATE_API_SECRET` | 您的 API Secret | Gate.io 账户设置 |
+| `TELEGRAM_BOT_TOKEN` | Bot Token | BotFather 创建 |
+| `TELEGRAM_CHAT_ID` | Chat ID | 发送 /start 到 Bot |
 
-在 Railway Variables 中添加：
+**Telegram 设置步骤**:
 
-| 变量 | 说明 |
-|------|------|
-| `GATE_API_KEY` | Gate.io API Key |
-| `GATE_API_SECRET` | Gate.io API Secret |
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token |
-| `TELEGRAM_CHAT_ID` | Telegram Chat ID |
-| `ENABLE_AUTO_TRADING` | `true/false`，默认 `false` |
+1. 打开 Telegram 搜索 `@BotFather`
+2. 发送 `/newbot`
+3. 按照提示创建机器人，获得 Token：`123456:ABCDefghijKLMNOpqrSTUVwxyz`
+4. 创建私人群组 (Settings → Create Channel → Private)
+5. 将您的 Bot 添加到群组
+6. 发送一条消息到群组，然后：
+   ```bash
+   # 在浏览器访问 (replace TOKEN with your token)
+   https://api.telegram.org/botTOKEN/getUpdates
+   ```
+7. 从 JSON 响应中找到 `"chat":{"id":123456789}` - 这就是 CHAT_ID
 
-其他可选配置见 [CONFIGURATION.md](CONFIGURATION.md)。
+### 1.3 启用工作流
 
-### 1.4 railway.toml 配置说明
+1. 打开仓库 → Actions 标签
+2. 左侧选择 "ETH Trading Bot Scheduler"
+3. 点击 "Enable workflow"
 
-```toml
-# Railway Cron Job 配置
-[[crons]]
-schedule = "*/30 * * * *"  # 每 30 分钟
-command = "python main.py"
+### 1.4 工作流配置说明
+
+工作流文件: `.github/workflows/trading.yml`
+
+**当前配置**:
+- 每 30 分钟运行一次
+- 在 UTC 时区执行
+- 模式: 仅信号模式（ENABLE_AUTO_TRADING=false）
+
+**修改运行频率**:
+
+```yaml
+# .github/workflows/trading.yml
+on:
+  schedule:
+    - cron: '0 */1 * * *'  # 每小时运行一次
+    # cron: '*/30 * * * *'  # 每30分钟运行一次（当前）
+    # cron: '0 0 * * *'     # 每天 00:00 UTC 运行
 ```
 
-**修改运行频率**：
-- `*/30 * * * *` - 每 30 分钟（当前）
-- `0 * * * *` - 每小时整点
-- `0 */2 * * *` - 每 2 小时
-- `0 0 * * *` - 每天 00:00 UTC
+Cron 格式: `分钟 小时 日 月 周几`
 
-### 1.5 验证部署
+**启用自动交易**:
 
-1. **查看部署日志**
-   - Railway Dashboard → Deployments
-   - 点击最新部署查看日志
+如果已验证信号准确，可启用自动交易：
 
-2. **查看 Cron 执行**
-   - Railway Dashboard → Cron Jobs
-   - 查看执行历史和日志
+```yaml
+# .github/workflows/trading.yml
+env:
+  ENABLE_AUTO_TRADING: 'true'
+```
 
-3. **验证通知**
-   - 等待下一次 Cron 触发（最多 30 分钟）
-   - 检查 Telegram 是否收到消息
+### 1.5 监控运行
+
+1. 打开仓库 → Actions 标签
+2. 查看最新运行记录
+3. 点击运行记录查看详细日志
+4. 检查 Telegram 是否收到消息
 
 ### 1.6 故障排查
 
-**问题**: Cron Job 不执行
-- **原因**: railway.toml 配置错误或部署失败
-- **解决**: 检查部署日志，确认 railway.toml 格式正确
+**问题**: 收不到通知
+- **原因**: Secrets 配置有误或 Telegram 权限问题
+- **解决**: 
+  1. 检查 Secrets 是否正确设置
+  2. 手动运行工作流观察日志
+  3. 点击 Telegram Bot 的链接测试权限
 
-**问题**: 脚本运行但无信号
-- **原因**: 环境变量未配置或市场无信号
-- **解决**: 检查 Railway Variables，查看执行日志
-
-**问题**: Telegram 无通知
-- **原因**: Token 或 Chat ID 错误
-- **解决**: 核对 Telegram 配置，手动测试 Bot
+**问题**: 工作流运行失败
+- **原因**: API 配置错误、网络问题或代码错误
+- **解决**:
+  1. 查看详细错误日志
+  2. 验证 API Key 和 Secret
+  3. 根据错误消息调整配置
 
 ---
 
@@ -441,8 +465,8 @@ screen -ls
 
 完成部署前，请检查：
 
-- [ ] Git 已安装
-- [ ] Python 3.11+ 已安装
+- [ ] Git 已安装 (GitHub Actions 不需要)
+- [ ] Python 3.11+ 已安装 (GitHub Actions 不需要)
 - [ ] requirements.txt 依赖已安装
 - [ ] GATE_API_KEY 正确
 - [ ] GATE_API_SECRET 正确
@@ -450,7 +474,7 @@ screen -ls
 - [ ] TELEGRAM_CHAT_ID 正确
 - [ ] 在模拟模式运行至少 1 周验证信号
 - [ ] 理解风险、杠杆和资金管理
-- [ ] 有应急停止的方法（Railway Cron 可暂停或删除项目）
+- [ ] 有应急停止的方法（GitHub Actions 可禁用运行）
 
 ---
 
@@ -468,7 +492,7 @@ screen -ls
 **A**: 
 - **本地**: 不需要在远程服务器存储 API Key，更安全
 - **VPS**: 需要小心管理 Secrets，但支持 7x24 运行
-- **Railway**: 平台托管变量，免费计划支持 Cron Jobs，配置简单
+- **GitHub Actions**: GitHub 负责安全管理 Secrets，推荐
 
 ### Q: 可以同时在多个 VPS 上运行脚本吗？
 
@@ -489,18 +513,10 @@ screen -ls
 ### Q: 如何停止脚本？
 
 **A**:
-- Railway Cron Jobs: 在 Railway Dashboard 暂停或删除项目
+- GitHub Actions: 禁用工作流或修改 Secrets
 - VPS Cron: `crontab -e` 注释掉对应行
 - VPS SystemD: `sudo systemctl stop trading-bot.service`
 - Docker: `docker-compose stop`
-
-### Q: Railway Cron Jobs 免费计划有限制吗？
-
-**A**: Railway 免费计划有一定的执行时间限制（具体见 Railway 官网），但对于每 30 分钟跑几秒的脚本来说通常足够。
-
-### Q: GitHub Actions 还能用吗？
-
-**A**: 可以。仓库保留了 GitHub Actions 工作流配置，你可按需启用；但当前文档主推荐是 Railway Cron Jobs。
 
 ---
 
