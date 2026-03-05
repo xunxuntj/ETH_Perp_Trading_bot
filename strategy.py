@@ -49,7 +49,7 @@ class Position:
 
 
 # 合约面值（每张对应的 ETH），用于仓位/盈亏计算。测试套件使用 0.01
-FACE_VALUE = 0.1
+FACE_VALUE = 0.01
 
 
 @dataclass
