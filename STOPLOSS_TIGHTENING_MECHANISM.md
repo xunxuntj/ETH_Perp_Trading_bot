@@ -35,28 +35,35 @@ def _infer_phase(self,
 
 **核心逻辑:**
 ```python
-# 计算当前浮盈
-pnl = (current_price - entry_price) * qty * FACE_VALUE  # 多仓
-pnl = (entry_price - current_price) * qty * FACE_VALUE  # 空仓
+# 计算按当前止损价（30m ST）平仓的期望盈利
+# 用于判断是否达到锁利阈值，而非使用当前市场价格的浮盈
+expected_pnl_at_stop = (last_30m_st - entry_price) * qty * FACE_VALUE  # 多仓
+expected_pnl_at_stop = (entry_price - last_30m_st) * qty * FACE_VALUE  # 空仓
 
 # 计算锁利阈值
 lock_threshold = calculate_lock_threshold(entry_price, qty, is_long)
 
 # 推导阶段
-if pnl < 1.0:  # LOCK_PROFIT_BUFFER = 1U
+if expected_pnl_at_stop < LOCK_PROFIT_BUFFER:  # 1.0 USDT
     # 【阶段1】生存期
+    # 按 30m ST 止损平仓的收益还不到 buffer
     phase = "survival"
     recommended_stop = last_30m_st  # ← 止损跟随 30m ST
     
 elif is_1h_tighter(last_1h_st, lock_threshold, is_long):
     # 【阶段3】换轨期
+    # 1H ST 比锁利阈值更紧，切换至 1H ST 轨道
     phase = "hourly"
     recommended_stop = last_1h_st  # ← 止损跟随 1H ST
     
 else:
     # 【阶段2】锁利期
+    # 收益足够（>= buffer），但 1H ST 不够紧
+    # 跟随 1H ST，但只有更紧才更新，否则保持 30m ST
     phase = "locked"
-    recommended_stop = last_30m_st  # ← 止损锁定
+    # 多单：取更高的（更紧）; 空单：取更低的（更紧）
+    recommended_stop = max(last_30m_st, last_1h_st)  # 多单
+    recommended_stop = min(last_30m_st, last_1h_st)  # 空单
     
 return phase, recommended_stop
 ```

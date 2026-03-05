@@ -19,7 +19,7 @@ from config import (
     LEVERAGE, CIRCUIT_BREAKER_EQUITY, get_risk_amount,
     LOCK_PROFIT_BUFFER
 )
-from position_state import update_position_state, clear_position_state
+from position_state import update_position_state, clear_position_state, load_position_state
 from indicators import calculate_supertrend, calculate_dema
 from gate_client import GateClient
 
@@ -171,39 +171,38 @@ class TradingStrategy:
         从当前数据推导阶段（无状态）
         返回: (phase, recommended_stop_loss)
         """
-        # 计算当前浮盈
+        # 计算按当前止损价（30m ST）平仓的期望盈利
+        # 用于判断是否达到锁利阈值，而非使用当前市场价格的浮盈
         if is_long:
-            pnl = (current_price - entry_price) * qty * FACE_VALUE
+            expected_pnl_at_stop = (last_30m_st - entry_price) * qty * FACE_VALUE
             current_st = last_30m_st
         else:
-            pnl = (entry_price - current_price) * qty * FACE_VALUE
+            expected_pnl_at_stop = (entry_price - last_30m_st) * qty * FACE_VALUE
             current_st = last_30m_st
 
         # 计算锁利阈值
         lock_threshold = calculate_lock_threshold(entry_price, qty, is_long)
 
         if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-            print(f"[STRATEGY DEBUG] _infer_phase: pnl={pnl:.2f}, lock_threshold={lock_threshold:.2f}, last_1h_st={last_1h_st:.2f}")
+            print(f"[STRATEGY DEBUG] _infer_phase: expected_pnl_at_stop={expected_pnl_at_stop:.2f}, lock_threshold={lock_threshold:.2f}, last_1h_st={last_1h_st:.2f}")
 
-        # 推导阶段逻辑
-        if pnl < LOCK_PROFIT_BUFFER:
-            # 生存期：跟随 30m ST，只紧不松
+        # 推导阶段逻辑：按止损价平仓的期望盈利来判断
+        if expected_pnl_at_stop < LOCK_PROFIT_BUFFER:
+            # 生存期：按 30m ST 止损平仓的收益还不到 buffer
             phase = Phase.SURVIVAL.value
-            if is_long:
-                recommended_stop = last_30m_st  # 多仓：30m ST 为目标
-            else:
-                recommended_stop = last_30m_st  # 空仓：30m ST 为目标
+            recommended_stop = last_30m_st
         elif is_1h_tighter(last_1h_st, lock_threshold, is_long):
-            # 换轨期：1H ST 比锁利阈值更紧
+            # 换轨期：1H ST 比锁利阈值更紧，切换至 1H ST 轨道
             phase = Phase.HOURLY.value
             recommended_stop = last_1h_st
         else:
-            # 锁利期：浮盈 > buffer 但 1H ST 不够紧
+            # 锁利期：收益足够，但 1H ST 不够紧
+            # stop_loss 返回 30m ST，具体是否保持由 _manage_long/short_position 处理
             phase = Phase.LOCKED.value
-            recommended_stop = last_30m_st  # 锁利时使用当前 30m ST 作为止损
+            recommended_stop = last_30m_st
 
         if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-            print(f"[STRATEGY DEBUG] inferred phase={phase}, recommended_stop={recommended_stop:.2f}")
+            print(f"[STRATEGY DEBUG] inferred phase={phase}, expected_pnl_at_stop={expected_pnl_at_stop:.2f}, recommended_stop={recommended_stop:.2f}")
 
         return phase, recommended_stop
 
@@ -589,6 +588,21 @@ class TradingStrategy:
         phase, recommended_stop = self._infer_phase(entry_price, current_price, qty, 
                                                       last_30m_st, last_1h_st, is_long=True)
 
+        # 【锁利期特殊处理】：stop_loss 保持不变，直至 1H ST 更紧
+        # 读取历史状态
+        prev_state = load_position_state().get("long", {})
+        prev_phase = prev_state.get("phase", "")
+        prev_stop_loss = prev_state.get("stop_loss", 0)
+        
+        if phase == Phase.LOCKED.value and prev_phase == Phase.LOCKED.value:
+            # 仍在锁利期，保持历史的 stop_loss
+            recommended_stop = prev_stop_loss
+            # 但检查 1H ST 是否更紧，如果更紧则进入换轨期
+            lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=True)
+            if is_1h_tighter(last_1h_st, lock_threshold, is_long=True):
+                phase = Phase.HOURLY.value
+                recommended_stop = last_1h_st
+
         # 判断离场信号
         exit_signal = False
         exit_reason = ""
@@ -714,6 +728,21 @@ class TradingStrategy:
         # 推导当前阶段和建议的止损
         phase, recommended_stop = self._infer_phase(entry_price, current_price, qty, 
                                                       last_30m_st, last_1h_st, is_long=False)
+
+        # 【锁利期特殊处理】：stop_loss 保持不变，直至 1H ST 更紧
+        # 读取历史状态
+        prev_state = load_position_state().get("short", {})
+        prev_phase = prev_state.get("phase", "")
+        prev_stop_loss = prev_state.get("stop_loss", 0)
+        
+        if phase == Phase.LOCKED.value and prev_phase == Phase.LOCKED.value:
+            # 仍在锁利期，保持历史的 stop_loss
+            recommended_stop = prev_stop_loss
+            # 但检查 1H ST 是否更紧，如果更紧则进入换轨期
+            lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=False)
+            if is_1h_tighter(last_1h_st, lock_threshold, is_long=False):
+                phase = Phase.HOURLY.value
+                recommended_stop = last_1h_st
 
         # 判断离场信号
         exit_signal = False
