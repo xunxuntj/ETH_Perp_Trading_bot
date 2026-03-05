@@ -44,6 +44,8 @@ class Position:
     """持仓状态 - 仅用于记录辅助信息，不缓存持仓关键数据（阶段、止损等都从 API 推导）"""
     trade_count: int = 0             # 交易计数
     consecutive_losses: int = 0      # 连续亏损次数
+    last_processed_30m_bar_ts: int = 0   # 去重: 最近一次已处理的30m已收盘K线时间戳
+    last_processed_30m_bar_iso: str = ""  # 去重: 最近一次已处理的30m已收盘K线时间
 
 
 # 合约面值（每张对应的 ETH），用于仓位/盈亏计算。测试套件使用 0.01
@@ -73,7 +75,9 @@ def load_state() -> Position:
                 data = json.load(f)
                 return Position(
                     trade_count=data.get('trade_count', 0),
-                    consecutive_losses=data.get('consecutive_losses', 0)
+                    consecutive_losses=data.get('consecutive_losses', 0),
+                    last_processed_30m_bar_ts=data.get('last_processed_30m_bar_ts', 0),
+                    last_processed_30m_bar_iso=data.get('last_processed_30m_bar_iso', "")
                 )
         except:
             pass
@@ -85,7 +89,9 @@ def save_state(pos: Position):
     with open(STATE_FILE, 'w') as f:
         json.dump({
             'trade_count': pos.trade_count,
-            'consecutive_losses': pos.consecutive_losses
+            'consecutive_losses': pos.consecutive_losses,
+            'last_processed_30m_bar_ts': pos.last_processed_30m_bar_ts,
+            'last_processed_30m_bar_iso': pos.last_processed_30m_bar_iso,
         }, f, indent=2)
 
 
@@ -152,6 +158,12 @@ def is_1h_tighter(last_1h_st: float, threshold: float, is_long: bool) -> bool:
 
 
 class TradingStrategy:
+
+    def _mark_processed_30m_bar(self, bar_ts: int, bar_iso: str):
+        """记录本次已处理的30m已收盘K线，用于高频调度去重。"""
+        self.state.last_processed_30m_bar_ts = bar_ts
+        self.state.last_processed_30m_bar_iso = bar_iso
+        save_state(self.state)
 
     def _infer_phase(self, entry_price: float, current_price: float, qty: int, 
                      last_30m_st: float, last_1h_st: float, is_long: bool) -> tuple:
@@ -220,6 +232,27 @@ class TradingStrategy:
         # 测试结果: 1000根K线DEMA值1925.71, 与TradingView 1925.64相差仅0.07 (差异<0.01%)
         df_30m = self.client.get_candlesticks(self.contract, "30m", 1000)
         df_1h = self.client.get_candlesticks(self.contract, "1h", 1000)
+
+        # 去重保护：同一根30m已收盘K线只处理一次，避免高频调度重复执行动作
+        signal_bar = df_30m.index[-2]
+        signal_bar_ts = int(signal_bar.value // 10**9)
+        signal_bar_iso = signal_bar.strftime('%Y-%m-%d %H:%M:%S')
+
+        if self.state.last_processed_30m_bar_ts == signal_bar_ts:
+            return TradeResult(
+                action="hold",
+                message=f"⏭️ 去重保护：30m K线 {signal_bar_iso} 已处理，跳过本次重复执行",
+                details={
+                    "dedup": True,
+                    "signal_bar_ts": signal_bar_ts,
+                    "signal_bar_iso": signal_bar_iso
+                }
+            )
+
+        def finalize(result: TradeResult) -> TradeResult:
+            # 只有真正执行了分析流程才标记，防止同一根K线重复执行
+            self._mark_processed_30m_bar(signal_bar_ts, signal_bar_iso)
+            return result
         
         # DEBUG: 记录K线时间戳和数据
         if os.getenv('DEBUG_KLINE'):
@@ -295,11 +328,11 @@ class TradingStrategy:
                 debug_msg = f"\n\n[DEBUG] account={account}\n[DEBUG] equity={equity}"
                 print(f"[STRATEGY] WARNING: equity is {equity}, account={account}")
             
-            return TradeResult(
+            return finalize(TradeResult(
                 action="circuit_breaker",
                 message=f"⚠️ 熔断！{risk['message']}，停手一周{debug_msg}",
                 details={"equity": equity, "account": account}
-            )
+            ))
         
         # 通过 API 检查连续亏损（从交易历史获取）
         from cooldown import check_cooldown
@@ -318,7 +351,7 @@ class TradingStrategy:
                 action = "none"
                 message = f"⏸️ 冷静期中... {cooldown.details}"
             
-            return TradeResult(
+            return finalize(TradeResult(
                 action=action,
                 message=message,
                 details={
@@ -328,7 +361,7 @@ class TradingStrategy:
                     "can_trade_time": cooldown.can_trade_time.isoformat() if cooldown.can_trade_time else None,
                     "should_notify": cooldown.should_notify
                 }
-            )
+            ))
         
         risk_amount = risk['amount']
         risk_info = risk['message']
@@ -389,7 +422,7 @@ class TradingStrategy:
                 lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=True)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
                 
-                return TradeResult(
+                return finalize(TradeResult(
                     action="open_long",
                     message=f"""🟢 开多信号！{timing}
 
@@ -422,14 +455,14 @@ class TradingStrategy:
                         "1h_dema": last_1h_dema,
                         "30m_st": last_30m_st
                     }
-                )
+                ))
             
             elif can_short:
                 pos_info = calculate_position_size(risk_amount, current_price, last_30m_st)
                 lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=False)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
                 
-                return TradeResult(
+                return finalize(TradeResult(
                     action="open_short",
                     message=f"""🔴 开空信号！{timing}
 
@@ -462,10 +495,10 @@ class TradingStrategy:
                         "1h_dema": last_1h_dema,
                         "30m_st": last_30m_st
                     }
-                )
+                ))
             
             else:
-                return TradeResult(
+                return finalize(TradeResult(
                     action="none",
                     message=f"""📊 无开仓信号
 
@@ -495,14 +528,14 @@ class TradingStrategy:
                         "30m_st_dir": last_30m_dir,
                         "equity": equity
                     }
-                )
+                ))
         
         # ============ 已持多仓 ============
         if is_long:
             # 如果满足开空条件 → 提示平多反手
             if can_short:
                 pnl = (current_price - position['entry_price']) * position['size'] * FACE_VALUE
-                return TradeResult(
+                return finalize(TradeResult(
                     action="reverse_to_short",
                     message=f"🔄 平多反手开空！\n"
                             f"• 当前多仓入场: {position['entry_price']:.2f}\n"
@@ -510,20 +543,20 @@ class TradingStrategy:
                             f"• 预计盈亏: {pnl:.2f}U\n"
                             f"• 新空仓止损: {last_30m_st:.2f}",
                     details={"pnl": pnl, "new_stop": last_30m_st}
-                )
+                ))
             
             # 否则继续持有，检查止损调整
-            return self._manage_long_position(
+            return finalize(self._manage_long_position(
                 position, df_30m, df_1h, st_30m, st_1h,
                 last_1h_close, last_1h_dema, risk_amount, risk_info
-            )
+            ))
         
         # ============ 已持空仓 ============
         if is_short:
             # 如果满足开多条件 → 提示平空反手
             if can_long:
                 pnl = (position['entry_price'] - current_price) * abs(position['size']) * FACE_VALUE
-                return TradeResult(
+                return finalize(TradeResult(
                     action="reverse_to_long",
                     message=f"🔄 平空反手开多！\n"
                             f"• 当前空仓入场: {position['entry_price']:.2f}\n"
@@ -531,15 +564,15 @@ class TradingStrategy:
                             f"• 预计盈亏: {pnl:.2f}U\n"
                             f"• 新多仓止损: {last_30m_st:.2f}",
                     details={"pnl": pnl, "new_stop": last_30m_st}
-                )
+                ))
             
             # 如果仍满足开空条件（已持空仓）→ 不提示，检查止损调整
-            return self._manage_short_position(
+            return finalize(self._manage_short_position(
                 position, df_30m, df_1h, st_30m, st_1h,
                 last_1h_close, last_1h_dema, risk_amount, risk_info
-            )
+            ))
         
-        return TradeResult(action="none", message="未知状态")
+        return finalize(TradeResult(action="none", message="未知状态"))
     
     def _manage_long_position(self, position, df_30m, df_1h, st_30m, st_1h,
                                last_1h_close, last_1h_dema, risk_amount, risk_info) -> TradeResult:

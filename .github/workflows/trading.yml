@@ -2,8 +2,8 @@ name: ETH Trading Monitor
 
 on:
   schedule:
-    # 每30分钟运行 (03分和33分，错峰以减少延迟)
-    - cron: '3,33 * * * *'
+    # 每10分钟运行（错峰1分钟）：01,11,21,31,41,51
+    - cron: '1,11,21,31,41,51 * * * *'
   workflow_dispatch:  # 手动触发
 
 env:
