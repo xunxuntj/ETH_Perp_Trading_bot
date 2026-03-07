@@ -1,0 +1,76 @@
+{
+  "timestamp": "2026-03-07T15:16:22.999115+00:00",
+  "position": {
+    "size": -49,
+    "entry_price": 2062.17,
+    "mark_price": 1985.32,
+    "liq_price": 3728.28,
+    "unrealised_pnl": 37.6565,
+    "leverage": 0,
+    "margin": 0.0
+  },
+  "open_price_orders": [
+    {
+      "user": 2664232,
+      "trigger": {
+        "strategy_type": 0,
+        "price_type": 0,
+        "price": "3000",
+        "rule": 1,
+        "expiration": 0
+      },
+      "initial": {
+        "contract": "ETH_USDT",
+        "size": 0,
+        "price": "0",
+        "tif": "ioc",
+        "text": "app",
+        "iceberg": 0,
+        "is_close": false,
+        "is_reduce_only": true,
+        "auto_size": "close",
+        "amount": "0",
+        "iceberg_amount": "0"
+      },
+      "id": 2030298899658309632,
+      "id_string": "2030298899658309632",
+      "trigger_time": 0,
+      "trade_id": 0,
+      "trade_id_string": "0",
+      "status": "open",
+      "reason": "",
+      "create_time": 1772895953,
+      "finish_time": 1772895953,
+      "is_stop_order": false,
+      "stop_trigger": {
+        "rule": 0,
+        "trigger_price": "",
+        "order_price": ""
+      },
+      "me_order_id": 0,
+      "me_order_id_string": "0",
+      "order_type": "close-short-position",
+      "in_dual_mode": false,
+      "parent_id": 0,
+      "parent_id_string": "0",
+      "stop_profit_price": "",
+      "stop_loss_price": "",
+      "batch_id": "2664232_ETH_USDT_cross_2",
+      "mmr_trigger": {
+        "mmr": "",
+        "rate": "",
+        "trigger_mark_price": ""
+      },
+      "direction": "long",
+      "filled_size": "0",
+      "broker": "",
+      "pos_margin_mode": "cross",
+      "position_mode": "single",
+      "finish_as_text": "",
+      "position_side": "",
+      "position_side_output": "",
+      "text_output": "",
+      "is_splitting": false
+    }
+  ]
+}

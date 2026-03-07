@@ -618,6 +618,7 @@ class TradingStrategy:
         # 读取历史状态
         prev_state = load_position_state().get("long", {})
         prev_phase = prev_state.get("phase", "")
+        prev_stop_loss = prev_state.get("stop_loss", 0)  # ← 记录旧止损，用于调整时验证
         initial_30m_st = prev_state.get("initial_30m_st", 0)
         locked_stop_loss = prev_state.get("locked_stop_loss", 0)
         
@@ -698,7 +699,7 @@ class TradingStrategy:
 • 方向: 多 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 新止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U""",
-                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         elif change_type == "enter_locked":
             return TradeResult(
@@ -708,7 +709,7 @@ class TradingStrategy:
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
 • 说明: 浮盈已超过 50U，切换至锁利策略""",
-                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         elif change_type == "switch_1h":
             return TradeResult(
@@ -718,7 +719,7 @@ class TradingStrategy:
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
 • 说明: 1H ST已转向上升，以 1H ST 作为止损参考""",
-                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         else:
             # 正常持仓，无状态变化
@@ -765,6 +766,7 @@ class TradingStrategy:
         # 读取历史状态
         prev_state = load_position_state().get("short", {})
         prev_phase = prev_state.get("phase", "")
+        prev_stop_loss = prev_state.get("stop_loss", 0)  # ← 记录旧止损，用于调整时验证
         initial_30m_st = prev_state.get("initial_30m_st", 0)
         locked_stop_loss = prev_state.get("locked_stop_loss", 0)
         
@@ -845,7 +847,7 @@ class TradingStrategy:
 • 方向: 空 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 新止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U""",
-                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         elif change_type == "enter_locked":
             return TradeResult(
@@ -855,7 +857,7 @@ class TradingStrategy:
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
 • 说明: 浮盈已超过 50U，切换至锁利策略""",
-                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         elif change_type == "switch_1h":
             return TradeResult(
@@ -865,7 +867,7 @@ class TradingStrategy:
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
 • 说明: 1H ST已转向下降，以 1H ST 作为止损参考""",
-                details={"phase": phase, "stop_loss": recommended_stop, "pnl": pnl}
+                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         else:
             # 正常持仓，无状态变化

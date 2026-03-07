@@ -51,6 +51,15 @@ class TradeExecutor:
     def _is_dry_run(self) -> bool:
         """判断是否为干运行模式"""
         return self.dry_run or os.getenv("DRY_RUN", "").lower() == "true"
+
+    def _set_stop_loss_order(self, direction: str, stop_loss: float) -> Dict[str, Any]:
+        """创建止损触发单（price_orders）。direction 为持仓方向 long/short。"""
+        return self.client.create_price_stop_order(
+            contract=self.contract,
+            position_side=direction,
+            stop_price=stop_loss,
+            text=f"stop_loss_{direction}_{int(time.time())}"
+        )
     
     def open_long(self, entry_price: float, stop_loss: float, qty: int) -> Dict[str, Any]:
         """
@@ -121,14 +130,9 @@ class TradeExecutor:
                     }
                     self._log("SET_STOP", f"✅ [模拟] 设置止损单 {qty}张 @ {stop_loss:.2f}")
                 else:
-                    # 实际交易：设置止损条件单
-                    stop_order = self.client.create_order(
-                        contract=self.contract,
-                        size=-qty,  # 反向平仓
-                        price=stop_loss,
-                        reduce_only=True,
-                        text=f"stop_loss_long_{int(time.time())}"
-                    )
+                    # 实际交易：先清理旧触发单，再设置新的触发止损
+                    self.client.cancel_price_orders(contract=self.contract)
+                    stop_order = self._set_stop_loss_order("long", stop_loss)
                     self._log("SET_STOP", f"✅ 设置止损单 {qty}张 @ {stop_loss:.2f}")
             
             return {
@@ -224,14 +228,9 @@ class TradeExecutor:
                     }
                     self._log("SET_STOP", f"✅ [模拟] 设置止损单 {qty}张 @ {stop_loss:.2f}")
                 else:
-                    # 实际交易：设置止损条件单
-                    stop_order = self.client.create_order(
-                        contract=self.contract,
-                        size=qty,  # 正数表示多方向平仓
-                        price=stop_loss,
-                        reduce_only=True,
-                        text=f"stop_loss_short_{int(time.time())}"
-                    )
+                    # 实际交易：先清理旧触发单，再设置新的触发止损
+                    self.client.cancel_price_orders(contract=self.contract)
+                    stop_order = self._set_stop_loss_order("short", stop_loss)
                     self._log("SET_STOP", f"✅ 设置止损单 {qty}张 @ {stop_loss:.2f}")
             
             return {
@@ -284,16 +283,18 @@ class TradeExecutor:
             }
         
         try:
+            old_stop_str = f"{old_stop:.2f}" if old_stop is not None else "N/A"
+
             # 验证止损方向
             if direction == "long":
-                if old_stop and new_stop < old_stop:
+                if old_stop is not None and new_stop < old_stop:
                     return {
                         "success": False,
                         "message": f"❌ 多仓止损只能上移，当前 {old_stop:.2f} 新止损 {new_stop:.2f}",
                         "details": {"error": "invalid_direction", "mode": "tight_only"}
                     }
             else:  # short
-                if old_stop and new_stop > old_stop:
+                if old_stop is not None and new_stop > old_stop:
                     return {
                         "success": False,
                         "message": f"❌ 空仓止损只能下移，当前 {old_stop:.2f} 新止损 {new_stop:.2f}",
@@ -303,13 +304,13 @@ class TradeExecutor:
             if self._is_dry_run():
                 # 模拟模式
                 if direction == "long":
-                    self._log("ADJUST_STOP", f"✅ [模拟] 多仓止损调整 {old_stop:.2f} → {new_stop:.2f}")
+                    self._log("ADJUST_STOP", f"✅ [模拟] 多仓止损调整 {old_stop_str} → {new_stop:.2f}")
                 else:
-                    self._log("ADJUST_STOP", f"✅ [模拟] 空仓止损调整 {old_stop:.2f} → {new_stop:.2f}")
+                    self._log("ADJUST_STOP", f"✅ [模拟] 空仓止损调整 {old_stop_str} → {new_stop:.2f}")
                 
                 return {
                     "success": True,
-                    "message": f"✅ 止损已调整 {old_stop:.2f} → {new_stop:.2f}",
+                    "message": f"✅ 止损已调整 {old_stop_str} → {new_stop:.2f}",
                     "details": {
                         "direction": direction,
                         "old_stop": old_stop,
@@ -319,47 +320,46 @@ class TradeExecutor:
                     }
                 }
             else:
-                # 实际交易：取消旧止损单，创建新的
-                # 第1步：取消所有现有的 stop_loss 单
-                try:
-                    self.client.cancel_orders(
-                        contract=self.contract,
-                        text="stop_loss" if direction == "long" else "stop_loss"
-                    )
-                except:
-                    pass  # 可能没有现有止损单
+                # 实际交易：直接修改现有触发单的触发价（不取消重建）
+                # 第1步：查询现有open的price_orders
+                existing_orders = self.client.get_price_orders(
+                    contract=self.contract, status="open", limit=100
+                )
                 
-                # 第2步：创建新的止损单
-                if direction == "long":
-                    new_order = self.client.create_order(
-                        contract=self.contract,
-                        size=-qty,
-                        price=new_stop,
-                        reduce_only=True,
-                        text=f"stop_loss_long_{int(time.time())}"
-                    )
-                else:  # short
-                    new_order = self.client.create_order(
-                        contract=self.contract,
-                        size=qty,
-                        price=new_stop,
-                        reduce_only=True,
-                        text=f"stop_loss_short_{int(time.time())}"
-                    )
-                
-                self._log("ADJUST_STOP", f"✅ 止损已调整 {old_stop:.2f} → {new_stop:.2f}")
-                
-                return {
-                    "success": True,
-                    "message": f"✅ 止损已调整 {old_stop:.2f} → {new_stop:.2f}",
-                    "details": {
-                        "direction": direction,
-                        "old_stop": old_stop,
-                        "new_stop": new_stop,
-                        "qty": qty,
-                        "order_id": new_order.get("id")
+                if existing_orders:
+                    # 第2步：存在触发单，直接修改触发价
+                    order_id = str(existing_orders[0].get("id"))
+                    updated_order = self.client.update_price_order(order_id, new_stop, self.contract)
+                    self._log("ADJUST_STOP", f"✅ 止损已修改 {old_stop_str} → {new_stop:.2f} (order_id={order_id})")
+                    
+                    return {
+                        "success": True,
+                        "message": f"✅ 止损已调整 {old_stop_str} → {new_stop:.2f}",
+                        "details": {
+                            "direction": direction,
+                            "old_stop": old_stop,
+                            "new_stop": new_stop,
+                            "qty": qty,
+                            "order_id": order_id,
+                            "method": "update"  # 标记为修改而非创建
+                        }
                     }
-                }
+                else:
+                    # 第3步：不存在触发单，创建新的
+                    new_order = self._set_stop_loss_order(direction, new_stop)
+                    self._log("ADJUST_STOP", f"✅ 止损已创建 {new_stop:.2f}")
+                    
+                    return {
+                        "success": True,
+                        "message": f"✅ 止损已创建 @ {new_stop:.2f}",
+                        "details": {
+                            "direction": direction,
+                            "new_stop": new_stop,
+                            "qty": qty,
+                            "order_id": new_order.get("id"),
+                            "method": "create"  # 标记为新建
+                        }
+                    }
         
         except Exception as e:
             error_msg = f"❌ 调整止损异常：{str(e)}"
@@ -405,6 +405,10 @@ class TradeExecutor:
                     self.client.cancel_orders(contract=self.contract, text="stop_loss")
                 except:
                     pass  # 可能没有现有止损单
+                try:
+                    self.client.cancel_price_orders(contract=self.contract)
+                except:
+                    pass  # 可能没有触发单
             
             # 第2步：下平仓单（市价）
             mode_str = "多" if direction == "long" else "空"

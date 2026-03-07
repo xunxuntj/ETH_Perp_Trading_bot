@@ -7,6 +7,7 @@ import time
 import hashlib
 import hmac
 import requests
+import json
 from typing import Optional
 import pandas as pd
 import os
@@ -375,6 +376,169 @@ class GateClient:
         resp.raise_for_status()
         
         return resp.json()
+
+    def get_price_orders(self, contract: str, status: str = "open", limit: int = 100) -> list:
+        """获取触发单（price orders）列表。"""
+        url_path = "/api/v4/futures/usdt/price_orders"
+        full_url = f"{BASE_URL}/futures/usdt/price_orders"
+
+        params = {
+            "contract": contract,
+            "status": status,
+            "limit": limit,
+        }
+        query_parts = [f"{k}={v}" for k, v in params.items()]
+        query_string = "&".join(query_parts)
+
+        headers = self._sign("GET", url_path, query_string, "")
+        resp = self.session.get(full_url, params=params, headers=headers)
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        return data if isinstance(data, list) else []
+
+    def create_price_stop_order(self, contract: str, position_side: str,
+                                stop_price: float, text: str = "") -> dict:
+        """
+        创建持仓止损触发单（price_orders）。
+
+        Args:
+            contract: 交易对，例如 ETH_USDT
+            position_side: 持仓方向，"long" 或 "short"
+            stop_price: 触发价格
+            text: 订单备注
+        """
+        import json
+
+        if position_side not in ("long", "short"):
+            raise ValueError("position_side 必须是 long 或 short")
+
+        # Gate 规则：rule=1 价格 >= 触发价；rule=2 价格 <= 触发价
+        # 多仓止损：价格下破触发，使用 rule=2
+        # 空仓止损：价格上破触发，使用 rule=1
+        rule = 2 if position_side == "long" else 1
+
+        url_path = "/api/v4/futures/usdt/price_orders"
+        full_url = f"{BASE_URL}/futures/usdt/price_orders"
+
+        order_text = text or f"stop_loss_{position_side}_{int(time.time())}"
+        body_obj = {
+            "trigger": {
+                "strategy_type": 0,
+                "price_type": 0,
+                "price": str(stop_price),
+                "rule": rule,
+                "expiration": 0,
+            },
+            "initial": {
+                "contract": contract,
+                "size": 0,
+                "price": "0",
+                "tif": "ioc",
+                "text": order_text,
+                "reduce_only": True,
+                "auto_size": "close",
+            },
+        }
+
+        body = json.dumps(body_obj)
+        headers = self._sign("POST", url_path, "", body)
+        resp = self.session.post(full_url, data=body, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+
+    def cancel_price_order(self, order_id: str) -> dict:
+        """按 ID 取消单个触发单。"""
+        url_path = f"/api/v4/futures/usdt/price_orders/{order_id}"
+        full_url = f"{BASE_URL}/futures/usdt/price_orders/{order_id}"
+
+        headers = self._sign("DELETE", url_path, "", "")
+        resp = self.session.delete(full_url, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+
+    def update_price_order(self, order_id: str, new_trigger_price: float, contract: str = "ETH_USDT") -> dict:
+        """
+        更新触发单的触发价格。
+        
+        由于Gate.io REST API的PUT端点返回"Invalid param:order_id"错误，
+        暂无法直接修改现有订单。采用cancel+create方案实现功能等价性：
+        1. 取消现有订单（order_id会改变）
+        2. 创建新订单，保留所有原始参数（除trigger_price外）
+        
+        注：WebSocket或Gate.io UI可能支持真正的in-place修改，但REST API限制。
+        """
+        try:
+            # 第1步：查询现有订单获取参数
+            existing = self.get_price_orders(contract=contract, status="open", limit=100)
+            target_order = None
+            for o in existing:
+                if str(o.get("id")) == str(order_id):
+                    target_order = o
+                    break
+            
+            if not target_order:
+                return {"success": False, "message": f"Order {order_id} not found"}
+            
+            # 第2步：取消现有订单
+            self.cancel_price_order(order_id)
+            
+            # 第3步：提取原订单参数
+            contract = target_order.get("initial", {}).get("contract", "ETH_USDT")
+            rule = target_order.get("trigger", {}).get("rule", 1)
+            original_text = target_order.get("initial", {}).get("text", "")
+            
+            # 第4步：创建新订单（保留所有原始参数）
+            new_body = {
+                "trigger": {
+                    "strategy_type": 0,
+                    "price_type": 0,
+                    "price": str(new_trigger_price),
+                    "rule": rule,
+                    "expiration": 0,
+                },
+                "initial": {
+                    "contract": contract,
+                    "size": 0,
+                    "price": "0",
+                    "tif": "ioc",
+                    "text": original_text,
+                    "reduce_only": True,
+                    "auto_size": "close",
+                },
+            }
+            
+            url_path = "/api/v4/futures/usdt/price_orders"
+            full_url = f"{BASE_URL}/futures/usdt/price_orders"
+            body = json.dumps(new_body)
+            headers = self._sign("POST", url_path, "", body)
+            resp = self.session.post(full_url, data=body, headers=headers)
+            resp.raise_for_status()
+            
+            new_order = resp.json()
+            return {
+                "success": True,
+                "message": f"Order updated (API constraint: ID changed from {order_id})",
+                "old_id": order_id,
+                "new_id": new_order.get("id")
+            }
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    def cancel_price_orders(self, contract: str) -> list:
+        """取消某个合约的所有 open 触发单。"""
+        cancelled = []
+        for order in self.get_price_orders(contract=contract, status="open", limit=100):
+            order_id = order.get("id") or order.get("id_string")
+            if not order_id:
+                continue
+            try:
+                result = self.cancel_price_order(str(order_id))
+                cancelled.append(result)
+            except Exception:
+                # 单笔取消失败不影响其他单
+                continue
+        return cancelled
     
     def cancel_orders(self, contract: str, side: Optional[str] = None, text: str = "") -> list:
         """

@@ -69,6 +69,15 @@ class ExecutionFlow:
     
     def _execute_by_action(self, action: str, strategy_result) -> Dict[str, Any]:
         """根据策略信号执行相应的交易动作"""
+
+        # 信号模式：严格只发信号，不执行任何交易 API。
+        if not ENABLE_AUTO_TRADING:
+            return {
+                "strategy_action": action,
+                "trade_executed": False,
+                "trade_details": strategy_result.details or {},
+                "message": strategy_result.message + "\n\n🔔 自动交易已关闭（ENABLE_AUTO_TRADING=false），仅发送信号"
+            }
         
         # 无操作信号
         if action in ["none", "hold", "cooldown"]:
@@ -115,13 +124,7 @@ class ExecutionFlow:
         
         # ============ 止损/阶段调整（持仓中）============
         elif action in ["stop_updated", "enter_locked", "switch_1h"]:
-            # 这些是信息通知，不需要立即交易
-            return {
-                "strategy_action": action,
-                "trade_executed": False,
-                "trade_details": strategy_result.details or {},
-                "message": strategy_result.message
-            }
+            return self._execute_stop_update(action, strategy_result)
         
         else:
             return {
@@ -130,6 +133,57 @@ class ExecutionFlow:
                 "trade_details": strategy_result.details or {},
                 "message": f"⚠️ 未知操作: {action}"
             }
+
+    def _execute_stop_update(self, action: str, strategy_result) -> Dict[str, Any]:
+        """执行止损更新（仅自动交易模式）。"""
+        details = strategy_result.details or {}
+        new_stop = details.get("stop_loss")
+
+        if not new_stop:
+            return {
+                "strategy_action": action,
+                "trade_executed": False,
+                "trade_details": details,
+                "message": strategy_result.message + "\n\n⚠️ 缺少 stop_loss，未执行止损更新"
+            }
+
+        position = self.client.get_positions(self.contract)
+        if not position:
+            return {
+                "strategy_action": action,
+                "trade_executed": False,
+                "trade_details": details,
+                "message": strategy_result.message + "\n\n⚠️ 当前无持仓，未执行止损更新"
+            }
+
+        qty = abs(position.get("size", 0))
+        if qty <= 0:
+            return {
+                "strategy_action": action,
+                "trade_executed": False,
+                "trade_details": details,
+                "message": strategy_result.message + "\n\n⚠️ 持仓数量无效，未执行止损更新"
+            }
+
+        direction = "long" if position["size"] > 0 else "short"
+        old_stop = details.get("old_stop")
+
+        exec_result = self.executor.adjust_stop_loss(
+            direction=direction,
+            new_stop=float(new_stop),
+            qty=int(qty),
+            old_stop=old_stop
+        )
+
+        return {
+            "strategy_action": action,
+            "trade_executed": exec_result["success"],
+            "trade_details": {
+                "executor_result": exec_result,
+                "strategy_details": details
+            },
+            "message": strategy_result.message + "\n\n" + exec_result["message"]
+        }
     
     def _execute_open_long(self, strategy_result) -> Dict[str, Any]:
         """执行开多仓"""

@@ -1,6 +1,5 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:system",
-    "python-envs.pythonProjects": [],
     "chat.tools.terminal.autoApprove": {
         "/^cd /workspaces/ETH_Perp_Trading_bot && echo \"=== 分析最近20次scheduled运行的间隔 ===\" && gh run list --workflow \"ETH Trading Monitor\" --limit 30 --json event,createdAt --jq '\\.\\[\\] \\| select\\(\\.event==\"schedule\"\\) \\| \\.createdAt' \\| head -20 \\| awk 'BEGIN\\{print \"触发时间\\\\t\\\\t间隔\\(分钟\\)\"\\} \\{gsub\\(/\"/,\"\"\\); cmd=\"date -d \\\\\"\"\\$0\"\\\\\" \\+%s\"; cmd \\| getline t; close\\(cmd\\); if\\(prev>0\\)\\{interval=\\(prev-t\\)/60; printf\\(\"%s\\\\t%\\.1f\\\\n\", \\$0, interval\\)\\} else \\{printf\\(\"%s\\\\t---\\\\n\", \\$0\\)\\} prev=t\\}'$/": {
             "approve": true,

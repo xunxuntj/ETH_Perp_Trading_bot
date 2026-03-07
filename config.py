@@ -62,8 +62,6 @@ CLOSE_MODE = os.environ.get("CLOSE_MODE", "market")
 
 # Telegram 通知中是否包含详细日志（模拟模式下）
 NOTIFY_DETAILS = os.environ.get("NOTIFY_DETAILS", "true").lower() == "true"
-# 打开时：发信号并执行交易（开仓、调止损、平仓）
-ENABLE_AUTO_TRADING = os.environ.get("ENABLE_AUTO_TRADING", "false").lower() == "true"
 
 
 def get_risk_amount(equity: float) -> dict:
