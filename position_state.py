@@ -27,8 +27,14 @@ def load_position_state() -> dict:
     加载持仓状态文件
     
     格式: {
-        "long": {"phase": "LOCKED", "stop_loss": 2000.5, "entry_price": 2010.0, "last_update": 1234567890},
-        "short": {"phase": "SURVIVAL", "stop_loss": 2100.0, "entry_price": 2090.0, "last_update": 1234567890}
+        "long": {
+            "phase": "LOCKED",                # 当前阶段: SURVIVAL/LOCKED/HOURLY
+            "stop_loss": 2000.5,              # 当前止损
+            "locked_stop_loss": 2024.83,      # 锁利期止损（进入锁利期时的30m ST）
+            "entry_price": 2010.0,
+            "initial_30m_st": 2031.55,        # 开仓时的初始30m ST（用于判断生存期）
+            "last_update": 1234567890
+        }
     }
     """
     if os.path.exists(POSITION_STATE_FILE):
@@ -51,48 +57,69 @@ def save_position_state(state: dict):
 
 
 def update_position_state(direction: str, phase: str, stop_loss: float, entry_price: float, 
-                         current_time: float) -> Tuple[bool, str]:
+                         current_time: float, initial_30m_st: float = 0, 
+                         locked_stop_loss: float = 0) -> Tuple[bool, str]:
     """
     更新持仓状态，检测是否有变化
     
+    参数:
+        direction: "long" 或 "short"
+        phase: 当前阶段 "SURVIVAL"/"LOCKED"/"HOURLY"
+        stop_loss: 当前止损价格
+        entry_price: 入场价格
+        current_time: 当前时间戳
+        initial_30m_st: 初始30m ST（入场时）- 仅在新持仓时需要
+        locked_stop_loss: 锁利期止损 - 仅当从SURVIVAL进入LOCKED时需要更新
+    
     返回: (has_change, change_type)
-    change_type: "", "stop_updated", "enter_locked", "switch_1h", "phase_changed", "new_position"
+    change_type: "", "stop_updated", "enter_locked", "switch_1h", "new_position"
     """
     state = load_position_state()
     
     # 获取前一次的状态
     prev_state = state.get(direction, {})
+    prev_phase = prev_state.get('phase', '')
+    prev_stop_loss = prev_state.get('stop_loss', 0)
+    prev_locked_stop_loss = prev_state.get('locked_stop_loss', 0)
+    prev_initial_30m_st = prev_state.get('initial_30m_st', 0)
     
     change_type = ""
     
-    # 如果是新持仓（position_state.json中没有该方向的记录）
-    # 手动开仓或冷却期结束后的首次信号检测时会触发这个条件
+    # 新持仓：记录初始30m ST
     if not prev_state:
-        change_type = "stop_updated"  # 新持仓时发送止损通知
-    # 检查止损是否有变化 (差异超过 0.01)
-    elif abs(prev_state.get('stop_loss', 0) - stop_loss) > 0.01:
+        change_type = "new_position"
+    # 检查阶段变化：SURVIVAL → LOCKED
+    elif phase == "LOCKED" and prev_phase == "SURVIVAL":
+        change_type = "enter_locked"
+    # 检查阶段变化：LOCKED/SURVIVAL → HOURLY
+    elif phase == "HOURLY" and prev_phase in ["SURVIVAL", "LOCKED"]:
+        change_type = "switch_1h"
+    # 检查止损是否有变化（差异 > 0.01）
+    elif abs(prev_stop_loss - stop_loss) > 0.01:
         change_type = "stop_updated"
     
-    # 检查阶段是否有变化
-    prev_phase = prev_state.get('phase', '')
-    if prev_phase and prev_phase != phase:
-        # 进入锁利期
-        if phase == "LOCKED" and prev_phase == "SURVIVAL":
-            change_type = "enter_locked"
-        # 切换到小时线
-        elif phase == "HOURLY" and prev_phase in ["SURVIVAL", "LOCKED"]:
-            change_type = "switch_1h"
-        else:
-            # 其他阶段变化
-            change_type = "phase_changed"
-    
-    # 保存当前状态
-    state[direction] = {
+    # 构建新状态
+    new_state = {
         "phase": phase,
         "stop_loss": stop_loss,
         "entry_price": entry_price,
         "last_update": current_time
     }
+    
+    # 保留或更新 initial_30m_st（仅在新持仓时设置）
+    if initial_30m_st > 0:
+        new_state["initial_30m_st"] = initial_30m_st
+    elif prev_initial_30m_st > 0:
+        new_state["initial_30m_st"] = prev_initial_30m_st
+    
+    # 保留或更新 locked_stop_loss（仅当进入LOCKED或已经在LOCKED时更新）
+    if locked_stop_loss > 0:
+        new_state["locked_stop_loss"] = locked_stop_loss
+    elif prev_locked_stop_loss > 0:
+        new_state["locked_stop_loss"] = prev_locked_stop_loss
+    
+    # 保存当前状态
+    state[direction] = new_state
     save_position_state(state)
     
     return (change_type != ""), change_type

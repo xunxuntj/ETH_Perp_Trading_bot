@@ -1,6 +1,38 @@
-# GitHub Actions Schedule 问题修复总结
+# 问题修复总结
 
-## 问题诊断
+## 📌 2026-03-07 - 三阶段止损逻辑 V2 (重要更新)
+
+### 问题说明
+换轨期的判断逻辑有问题：
+- 原逻辑使用 `lock_threshold`（按入场价计算）作为换轨条件
+- 实际应该使用**进入锁利期时的 30m ST** 作为换轨条件
+- 锁利期内不应该跟随 30m ST 调整，应该保持锁利止损不变
+
+### 正确的三阶段逻辑
+1. **生存期（SURVIVAL）**：期望盈利 < LOCK_PROFIT_BUFFER，止损跟随 30m ST
+2. **锁利期（LOCKED）**：期望盈利 >= LOCK_PROFIT_BUFFER，暂停止损调整，保持当前 30m ST 作为 `locked_stop_loss`
+3. **换轨期（HOURLY）**：1H ST <= `locked_stop_loss`（比锁利止损更紧），止损跟随 1H ST
+
+### 实现修改
+- **position_state.json**：新增 `locked_stop_loss` 和 `initial_30m_st` 字段
+  - `locked_stop_loss`：进入锁利期时的 30m ST
+  - `initial_30m_st`：开仓时的 30m ST
+- **strategy.py `_infer_phase()`**：完全重新实现三阶段推导逻辑
+  - 接收 `initial_30m_st` 和 `locked_stop_loss` 参数
+  - 锁利期直接返回 `locked_stop_loss`，不跟随 30m ST
+  - 换轨条件：1H ST vs locked_stop_loss，而非 vs lock_threshold
+- **position_state.py `update_position_state()`**：支持新参数
+  - 进入 LOCKED 时自动记录 `locked_stop_loss`
+  - 保留历史的 `locked_stop_loss` 直到平仓
+
+### 文档
+- 新增 `TRADING_PHASE_LOGIC_V2.md` - 完整的三阶段逻辑说明
+
+---
+
+## 📌 2026-03-05 - GitHub Actions Schedule 问题修复
+
+### 问题诊断
 
 ✅ **已确认的情况**：
 - Workflow 文件在 2026-03-05 16:06:17 UTC 更新（改为每 5 分钟运行）
@@ -8,7 +40,7 @@
 - 从 16:06 到现在 17:06，按新配置应该运行了 11 次，但实际 0 次
 - 历史记录显示：即使配置每 10 分钟，实际也是每小时才运行 1 次
 
-## 根本原因
+### 根本原因
 
 **GitHub Actions 的 `schedule` 触发器存在严重限制**：
 
@@ -17,7 +49,7 @@
 3. **资源竞争**：在高峰时段，低优先级的 scheduled workflows 会被延迟或跳过
 4. **不适用场景**：不适合需要精确定时的交易机器人
 
-## 已实施的修复
+### 已实施的修复
 
 ### 1. 更新 workflow 文件（已完成）
 
