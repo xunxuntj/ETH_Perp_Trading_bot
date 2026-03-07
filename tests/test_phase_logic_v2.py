@@ -4,12 +4,19 @@
 验证用户提供的交易案例
 """
 
+import sys
+import os
 from dataclasses import dataclass
 from typing import List, Tuple
 from enum import Enum
 
-# 常量配置
-LOCK_PROFIT_BUFFER = 1.0  # USDT
+# 添加项目根目录到 Python 路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 从配置中导入 LOCK_PROFIT_BUFFER（确保使用配置项，而非硬编码）
+from config import LOCK_PROFIT_BUFFER
+
+# 合约面值常数（从 strategy.py 保持一致）
 FACE_VALUE = 0.01  # ETH per contract
 
 
