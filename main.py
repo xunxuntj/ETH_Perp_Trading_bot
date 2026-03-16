@@ -88,8 +88,15 @@ def main():
             "cooldown",
         ]
         
+        # 兜底：止损相关异常强制推送，避免遗漏关键风控信息
+        message_lower = message.lower()
+        stop_loss_fallback = (
+            ("stop_loss" in message_lower or "止损" in message_lower)
+            and any(keyword in message_lower for keyword in ["失败", "异常", "未执行", "error", "failed"])
+        )
+
         # 发送 Telegram 通知
-        if strategy_action in notify_actions:
+        if strategy_action in notify_actions or stop_loss_fallback:
             success = send_telegram_message(message)
             if success:
                 print("\n📱 Telegram 通知已发送")

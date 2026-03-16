@@ -258,6 +258,46 @@ class TestPositionState(unittest.TestCase):
         self.assertEqual(change_type, "")
         print("✅ 同一阶段无变化正确处理")
 
+    def test_10_lowercase_phase_transition_compatibility(self):
+        """测试小写阶段值也能触发阶段变化通知（兼容 strategy.py）"""
+        print("\n【测试 10】小写阶段兼容性")
+
+        # strategy.py 传入的是小写 phase（survival/locked/hourly）
+        update_position_state(
+            direction="long",
+            phase="survival",
+            stop_loss=2000.0,
+            entry_price=2010.0,
+            current_time=time.time()
+        )
+
+        time.sleep(0.1)
+
+        has_change, change_type = update_position_state(
+            direction="long",
+            phase="locked",
+            stop_loss=2000.0,
+            entry_price=2010.0,
+            current_time=time.time()
+        )
+
+        self.assertTrue(has_change)
+        self.assertEqual(change_type, "enter_locked")
+
+        time.sleep(0.1)
+
+        has_change, change_type = update_position_state(
+            direction="long",
+            phase="hourly",
+            stop_loss=2000.0,
+            entry_price=2010.0,
+            current_time=time.time()
+        )
+
+        self.assertTrue(has_change)
+        self.assertEqual(change_type, "switch_1h")
+        print("✅ 小写阶段兼容成功：enter_locked + switch_1h")
+
 
 def run_tests():
     """运行所有测试"""

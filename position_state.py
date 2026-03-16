@@ -79,6 +79,9 @@ def update_position_state(direction: str, phase: str, stop_loss: float, entry_pr
     # 获取前一次的状态
     prev_state = state.get(direction, {})
     prev_phase = prev_state.get('phase', '')
+    # 兼容历史/不同模块使用的大小写阶段值（例如 LOCKED vs locked）。
+    current_phase_upper = str(phase).upper()
+    prev_phase_upper = str(prev_phase).upper()
     prev_stop_loss = prev_state.get('stop_loss', 0)
     prev_locked_stop_loss = prev_state.get('locked_stop_loss', 0)
     prev_initial_30m_st = prev_state.get('initial_30m_st', 0)
@@ -89,10 +92,10 @@ def update_position_state(direction: str, phase: str, stop_loss: float, entry_pr
     if not prev_state:
         change_type = "new_position"
     # 检查阶段变化：SURVIVAL → LOCKED
-    elif phase == "LOCKED" and prev_phase == "SURVIVAL":
+    elif current_phase_upper == "LOCKED" and prev_phase_upper == "SURVIVAL":
         change_type = "enter_locked"
     # 检查阶段变化：LOCKED/SURVIVAL → HOURLY
-    elif phase == "HOURLY" and prev_phase in ["SURVIVAL", "LOCKED"]:
+    elif current_phase_upper == "HOURLY" and prev_phase_upper in ["SURVIVAL", "LOCKED"]:
         change_type = "switch_1h"
     # 检查止损是否有变化（差异 > 0.01）
     elif abs(prev_stop_loss - stop_loss) > 0.01:
