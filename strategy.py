@@ -159,6 +159,40 @@ def is_1h_tighter(last_1h_st: float, threshold: float, is_long: bool) -> bool:
 
 class TradingStrategy:
 
+    def _debug_enabled(self) -> bool:
+        return bool(os.getenv('GATE_DEBUG') or os.getenv('DEBUG'))
+
+    def _debug_log(self, message: str):
+        if self._debug_enabled():
+            print(f"[STRATEGY DEBUG] {message}")
+
+    def _get_live_stop_price(self) -> Optional[float]:
+        """读取交易所当前 open 触发单价格，用于无状态部署下的止损差异检测。"""
+        try:
+            orders = self.client.get_price_orders(self.contract, status="open", limit=100)
+            if not orders:
+                self._debug_log("_get_live_stop_price: no open price orders")
+                return None
+
+            # 优先选取用于平仓止损的触发单（reduce_only + auto_size=close）。
+            selected = orders[0]
+            for order in orders:
+                initial = order.get("initial", {})
+                if initial.get("reduce_only") and str(initial.get("auto_size", "")).lower() == "close":
+                    selected = order
+                    break
+
+            trigger = selected.get("trigger", {})
+            price = trigger.get("price")
+            live_stop = float(price) if price is not None else None
+            self._debug_log(
+                f"_get_live_stop_price: selected_order_id={selected.get('id')} trigger_price={price} parsed={live_stop}"
+            )
+            return live_stop
+        except Exception as e:
+            self._debug_log(f"_get_live_stop_price error: {str(e)}")
+            return None
+
     def _mark_processed_30m_bar(self, bar_ts: int, bar_iso: str):
         """记录本次已处理的30m已收盘K线，用于高频调度去重。"""
         self.state.last_processed_30m_bar_ts = bar_ts
@@ -197,15 +231,16 @@ class TradingStrategy:
         if initial_30m_st <= 0:
             initial_30m_st = last_30m_st
 
-        if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-            print(f"[STRATEGY DEBUG] _infer_phase: expected_pnl_at_stop={expected_pnl_at_stop:.2f}, LOCK_PROFIT_BUFFER={LOCK_PROFIT_BUFFER}, last_1h_st={last_1h_st:.2f}, locked_stop_loss={locked_stop_loss:.2f}")
+        self._debug_log(
+            f"_infer_phase: expected_pnl_at_stop={expected_pnl_at_stop:.2f}, LOCK_PROFIT_BUFFER={LOCK_PROFIT_BUFFER}, "
+            f"last_1h_st={last_1h_st:.2f}, locked_stop_loss={locked_stop_loss:.2f}"
+        )
 
         # 【阶段1 - 生存期】：按30m ST平仓收益还不到缓冲
         if expected_pnl_at_stop < LOCK_PROFIT_BUFFER:
             phase = Phase.SURVIVAL.value
             recommended_stop = last_30m_st
-            if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                print(f"[STRATEGY DEBUG] Phase: SURVIVAL, expected_pnl={expected_pnl_at_stop:.2f} < {LOCK_PROFIT_BUFFER}")
+            self._debug_log(f"Phase: SURVIVAL, expected_pnl={expected_pnl_at_stop:.2f} < {LOCK_PROFIT_BUFFER}")
             return phase, recommended_stop
         
         # 到这里说明 expected_pnl >= LOCK_PROFIT_BUFFER，已满足锁利条件
@@ -213,8 +248,7 @@ class TradingStrategy:
         # 初值处理：如果没有传入 locked_stop_loss，说明是首次进入锁利期，记录当前30m ST
         if locked_stop_loss <= 0:
             locked_stop_loss = last_30m_st
-            if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                print(f"[STRATEGY DEBUG] 首次进入锁利期条件，记录 locked_stop_loss={locked_stop_loss:.2f}")
+            self._debug_log(f"首次进入锁利期条件，记录 locked_stop_loss={locked_stop_loss:.2f}")
         
         # 判断1H ST是否比锁利止损更紧
         if is_long:
@@ -226,15 +260,13 @@ class TradingStrategy:
         if is_1h_tighter:
             phase = Phase.HOURLY.value
             recommended_stop = last_1h_st
-            if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                print(f"[STRATEGY DEBUG] Phase: HOURLY, 1h_st={'>' if is_long else '<'} locked_stop_loss")
+            self._debug_log(f"Phase: HOURLY, 1h_st={'>' if is_long else '<'} locked_stop_loss")
             return phase, recommended_stop
         
         # 【阶段2 - 锁利期】：收益足够，但1H ST还不够紧
         phase = Phase.LOCKED.value
         recommended_stop = locked_stop_loss  # ← 关键：保持锁利期的止损不变
-        if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-            print(f"[STRATEGY DEBUG] Phase: LOCKED, recommended_stop={recommended_stop:.2f}")
+        self._debug_log(f"Phase: LOCKED, recommended_stop={recommended_stop:.2f}")
         return phase, recommended_stop
 
     def __init__(self, client: GateClient, contract: str = "ETH_USDT"):
@@ -679,6 +711,20 @@ class TradingStrategy:
             locked_stop_loss=locked_stop_for_update if locked_stop_for_update > 0 else locked_stop_loss
         )
 
+        # 无状态部署（如 GitHub Actions）下，position_state 可能每轮丢失。
+        # 这种情况下通过交易所实时止损单与推荐止损做差异比较，恢复 stop_updated 信号。
+        if change_type == "new_position":
+            live_stop = self._get_live_stop_price()
+            self._debug_log(
+                f"stateless_fallback(long): change_type=new_position, live_stop={live_stop}, recommended_stop={recommended_stop:.2f}"
+            )
+            if live_stop is None or abs(live_stop - recommended_stop) > 0.01:
+                change_type = "stop_updated"
+                prev_stop_loss = live_stop if live_stop is not None else prev_stop_loss
+                self._debug_log("stateless_fallback(long): promote to stop_updated")
+            else:
+                self._debug_log("stateless_fallback(long): keep hold (difference <= 0.01)")
+
         # 返回阶段和止损信息
         phase_names = {
             Phase.SURVIVAL.value: "🔵 生存期",
@@ -826,6 +872,20 @@ class TradingStrategy:
             initial_30m_st=initial_30m_st,
             locked_stop_loss=locked_stop_for_update if locked_stop_for_update > 0 else locked_stop_loss
         )
+
+        # 无状态部署（如 GitHub Actions）下，position_state 可能每轮丢失。
+        # 这种情况下通过交易所实时止损单与推荐止损做差异比较，恢复 stop_updated 信号。
+        if change_type == "new_position":
+            live_stop = self._get_live_stop_price()
+            self._debug_log(
+                f"stateless_fallback(short): change_type=new_position, live_stop={live_stop}, recommended_stop={recommended_stop:.2f}"
+            )
+            if live_stop is None or abs(live_stop - recommended_stop) > 0.01:
+                change_type = "stop_updated"
+                prev_stop_loss = live_stop if live_stop is not None else prev_stop_loss
+                self._debug_log("stateless_fallback(short): promote to stop_updated")
+            else:
+                self._debug_log("stateless_fallback(short): keep hold (difference <= 0.01)")
 
         # 返回阶段和止损信息
         phase_names = {

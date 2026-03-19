@@ -89,15 +89,43 @@ def main():
         ]
         
         # 兜底：止损相关异常强制推送，避免遗漏关键风控信息
+        debug_enabled = bool(os.getenv("DEBUG") or os.getenv("GATE_DEBUG"))
         message_lower = message.lower()
         stop_loss_fallback = (
             ("stop_loss" in message_lower or "止损" in message_lower)
             and any(keyword in message_lower for keyword in ["失败", "异常", "未执行", "error", "failed"])
         )
 
+        notify_message = message
+        if stop_loss_fallback and debug_enabled:
+            strategy_details = trade_details.get("strategy_details", {}) if isinstance(trade_details, dict) else {}
+            executor_result = trade_details.get("executor_result", {}) if isinstance(trade_details, dict) else {}
+
+            old_stop = strategy_details.get("old_stop")
+            new_stop = strategy_details.get("stop_loss")
+            exec_success = executor_result.get("success")
+            exec_msg = executor_result.get("message")
+
+            debug_lines = [
+                "",
+                "[DEBUG:FALLBACK_NOTIFY]",
+                f"strategy_action={strategy_action}",
+                f"trade_executed={trade_executed}",
+            ]
+            if old_stop is not None:
+                debug_lines.append(f"old_stop={old_stop}")
+            if new_stop is not None:
+                debug_lines.append(f"new_stop={new_stop}")
+            if exec_success is not None:
+                debug_lines.append(f"executor_success={exec_success}")
+            if exec_msg:
+                debug_lines.append(f"executor_message={exec_msg}")
+
+            notify_message = message + "\n" + "\n".join(debug_lines)
+
         # 发送 Telegram 通知
         if strategy_action in notify_actions or stop_loss_fallback:
-            success = send_telegram_message(message)
+            success = send_telegram_message(notify_message)
             if success:
                 print("\n📱 Telegram 通知已发送")
             else:
