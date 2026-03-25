@@ -1,20 +1,32 @@
 #!/usr/bin/env python3
-"""
-冷静期推送优化测试脚本
+"""冷静期双模式测试。"""
 
-用途：验证冷静期推送是否正常工作（仅首次推送，之后不重复推送）
-"""
-
-import os
-import json
 from datetime import datetime, timedelta, timezone
 
+import cooldown
 from cooldown import (
+    CooldownStatus,
+    check_cooldown,
     load_cooldown_notify_state,
-    save_cooldown_notify_state,
+    load_cooldown_state,
+    record_trade_result,
     reset_cooldown_notify_state,
-    CooldownStatus
+    reset_cooldown_state,
+    save_cooldown_notify_state,
+    save_cooldown_state,
 )
+
+
+class DummyClient:
+    def __init__(self, closes=None, equity=1000.0):
+        self._closes = closes or []
+        self._equity = equity
+
+    def get_account(self):
+        return {"available": self._equity, "unrealised_pnl": 0.0}
+
+    def get_position_closes(self, contract, limit=30):
+        return self._closes[:limit]
 
 
 def test_state_management():
@@ -170,6 +182,97 @@ def test_notification_logic():
     reset_cooldown_notify_state()
 
 
+def test_auto_trading_cooldown_state_reset():
+    """自动交易模式下，冷静期结束后亏损计数清零。"""
+    reset_cooldown_state()
+
+    now = datetime.now(timezone.utc)
+    record_trade_result(-10, now - timedelta(hours=2))
+    record_trade_result(-8, now - timedelta(hours=1))
+    record_trade_result(-5, now)
+
+    state = load_cooldown_state()
+    assert state["consecutive_losses"] == 3, "❌ 连续亏损计数应为3"
+    assert state["cooldown_until"] is not None, "❌ 应已进入冷静期"
+
+    reset_cooldown_state(now + timedelta(hours=48))
+    state = load_cooldown_state()
+    assert state["consecutive_losses"] == 0, "❌ 冷静期结束后应清零"
+
+
+def test_auto_trading_profit_resets_loss_counter():
+    """自动交易模式下，盈利会把连续亏损计数清零。"""
+    reset_cooldown_state()
+
+    now = datetime.now(timezone.utc)
+    record_trade_result(-10, now - timedelta(hours=2))
+    record_trade_result(-8, now - timedelta(hours=1))
+    record_trade_result(6, now)
+
+    state = load_cooldown_state()
+    assert state["consecutive_losses"] == 0, "❌ 盈利后应重置连续亏损计数"
+    assert state["cooldown_until"] is None, "❌ 盈利后不应保留冷静期"
+
+
+def test_signal_mode_trigger_sets_reset_anchor(monkeypatch):
+    """信号模式下，冷静期结束后通过 reset_anchor_time 从头开始统计。"""
+    monkeypatch.setattr(cooldown, "ENABLE_AUTO_TRADING", False)
+    reset_cooldown_state()
+    reset_cooldown_notify_state()
+
+    now = datetime.now(timezone.utc)
+    closes = [
+        {"time": int((now - timedelta(hours=1)).timestamp()), "pnl": -5.0, "side": "long"},
+        {"time": int((now - timedelta(hours=2)).timestamp()), "pnl": -8.0, "side": "long"},
+        {"time": int((now - timedelta(hours=3)).timestamp()), "pnl": -10.0, "side": "short"},
+    ]
+    client = DummyClient(closes=closes)
+
+    status = check_cooldown(client)
+    state = load_cooldown_state()
+
+    assert status.triggered is True, "❌ 连续3笔亏损应触发冷静期"
+    assert state["cooldown_until"] is not None, "❌ 信号模式应记录 cooldown_until"
+    assert state["reset_anchor_time"] is None, "❌ 冷静期进行中不应提前设置重置锚点"
+
+    cooldown_until = datetime.fromisoformat(state["cooldown_until"])
+    reset_cooldown_state(cooldown_until)
+    state = load_cooldown_state()
+
+    assert state["consecutive_losses"] == 0, "❌ 冷静期结束后计数应清零"
+    assert state["reset_anchor_time"] == cooldown_until.isoformat(), "❌ 应记录新的 reset_anchor_time"
+
+
+def test_signal_mode_ignores_losses_before_reset_anchor(monkeypatch):
+    """信号模式下，reset_anchor_time 之前的历史亏损不再参与连续统计。"""
+    monkeypatch.setattr(cooldown, "ENABLE_AUTO_TRADING", False)
+
+    now = datetime.now(timezone.utc)
+    anchor = now - timedelta(hours=10)
+    save_cooldown_state({
+        "consecutive_losses": 0,
+        "cooldown_until": None,
+        "last_loss_time": None,
+        "reset_anchor_time": anchor.isoformat()
+    })
+    reset_cooldown_notify_state()
+
+    closes = [
+        {"time": int((now - timedelta(hours=1)).timestamp()), "pnl": -4.0, "side": "long"},
+        {"time": int((now - timedelta(hours=2)).timestamp()), "pnl": -6.0, "side": "short"},
+        {"time": int((now - timedelta(hours=12)).timestamp()), "pnl": -9.0, "side": "long"},
+        {"time": int((now - timedelta(hours=13)).timestamp()), "pnl": -11.0, "side": "short"},
+    ]
+    client = DummyClient(closes=closes)
+
+    status = check_cooldown(client)
+    state = load_cooldown_state()
+
+    assert status.triggered is False, "❌ 锚点前的亏损不应导致再次触发冷静期"
+    assert state["consecutive_losses"] == 2, "❌ 只应统计 reset_anchor_time 之后的两笔亏损"
+    assert state["cooldown_until"] is None, "❌ 不应进入新的冷静期"
+
+
 def test_real_world_scenario():
     """测试真实场景"""
     
@@ -222,6 +325,10 @@ def main():
         test_state_management()
         test_cooldown_status()
         test_notification_logic()
+        test_auto_trading_cooldown_state_reset()
+        test_auto_trading_profit_resets_loss_counter()
+        test_signal_mode_trigger_sets_reset_anchor(lambda *args, **kwargs: None)
+        test_signal_mode_ignores_losses_before_reset_anchor(lambda *args, **kwargs: None)
         test_real_world_scenario()
         
         print("\n" + "="*70)

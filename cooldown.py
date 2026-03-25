@@ -25,7 +25,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 from gate_client import GateClient
-from config import MAX_CONSECUTIVE_LOSSES, CIRCUIT_BREAKER_EQUITY
+from config import MAX_CONSECUTIVE_LOSSES, CIRCUIT_BREAKER_EQUITY, ENABLE_AUTO_TRADING
 
 
 @dataclass
@@ -50,6 +50,250 @@ class CooldownStatus:
 
 # 冷静期通知状态文件
 COOLDOWN_NOTIFY_STATE_FILE = "cooldown_notify_state.json"
+COOLDOWN_STATE_FILE = "cooldown_state.json"
+
+
+def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _serialize_datetime(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def load_cooldown_state() -> dict:
+    """加载冷静期状态。"""
+    default_state = {
+        "consecutive_losses": 0,
+        "cooldown_until": None,
+        "last_loss_time": None,
+        "reset_anchor_time": None
+    }
+
+    if os.path.exists(COOLDOWN_STATE_FILE):
+        try:
+            with open(COOLDOWN_STATE_FILE, 'r') as f:
+                data = json.load(f)
+                default_state.update({
+                    "consecutive_losses": int(data.get("consecutive_losses", 0) or 0),
+                    "cooldown_until": data.get("cooldown_until"),
+                    "last_loss_time": data.get("last_loss_time"),
+                    "reset_anchor_time": data.get("reset_anchor_time")
+                })
+        except Exception:
+            pass
+
+    return default_state
+
+
+def save_cooldown_state(state: dict):
+    """保存冷静期状态。"""
+    with open(COOLDOWN_STATE_FILE, 'w') as f:
+        json.dump(state, f, indent=2)
+
+
+def reset_cooldown_state(reset_anchor_time: Optional[datetime] = None):
+    """重置冷静期状态，冷静期结束后从头开始统计。"""
+    save_cooldown_state({
+        "consecutive_losses": 0,
+        "cooldown_until": None,
+        "last_loss_time": None,
+        "reset_anchor_time": _serialize_datetime(reset_anchor_time)
+    })
+
+
+def record_trade_result(pnl: float, close_time: Optional[datetime] = None):
+    """记录一笔已平仓交易结果，用于自动交易模式下的连续亏损统计。"""
+    state = load_cooldown_state()
+    close_time = close_time or datetime.now(timezone.utc)
+
+    cooldown_until = _parse_datetime(state.get("cooldown_until"))
+    if cooldown_until and close_time >= cooldown_until:
+        reset_cooldown_state(reset_anchor_time=cooldown_until)
+        state = load_cooldown_state()
+
+    if pnl < 0:
+        state["consecutive_losses"] = int(state.get("consecutive_losses", 0)) + 1
+        state["last_loss_time"] = _serialize_datetime(close_time)
+    else:
+        state["consecutive_losses"] = 0
+        state["last_loss_time"] = None
+
+    if state["consecutive_losses"] >= MAX_CONSECUTIVE_LOSSES:
+        cooldown_until = close_time + timedelta(hours=48)
+        state["consecutive_losses"] = MAX_CONSECUTIVE_LOSSES
+        state["cooldown_until"] = _serialize_datetime(cooldown_until)
+        state["last_loss_time"] = _serialize_datetime(close_time)
+    else:
+        state["cooldown_until"] = None
+
+    save_cooldown_state(state)
+
+
+def _build_consecutive_loss_status(consecutive_losses: int) -> CooldownStatus:
+    return CooldownStatus(
+        triggered=False,
+        consecutive_losses=consecutive_losses,
+        details=f"最近连续亏损: {consecutive_losses} 笔 (阈值: {MAX_CONSECUTIVE_LOSSES})"
+    )
+
+
+def _check_cooldown_from_state(now: datetime, notify_state: dict) -> CooldownStatus:
+    state = load_cooldown_state()
+    cooldown_until = _parse_datetime(state.get("cooldown_until"))
+    consecutive_losses = int(state.get("consecutive_losses", 0) or 0)
+    last_loss_time = _parse_datetime(state.get("last_loss_time"))
+
+    if cooldown_until and now < cooldown_until:
+        remaining_hours = (cooldown_until - now).total_seconds() / 3600
+        should_notify = not notify_state["notified"]
+        if should_notify:
+            notify_state["notified"] = True
+            notify_state["triggered_at"] = now.isoformat()
+            notify_state["notify_count"] = 1
+            save_cooldown_notify_state(notify_state)
+
+        last_loss_str = last_loss_time.strftime('%Y-%m-%d %H:%M UTC') if last_loss_time else '未知'
+        return CooldownStatus(
+            triggered=True,
+            reason="consecutive_loss",
+            cooldown_hours=48,
+            consecutive_losses=consecutive_losses,
+            last_loss_time=last_loss_time,
+            can_trade_time=cooldown_until,
+            should_notify=should_notify,
+            details=f"连续 {consecutive_losses} 笔亏损，需休息 48 小时\n"
+                    f"最后亏损: {last_loss_str}\n"
+                    f"剩余: {remaining_hours:.1f} 小时\n"
+                    f"✅ 可开单时间: {cooldown_until.strftime('%Y-%m-%d %H:%M UTC')}"
+        )
+
+    if cooldown_until and now >= cooldown_until:
+        reset_cooldown_state(reset_anchor_time=cooldown_until)
+        reset_cooldown_notify_state()
+        return CooldownStatus(
+            triggered=False,
+            details="48 小时冷静期已结束，连续亏损计数已清零 ✅ 可以开单"
+        )
+
+    if notify_state["notified"]:
+        reset_cooldown_notify_state()
+
+    return _build_consecutive_loss_status(consecutive_losses)
+
+
+def _check_cooldown_from_history(client: GateClient, contract: str, now: datetime, notify_state: dict) -> CooldownStatus:
+    state = load_cooldown_state()
+    cooldown_until = _parse_datetime(state.get("cooldown_until"))
+    reset_anchor_time = _parse_datetime(state.get("reset_anchor_time"))
+
+    if cooldown_until and now < cooldown_until:
+        remaining_hours = (cooldown_until - now).total_seconds() / 3600
+        should_notify = not notify_state["notified"]
+        if should_notify:
+            notify_state["notified"] = True
+            notify_state["triggered_at"] = now.isoformat()
+            notify_state["notify_count"] = 1
+            save_cooldown_notify_state(notify_state)
+
+        last_loss_time = _parse_datetime(state.get("last_loss_time"))
+        last_loss_str = last_loss_time.strftime('%Y-%m-%d %H:%M UTC') if last_loss_time else '未知'
+        return CooldownStatus(
+            triggered=True,
+            reason="consecutive_loss",
+            cooldown_hours=48,
+            consecutive_losses=int(state.get("consecutive_losses", 0) or 0),
+            last_loss_time=last_loss_time,
+            can_trade_time=cooldown_until,
+            should_notify=should_notify,
+            details=f"连续 {int(state.get('consecutive_losses', 0) or 0)} 笔亏损，需休息 48 小时\n"
+                    f"最后亏损: {last_loss_str}\n"
+                    f"剩余: {remaining_hours:.1f} 小时\n"
+                    f"✅ 可开单时间: {cooldown_until.strftime('%Y-%m-%d %H:%M UTC')}"
+        )
+
+    if cooldown_until and now >= cooldown_until:
+        reset_cooldown_state(reset_anchor_time=cooldown_until)
+        reset_cooldown_notify_state()
+        state = load_cooldown_state()
+        reset_anchor_time = _parse_datetime(state.get("reset_anchor_time"))
+
+    closes = client.get_position_closes(contract, limit=30)
+    if not closes:
+        if notify_state["notified"]:
+            reset_cooldown_notify_state()
+        return CooldownStatus(triggered=False, details="无平仓记录")
+
+    consecutive_losses = 0
+    last_loss_time = None
+    for close in closes:
+        close_time = datetime.fromtimestamp(close['time'], tz=timezone.utc)
+        if reset_anchor_time and close_time < reset_anchor_time:
+            break
+
+        pnl = close['pnl']
+        if pnl < 0:
+            consecutive_losses += 1
+            if last_loss_time is None:
+                last_loss_time = close_time
+        else:
+            break
+
+    state["consecutive_losses"] = consecutive_losses
+    state["last_loss_time"] = _serialize_datetime(last_loss_time)
+
+    if consecutive_losses >= MAX_CONSECUTIVE_LOSSES and last_loss_time:
+        cooldown_until = last_loss_time + timedelta(hours=48)
+        if now < cooldown_until:
+            state["cooldown_until"] = _serialize_datetime(cooldown_until)
+            save_cooldown_state(state)
+
+            should_notify = not notify_state["notified"]
+            if should_notify:
+                notify_state["notified"] = True
+                notify_state["triggered_at"] = now.isoformat()
+                notify_state["notify_count"] = 1
+                save_cooldown_notify_state(notify_state)
+
+            remaining_hours = (cooldown_until - now).total_seconds() / 3600
+            return CooldownStatus(
+                triggered=True,
+                reason="consecutive_loss",
+                cooldown_hours=48,
+                consecutive_losses=consecutive_losses,
+                last_loss_time=last_loss_time,
+                can_trade_time=cooldown_until,
+                should_notify=should_notify,
+                details=f"连续 {consecutive_losses} 笔亏损，需休息 48 小时\n"
+                        f"最后亏损: {last_loss_time.strftime('%Y-%m-%d %H:%M UTC')}\n"
+                        f"剩余: {remaining_hours:.1f} 小时\n"
+                        f"✅ 可开单时间: {cooldown_until.strftime('%Y-%m-%d %H:%M UTC')}"
+            )
+
+        reset_cooldown_state(reset_anchor_time=cooldown_until)
+        reset_cooldown_notify_state()
+        return CooldownStatus(
+            triggered=False,
+            details="48 小时冷静期已结束，连续亏损计数已清零 ✅ 可以开单"
+        )
+
+    state["cooldown_until"] = None
+    save_cooldown_state(state)
+
+    if notify_state["notified"]:
+        reset_cooldown_notify_state()
+
+    return _build_consecutive_loss_status(consecutive_losses)
 
 
 def load_cooldown_notify_state() -> dict:
@@ -122,84 +366,9 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
     
     # 2. 检查连续亏损
     try:
-        closes = client.get_position_closes(contract, limit=10)
-        
-        if not closes:
-            # 冷静期已解除，重置状态
-            if notify_state["notified"]:
-                reset_cooldown_notify_state()
-            
-            return CooldownStatus(
-                triggered=False,
-                details="无平仓记录"
-            )
-        
-        # 统计连续亏损次数（从最近开始往前数）
-        consecutive_losses = 0
-        last_loss_time = None
-        
-        for close in closes:
-            pnl = close['pnl']
-            
-            if pnl < 0:  # 亏损
-                consecutive_losses += 1
-                if last_loss_time is None:
-                    last_loss_time = datetime.fromtimestamp(close['time'], tz=timezone.utc)
-            else:
-                # 遇到盈利，停止计数
-                break
-        
-        if consecutive_losses >= MAX_CONSECUTIVE_LOSSES:
-            # 检查是否已过 48 小时
-            if last_loss_time:
-                hours_since = (now - last_loss_time).total_seconds() / 3600
-                
-                if hours_since < 48:
-                    can_trade_time = last_loss_time + timedelta(hours=48)
-                    
-                    # 判断是否需要推送：仅在首次进入冷静期时推送
-                    should_notify = not notify_state["notified"]
-                    if should_notify:
-                        notify_state["notified"] = True
-                        notify_state["triggered_at"] = now.isoformat()
-                        notify_state["notify_count"] = 1
-                        save_cooldown_notify_state(notify_state)
-                    
-                    return CooldownStatus(
-                        triggered=True,
-                        reason="consecutive_loss",
-                        cooldown_hours=48,
-                        consecutive_losses=consecutive_losses,
-                        last_loss_time=last_loss_time,
-                        can_trade_time=can_trade_time,
-                        should_notify=should_notify,
-                        details=f"连续 {consecutive_losses} 笔亏损，需休息 48 小时\n"
-                                f"最后亏损: {last_loss_time.strftime('%Y-%m-%d %H:%M UTC')}\n"
-                                f"已过: {hours_since:.1f} 小时\n"
-                                f"剩余: {48 - hours_since:.1f} 小时\n"
-                                f"✅ 可开单时间: {can_trade_time.strftime('%Y-%m-%d %H:%M UTC')}"
-                    )
-                else:
-                    # 已过 48 小时，冷静期结束，重置状态
-                    reset_cooldown_notify_state()
-                    
-                    return CooldownStatus(
-                        triggered=False,
-                        consecutive_losses=consecutive_losses,
-                        details=f"连续 {consecutive_losses} 笔亏损，但已过 48 小时冷静期 ✅ 可以开单"
-                    )
-        
-        # 未触发冷静期，重置通知状态
-        if notify_state["notified"]:
-            reset_cooldown_notify_state()
-        
-        # 未触发冷静期
-        return CooldownStatus(
-            triggered=False,
-            consecutive_losses=consecutive_losses,
-            details=f"最近连续亏损: {consecutive_losses} 笔 (阈值: {MAX_CONSECUTIVE_LOSSES})"
-        )
-        
+        if ENABLE_AUTO_TRADING:
+            return _check_cooldown_from_state(now, notify_state)
+        return _check_cooldown_from_history(client, contract, now, notify_state)
     except Exception as e:
         return CooldownStatus(
             triggered=False,

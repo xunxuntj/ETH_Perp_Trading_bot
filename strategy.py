@@ -17,7 +17,7 @@ from config import (
     SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER, DEMA_PERIOD,
     MAX_CONSECUTIVE_LOSSES, STATE_FILE,
     LEVERAGE, CIRCUIT_BREAKER_EQUITY, get_risk_amount,
-    LOCK_PROFIT_BUFFER
+    LOCK_PROFIT_BUFFER, ENABLE_AUTO_TRADING
 )
 from position_state import update_position_state, clear_position_state, load_position_state
 from indicators import calculate_supertrend, calculate_dema
@@ -397,7 +397,11 @@ class TradingStrategy:
             ))
         
         # 通过 API 检查连续亏损（从交易历史获取）
-        from cooldown import check_cooldown
+        from cooldown import check_cooldown, record_trade_result
+
+        if ENABLE_AUTO_TRADING:
+            record_trade_result(pnl, datetime.now(timezone.utc))
+
         cooldown = check_cooldown(self.client, self.contract)
         
         if cooldown.triggered:
