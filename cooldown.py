@@ -113,11 +113,21 @@ def reset_cooldown_state(reset_anchor_time: Optional[datetime] = None):
 
 
 def record_trade_result(pnl: float, close_time: Optional[datetime] = None):
-    """记录一笔已平仓交易结果，用于自动交易模式下的连续亏损统计。"""
+    """记录一笔已平仓交易结果，用于自动交易模式下的连续亏损统计。
+
+    冷静期内发生的平仓（例如旧仓被止损）不会影响计数或重置计时。
+    48 小时自然结束后，计数由 check_cooldown 清零。
+    """
     state = load_cooldown_state()
     close_time = close_time or datetime.now(timezone.utc)
 
     cooldown_until = _parse_datetime(state.get("cooldown_until"))
+
+    # 冷静期仍在进行中 → 本笔交易结果不计入，等待自然结束
+    if cooldown_until and close_time < cooldown_until:
+        return
+
+    # 冷静期已结束，先清零再统计新结果
     if cooldown_until and close_time >= cooldown_until:
         reset_cooldown_state(reset_anchor_time=cooldown_until)
         state = load_cooldown_state()

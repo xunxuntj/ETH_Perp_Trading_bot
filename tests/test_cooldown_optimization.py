@@ -214,6 +214,74 @@ def test_auto_trading_profit_resets_loss_counter():
     assert state["cooldown_until"] is None, "❌ 盈利后不应保留冷静期"
 
 
+def test_loss_during_cooldown_does_not_extend_timer():
+    """冷静期内发生的亏损不应延长冷静期计时。"""
+    reset_cooldown_state()
+
+    now = datetime.now(timezone.utc)
+    # 三笔亏损触发冷静期，cooldown_until = now + 48h
+    record_trade_result(-10, now - timedelta(hours=2))
+    record_trade_result(-8, now - timedelta(hours=1))
+    record_trade_result(-5, now)
+
+    state_after_trigger = load_cooldown_state()
+    original_cooldown_until = state_after_trigger["cooldown_until"]
+    assert original_cooldown_until is not None, "❌ 应已进入冷静期"
+
+    # 冷静期内（T+10h）止损平掉旧仓，产生亏损
+    record_trade_result(-20, now + timedelta(hours=10))
+
+    state_after_loss = load_cooldown_state()
+    assert state_after_loss["cooldown_until"] == original_cooldown_until, \
+        "❌ 冷静期内的亏损不应延长 cooldown_until"
+    assert state_after_loss["consecutive_losses"] == 3, \
+        "❌ 冷静期内的亏损不应增加计数"
+
+
+def test_loss_during_cooldown_count_resets_after_cooldown_ends():
+    """冷静期内的亏损被忽略后，冷静期结束时计数应从 0 重新开始。"""
+    reset_cooldown_state()
+
+    now = datetime.now(timezone.utc)
+    record_trade_result(-10, now - timedelta(hours=2))
+    record_trade_result(-8, now - timedelta(hours=1))
+    record_trade_result(-5, now)
+
+    # 冷静期内又亏一笔（应被忽略）
+    record_trade_result(-20, now + timedelta(hours=10))
+
+    # 模拟冷静期自然结束
+    cooldown_end = now + timedelta(hours=48)
+    reset_cooldown_state(reset_anchor_time=cooldown_end)
+
+    state = load_cooldown_state()
+    assert state["consecutive_losses"] == 0, "❌ 冷静期结束后计数应为 0"
+    assert state["cooldown_until"] is None, "❌ 冷静期结束后不应有 cooldown_until"
+
+    # 结束后再亏 2 笔，不触发冷静期（1笔则计数为1，2笔则计数为2，未达阈值3）
+    record_trade_result(-5, cooldown_end + timedelta(hours=1))
+    record_trade_result(-3, cooldown_end + timedelta(hours=2))
+
+    state = load_cooldown_state()
+    assert state["consecutive_losses"] == 2, "❌ 冷静期结束后应从头重新计数"
+    assert state["cooldown_until"] is None, "❌ 2 笔亏损不应触发冷静期"
+
+
+def test_scenario_2_two_losses_gap_then_third_triggers_cooldown():
+    """场景2：2笔亏损 → 无信号48h → 第3笔亏损 → 触发冷静期。"""
+    reset_cooldown_state()
+
+    now = datetime.now(timezone.utc)
+    record_trade_result(-10, now - timedelta(hours=50))
+    record_trade_result(-8,  now - timedelta(hours=49))
+    # 中间 48h+ 无交易 → 第3笔在 now 时发生
+    record_trade_result(-5, now)
+
+    state = load_cooldown_state()
+    assert state["consecutive_losses"] == 3, "❌ 三笔连续亏损应计数为3"
+    assert state["cooldown_until"] is not None, "❌ 应触发冷静期"
+
+
 def test_signal_mode_trigger_sets_reset_anchor(monkeypatch):
     """信号模式下，冷静期结束后通过 reset_anchor_time 从头开始统计。"""
     monkeypatch.setattr(cooldown, "ENABLE_AUTO_TRADING", False)
