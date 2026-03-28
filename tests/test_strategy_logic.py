@@ -5,10 +5,17 @@
 """
 
 import unittest
+from unittest.mock import patch
 from strategy import (
     is_1h_tighter, calculate_lock_threshold, calculate_position_size,
-    Phase, Direction, Position, FACE_VALUE
+    Phase, Direction, Position, FACE_VALUE, TradingStrategy
 )
+from config import LOCK_PROFIT_BUFFER
+
+
+class DummyClient:
+    """仅用于调用 _infer_phase 的最小客户端桩。"""
+    pass
 
 
 class TestHelpers(unittest.TestCase):
@@ -67,6 +74,86 @@ class TestHelpers(unittest.TestCase):
 
 class TestPhaseTransitions(unittest.TestCase):
     """测试阶段转换逻辑"""
+
+    def test_phase_survival_when_pnl_non_positive(self):
+        """按当前止损成交 PnL <= 0 时应处于生存期并跟随30m ST。"""
+        strategy = TradingStrategy(DummyClient())
+        phase, stop = strategy._infer_phase(
+            entry_price=2000.0,
+            current_price=1995.0,
+            qty=10,
+            last_30m_st=1990.0,
+            last_1h_st=1980.0,
+            is_long=True,
+            current_stop_loss=1998.0
+        )
+        self.assertEqual(phase, Phase.SURVIVAL.value)
+        self.assertEqual(stop, 1990.0)
+
+    def test_phase_locked_when_pnl_positive_and_not_above_buffer(self):
+        """按当前止损成交 0 < PnL <= BUFFER 时进入锁利期并跟随30m ST。"""
+        strategy = TradingStrategy(DummyClient())
+        # 多仓: (current_stop - entry) * qty * FACE_VALUE = 0.5U
+        phase, stop = strategy._infer_phase(
+            entry_price=2000.0,
+            current_price=2002.0,
+            qty=10,
+            last_30m_st=2003.0,
+            last_1h_st=1995.0,
+            is_long=True,
+            current_stop_loss=2005.0  # pnl = (2005-2000)*10*0.01 = 0.5
+        )
+        self.assertTrue(0 < (2005.0 - 2000.0) * 10 * FACE_VALUE <= LOCK_PROFIT_BUFFER)
+        self.assertEqual(phase, Phase.LOCKED.value)
+        self.assertEqual(stop, 2003.0)
+
+    def test_phase_hourly_when_tight_only_and_1h_not_tighter(self):
+        """tight_only 下，PnL>BUFFER 时仍进入 HOURLY（止损是否更新由只收紧规则控制）。"""
+        strategy = TradingStrategy(DummyClient())
+        with patch('strategy.STOP_LOSS_MODE', 'tight_only'):
+            phase, stop = strategy._infer_phase(
+                entry_price=2000.0,
+                current_price=2020.0,
+                qty=10,
+                last_30m_st=2012.0,
+                last_1h_st=2008.0,
+                is_long=True,
+                current_stop_loss=2012.0  # pnl = 1.2U > 1.0U
+            )
+        self.assertEqual(phase, Phase.HOURLY.value)
+        self.assertEqual(stop, 2008.0)
+
+    def test_phase_hourly_when_tight_only_and_1h_tighter(self):
+        """tight_only 下，1H 比当前止损更紧时，切换 HOURLY。"""
+        strategy = TradingStrategy(DummyClient())
+        with patch('strategy.STOP_LOSS_MODE', 'tight_only'):
+            phase, stop = strategy._infer_phase(
+                entry_price=2000.0,
+                current_price=2020.0,
+                qty=10,
+                last_30m_st=2012.0,
+                last_1h_st=2015.0,
+                is_long=True,
+                current_stop_loss=2012.0
+            )
+        self.assertEqual(phase, Phase.HOURLY.value)
+        self.assertEqual(stop, 2015.0)
+
+    def test_phase_hourly_in_both_mode_even_if_1h_not_tighter(self):
+        """both 模式下，PnL>BUFFER 即切换到 HOURLY 并跟随 1H ST。"""
+        strategy = TradingStrategy(DummyClient())
+        with patch('strategy.STOP_LOSS_MODE', 'both'):
+            phase, stop = strategy._infer_phase(
+                entry_price=2000.0,
+                current_price=2020.0,
+                qty=10,
+                last_30m_st=2012.0,
+                last_1h_st=2008.0,
+                is_long=True,
+                current_stop_loss=2012.0
+            )
+        self.assertEqual(phase, Phase.HOURLY.value)
+        self.assertEqual(stop, 2008.0)
 
     def test_survival_to_locked_long(self):
         """多仓：生存期 → 锁利期（浮盈 > BUFFER）"""
