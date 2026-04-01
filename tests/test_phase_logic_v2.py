@@ -185,11 +185,15 @@ def test_phase_transitions():
     
     test_cases = [
         # (st_30m, st_1h, expected_phase, description)
+        # 空单 entry=2062.17, qty=49; LOCK_PROFIT_BUFFER=1U
+        # SURVIVAL: st_30m > entry
+        # LOCKED:  entry >= st_30m AND (entry-st_30m)*49*0.01 <= 1.0 → st_30m >= 2060.13
+        # HOURLY:  (entry-st_30m)*49*0.01 > 1.0 → st_30m < 2060.13
         (2063.00, 2063.00, Phase.SURVIVAL.value, "30m ST > 开仓价，生存期"),
-        (2062.17, 2060.00, Phase.LOCKED.value, "30m ST = 开仓价，进入锁利期，PNL=0"),
-        (2060.00, 2060.00, Phase.LOCKED.value, "按30m ST平仓PNL≈1U，继续锁利期跟随30m ST"),
-        (2055.00, 2055.00, Phase.HOURLY.value, "按30m ST平仓PNL>1U，进入换轨期"),
-        (2050.00, 2052.00, Phase.HOURLY.value, "换轨期，跟随1H ST，止损只紧不松"),
+        (2062.17, 2060.00, Phase.LOCKED.value,   "30m ST = 开仓价，进入锁利期，PNL=0"),
+        (2061.00, 2060.00, Phase.LOCKED.value,   "PNL=0.57U<=1U，锁利期跟随30m ST"),
+        (2059.00, 2059.00, Phase.HOURLY.value,   "PNL=1.55U>1U，进入换轨期"),
+        (2050.00, 2052.00, Phase.HOURLY.value,   "换轨期，跟随1H ST，止损只紧不松"),
     ]
     
     print(f"\n{'ST30m':<10} {'ST1h':<10} {'预期阶段':<10} {'说明':<35}")
