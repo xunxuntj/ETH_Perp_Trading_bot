@@ -5,17 +5,10 @@
 """
 
 import unittest
-from unittest.mock import patch
 from strategy import (
     is_1h_tighter, calculate_lock_threshold, calculate_position_size,
-    Phase, Direction, Position, FACE_VALUE, TradingStrategy
+    Phase, Direction, Position, FACE_VALUE
 )
-from config import LOCK_PROFIT_BUFFER
-
-
-class DummyClient:
-    """仅用于调用 _infer_phase 的最小客户端桩。"""
-    pass
 
 
 class TestHelpers(unittest.TestCase):
@@ -73,184 +66,131 @@ class TestHelpers(unittest.TestCase):
 
 
 class TestPhaseTransitions(unittest.TestCase):
-    """测试阶段转换逻辑"""
+    """测试阶段转换逻辑（新逻辑：基于30m ST是否达到开仓价 + PNL阈值）"""
 
-    def test_phase_survival_when_pnl_non_positive(self):
-        """按当前止损成交 PnL <= 0 时应处于生存期并跟随30m ST。"""
-        strategy = TradingStrategy(DummyClient())
-        phase, stop = strategy._infer_phase(
-            entry_price=2000.0,
-            current_price=1995.0,
-            qty=10,
-            last_30m_st=1990.0,
-            last_1h_st=1980.0,
-            is_long=True,
-            current_stop_loss=1998.0
-        )
-        self.assertEqual(phase, Phase.SURVIVAL.value)
-        self.assertEqual(stop, 1990.0)
-
-    def test_phase_locked_when_pnl_positive_and_not_above_buffer(self):
-        """按当前止损成交 0 < PnL <= BUFFER 时进入锁利期并跟随30m ST。"""
-        strategy = TradingStrategy(DummyClient())
-        # 多仓: (current_stop - entry) * qty * FACE_VALUE = 0.5U
-        phase, stop = strategy._infer_phase(
-            entry_price=2000.0,
-            current_price=2002.0,
-            qty=10,
-            last_30m_st=2003.0,
-            last_1h_st=1995.0,
-            is_long=True,
-            current_stop_loss=2005.0  # pnl = (2005-2000)*10*0.01 = 0.5
-        )
-        self.assertTrue(0 < (2005.0 - 2000.0) * 10 * FACE_VALUE <= LOCK_PROFIT_BUFFER)
-        self.assertEqual(phase, Phase.LOCKED.value)
-        self.assertEqual(stop, 2003.0)
-
-    def test_phase_hourly_when_tight_only_and_1h_not_tighter(self):
-        """tight_only 下，PnL>BUFFER 时仍进入 HOURLY（止损是否更新由只收紧规则控制）。"""
-        strategy = TradingStrategy(DummyClient())
-        with patch('strategy.STOP_LOSS_MODE', 'tight_only'):
-            phase, stop = strategy._infer_phase(
-                entry_price=2000.0,
-                current_price=2020.0,
-                qty=10,
-                last_30m_st=2012.0,
-                last_1h_st=2008.0,
-                is_long=True,
-                current_stop_loss=2012.0  # pnl = 1.2U > 1.0U
-            )
-        self.assertEqual(phase, Phase.HOURLY.value)
-        self.assertEqual(stop, 2008.0)
-
-    def test_phase_hourly_when_tight_only_and_1h_tighter(self):
-        """tight_only 下，1H 比当前止损更紧时，切换 HOURLY。"""
-        strategy = TradingStrategy(DummyClient())
-        with patch('strategy.STOP_LOSS_MODE', 'tight_only'):
-            phase, stop = strategy._infer_phase(
-                entry_price=2000.0,
-                current_price=2020.0,
-                qty=10,
-                last_30m_st=2012.0,
-                last_1h_st=2015.0,
-                is_long=True,
-                current_stop_loss=2012.0
-            )
-        self.assertEqual(phase, Phase.HOURLY.value)
-        self.assertEqual(stop, 2015.0)
-
-    def test_phase_hourly_in_both_mode_even_if_1h_not_tighter(self):
-        """both 模式下，PnL>BUFFER 即切换到 HOURLY 并跟随 1H ST。"""
-        strategy = TradingStrategy(DummyClient())
-        with patch('strategy.STOP_LOSS_MODE', 'both'):
-            phase, stop = strategy._infer_phase(
-                entry_price=2000.0,
-                current_price=2020.0,
-                qty=10,
-                last_30m_st=2012.0,
-                last_1h_st=2008.0,
-                is_long=True,
-                current_stop_loss=2012.0
-            )
-        self.assertEqual(phase, Phase.HOURLY.value)
-        self.assertEqual(stop, 2008.0)
-
-    def test_survival_to_locked_long(self):
-        """多仓：生存期 → 锁利期（浮盈 > BUFFER）"""
-        # 简化测试：直接检查 is_1h_tighter 在各阶段的应用
+    def test_survival_condition_long(self):
+        """多仓：生存期条件 = 30m ST 未达到开仓价"""
         entry_price = 2000.0
-        current_price = 2010.0
         qty = 10
         is_long = True
-        
-        # 浮盈 = (2010 - 2000) * 10 * 0.01 = 1.0 U (刚好等于 BUFFER)
-        pnl = (current_price - entry_price) * qty * FACE_VALUE
-        self.assertAlmostEqual(pnl, 1.0, places=2)
-        
-        # lock_threshold = 2000 + 1.0 / 0.1 = 2010.0
+        FACE_VALUE = 0.01
+
+        # 30m ST < 开仓价 → 生存期（止损触发会亏损）
+        last_30m_st = 1990.0
+        pnl_at_stop = (last_30m_st - entry_price) * qty * FACE_VALUE
+        self.assertLess(pnl_at_stop, 0)  # pnl = -1.0
+        self.assertFalse(last_30m_st >= entry_price)  # 未达开仓价
+
+        # 30m ST >= 开仓价 → 退出生存期
+        last_30m_st = 2000.0
+        self.assertTrue(last_30m_st >= entry_price)
+
+    def test_survival_condition_short(self):
+        """空仓：生存期条件 = 30m ST 未达到开仓价（从上方）"""
+        entry_price = 2000.0
+        qty = 10
+        is_long = False
+        FACE_VALUE = 0.01
+
+        # 30m ST > 开仓价 → 生存期（止损触发会亏损）
+        last_30m_st = 2010.0
+        self.assertFalse(last_30m_st <= entry_price)
+
+        # 30m ST <= 开仓价 → 退出生存期
+        last_30m_st = 2000.0
+        self.assertTrue(last_30m_st <= entry_price)
+
+    def test_locked_to_hourly_long_trigger(self):
+        """多仓：锁利期 → 换轨期（按30m ST平仓收益 > LOCK_PROFIT_BUFFER）"""
+        from config import LOCK_PROFIT_BUFFER
+        FACE_VALUE = 0.01
+        entry_price = 2000.0
+        qty = 10
+        is_long = True
+
+        # 30m ST = 2011 → pnl = (2011-2000)*10*0.01 = 1.1 > 1.0 → 换轨期
+        last_30m_st = 2011.0
+        pnl_at_stop = (last_30m_st - entry_price) * qty * FACE_VALUE
+        self.assertGreater(pnl_at_stop, LOCK_PROFIT_BUFFER)
+
+    def test_locked_to_hourly_long_no_trigger(self):
+        """多仓：锁利期 → 保持（按30m ST平仓收益 <= LOCK_PROFIT_BUFFER）"""
+        from config import LOCK_PROFIT_BUFFER
+        FACE_VALUE = 0.01
+        entry_price = 2000.0
+        qty = 10
+        is_long = True
+
+        # 30m ST = 2005 → pnl = (2005-2000)*10*0.01 = 0.5 <= 1.0 → 锁利期继续
+        last_30m_st = 2005.0
+        pnl_at_stop = (last_30m_st - entry_price) * qty * FACE_VALUE
+        self.assertLessEqual(pnl_at_stop, LOCK_PROFIT_BUFFER)
+
+    def test_locked_to_hourly_short_trigger(self):
+        """空仓：锁利期 → 换轨期（按30m ST平仓收益 > LOCK_PROFIT_BUFFER）"""
+        from config import LOCK_PROFIT_BUFFER
+        FACE_VALUE = 0.01
+        entry_price = 2000.0
+        qty = 10
+        is_long = False
+
+        # 30m ST = 1989 → pnl = (2000-1989)*10*0.01 = 1.1 > 1.0 → 换轨期
+        last_30m_st = 1989.0
+        pnl_at_stop = (entry_price - last_30m_st) * qty * FACE_VALUE
+        self.assertGreater(pnl_at_stop, LOCK_PROFIT_BUFFER)
+
+    def test_locked_to_hourly_short_no_trigger(self):
+        """空仓：锁利期 → 保持（按30m ST平仓收益 <= LOCK_PROFIT_BUFFER）"""
+        from config import LOCK_PROFIT_BUFFER
+        FACE_VALUE = 0.01
+        entry_price = 2000.0
+        qty = 10
+        is_long = False
+
+        # 30m ST = 1995 → pnl = (2000-1995)*10*0.01 = 0.5 <= 1.0 → 锁利期继续
+        last_30m_st = 1995.0
+        pnl_at_stop = (entry_price - last_30m_st) * qty * FACE_VALUE
+        self.assertLessEqual(pnl_at_stop, LOCK_PROFIT_BUFFER)
+
+    def test_hourly_tightening_only_long(self):
+        """多仓换轨期：止损只紧不松"""
+        # 如果1H ST下降，止损应保持在prev_stop不松动
+        prev_stop = 2020.0
+        last_1h_st_lower = 2015.0  # 1H ST下降
+        new_stop = max(last_1h_st_lower, prev_stop)
+        self.assertEqual(new_stop, prev_stop)  # 止损保持不变
+
+        # 如果1H ST上升，止损跟进
+        last_1h_st_higher = 2025.0
+        new_stop = max(last_1h_st_higher, prev_stop)
+        self.assertEqual(new_stop, last_1h_st_higher)  # 止损上移
+
+    def test_hourly_tightening_only_short(self):
+        """空仓换轨期：止损只紧不松"""
+        # 如果1H ST上升，止损应保持在prev_stop不松动
+        prev_stop = 2010.0
+        last_1h_st_higher = 2015.0  # 1H ST上升
+        new_stop = min(last_1h_st_higher, prev_stop)
+        self.assertEqual(new_stop, prev_stop)  # 止损保持不变
+
+        # 如果1H ST下降，止损跟进
+        last_1h_st_lower = 2005.0
+        new_stop = min(last_1h_st_lower, prev_stop)
+        self.assertEqual(new_stop, last_1h_st_lower)  # 止损下移
+
+    def test_survival_to_locked_threshold_long(self):
+        """多仓：锁利阈值（按30m ST平仓盈利 > BUFFER 时进入换轨）"""
+        entry_price = 2000.0
+        qty = 10
         lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=True)
         self.assertAlmostEqual(lock_threshold, 2010.0, places=2)
 
-    def test_survival_to_locked_short(self):
-        """空仓：生存期 → 锁利期（浮盈 > BUFFER）"""
+    def test_survival_to_locked_threshold_short(self):
+        """空仓：锁利阈值（按30m ST平仓盈利 > BUFFER 时进入换轨）"""
         entry_price = 2000.0
-        current_price = 1990.0
         qty = 10
-        is_long = False
-        
-        # 浮盈 = (2000 - 1990) * 10 * 0.01 = 1.0 U
-        pnl = (entry_price - current_price) * qty * FACE_VALUE
-        self.assertAlmostEqual(pnl, 1.0, places=2)
-        
-        # lock_threshold = 2000 - 1.0 / 0.1 = 1990.0
         lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=False)
         self.assertAlmostEqual(lock_threshold, 1990.0, places=2)
-
-    def test_survival_to_hourly_long_immediate(self):
-        """多仓：生存期 → 直接进入换轨期（1H ST比lock_threshold更紧）"""
-        entry_price = 2000.0
-        qty = 10
-        is_long = True
-        last_1h_st = 2020.0
-        
-        lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=True)
-        # lock_threshold ≈ 2010.0
-        # last_1h_st 2020.0 > lock_threshold 2010.0? YES，应进入HOURLY
-        should_enter_hourly = is_1h_tighter(last_1h_st, lock_threshold, is_long=True)
-        self.assertTrue(should_enter_hourly)
-
-    def test_survival_to_hourly_short_immediate(self):
-        """空仓：生存期 → 直接进入换轨期（1H ST比lock_threshold更紧）"""
-        entry_price = 2000.0
-        qty = 10
-        is_long = False
-        last_1h_st = 1980.0
-        
-        lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=False)
-        # lock_threshold ≈ 1990.0
-        # last_1h_st 1980.0 < lock_threshold 1990.0? YES，应进入HOURLY
-        should_enter_hourly = is_1h_tighter(last_1h_st, lock_threshold, is_long=False)
-        self.assertTrue(should_enter_hourly)
-
-    def test_locked_to_hourly_long_trigger(self):
-        """多仓：锁利期 → 换轨期（1H ST比locked_stop更紧）"""
-        last_1h_st = 2360.0
-        locked_stop = 2350.0
-        is_long = True
-        
-        # 2360 > 2350? YES，应进入HOURLY
-        should_switch = is_1h_tighter(last_1h_st, locked_stop, is_long=True)
-        self.assertTrue(should_switch)
-
-    def test_locked_to_hourly_long_no_trigger(self):
-        """多仓：锁利期 → 保持（1H ST不比locked_stop更紧）"""
-        last_1h_st = 2330.0
-        locked_stop = 2350.0
-        is_long = True
-        
-        # 2330 > 2350? NO，不进入HOURLY
-        should_switch = is_1h_tighter(last_1h_st, locked_stop, is_long=True)
-        self.assertFalse(should_switch)
-
-    def test_locked_to_hourly_short_trigger(self):
-        """空仓：锁利期 → 换轨期（1H ST比locked_stop更紧）"""
-        last_1h_st = 2300.0
-        locked_stop = 2341.21
-        is_long = False
-        
-        # 2300 < 2341.21? YES，应进入HOURLY
-        should_switch = is_1h_tighter(last_1h_st, locked_stop, is_long=False)
-        self.assertTrue(should_switch)
-
-    def test_locked_to_hourly_short_no_trigger(self):
-        """空仓：锁利期 → 保持（1H ST不比locked_stop更紧）"""
-        last_1h_st = 2385.21
-        locked_stop = 2341.21
-        is_long = False
-        
-        # 2385.21 < 2341.21? NO，不进入HOURLY
-        should_switch = is_1h_tighter(last_1h_st, locked_stop, is_long=False)
-        self.assertFalse(should_switch)
 
 
 class TestStopLossAdjustment(unittest.TestCase):

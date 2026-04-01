@@ -17,7 +17,7 @@ from config import (
     SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER, DEMA_PERIOD,
     MAX_CONSECUTIVE_LOSSES, STATE_FILE,
     LEVERAGE, CIRCUIT_BREAKER_EQUITY, get_risk_amount,
-    LOCK_PROFIT_BUFFER, ENABLE_AUTO_TRADING, STOP_LOSS_MODE
+    LOCK_PROFIT_BUFFER
 )
 from position_state import update_position_state, clear_position_state, load_position_state
 from indicators import calculate_supertrend, calculate_dema
@@ -159,107 +159,72 @@ def is_1h_tighter(last_1h_st: float, threshold: float, is_long: bool) -> bool:
 
 class TradingStrategy:
 
-    def _debug_enabled(self) -> bool:
-        return bool(os.getenv('GATE_DEBUG') or os.getenv('DEBUG'))
-
-    def _debug_log(self, message: str):
-        if self._debug_enabled():
-            print(f"[STRATEGY DEBUG] {message}")
-
-    def _get_live_stop_price(self) -> Optional[float]:
-        """读取交易所当前 open 触发单价格，用于无状态部署下的止损差异检测。"""
-        try:
-            orders = self.client.get_price_orders(self.contract, status="open", limit=100)
-            if not orders:
-                self._debug_log("_get_live_stop_price: no open price orders")
-                return None
-
-            # 优先选取用于平仓止损的触发单（reduce_only + auto_size=close）。
-            selected = orders[0]
-            for order in orders:
-                initial = order.get("initial", {})
-                if initial.get("reduce_only") and str(initial.get("auto_size", "")).lower() == "close":
-                    selected = order
-                    break
-
-            trigger = selected.get("trigger", {})
-            price = trigger.get("price")
-            live_stop = float(price) if price is not None else None
-            self._debug_log(
-                f"_get_live_stop_price: selected_order_id={selected.get('id')} trigger_price={price} parsed={live_stop}"
-            )
-            return live_stop
-        except Exception as e:
-            self._debug_log(f"_get_live_stop_price error: {str(e)}")
-            return None
-
     def _mark_processed_30m_bar(self, bar_ts: int, bar_iso: str):
         """记录本次已处理的30m已收盘K线，用于高频调度去重。"""
         self.state.last_processed_30m_bar_ts = bar_ts
         self.state.last_processed_30m_bar_iso = bar_iso
         save_state(self.state)
 
-    def _infer_phase(self, entry_price: float, current_price: float, qty: int,
+    def _infer_phase(self, entry_price: float, current_price: float, qty: int, 
                      last_30m_st: float, last_1h_st: float, is_long: bool,
                      initial_30m_st: float = 0, locked_stop_loss: float = 0,
-                     current_stop_loss: float = 0) -> tuple:
+                     prev_stop_loss: float = 0) -> tuple:
         """
         从当前数据推导阶段（三阶段逻辑）
-        
-        参数:
-            initial_30m_st: 开仓时的初始30m ST（生存期阈值）
-            locked_stop_loss: 锁利期止损（进入锁利期时的30m ST）
         
         返回: (phase, recommended_stop_loss)
         
         逻辑：
-        1) 生存期：按当前止损成交 PnL <= 0，止损跟随 30m ST
-        2) 锁利期：按当前止损成交 0 < PnL <= LOCK_PROFIT_BUFFER，止损跟随 30m ST
-                3) 换轨期：按当前止损成交 PnL > LOCK_PROFIT_BUFFER，进入 HOURLY，止损参考 1H ST
-                     - 若 STOP_LOSS_MODE=tight_only 且 1H ST 不比当前止损更紧：
-                         阶段仍为 HOURLY，但止损维持不变（不触发止损更新提示）
+        【阶段1 - 生存期】30m ST 未达到开仓价
+            止损跟随 30m ST
+        
+        【阶段2 - 锁利期】30m ST 已达到开仓价，但按30m ST平仓收益 <= LOCK_PROFIT_BUFFER
+            仍然跟随 30m ST（止损只紧不松）
+        
+        【阶段3 - 换轨期】按30m ST平仓收益 > LOCK_PROFIT_BUFFER
+            止损跟随 1H ST，止损只紧不松
         """
-        # 用“当前止损”计算触发阶段；若无历史止损则回退到30m ST
-        stop_for_pnl = current_stop_loss if current_stop_loss > 0 else last_30m_st
-
-        # 计算按当前止损成交的期望盈利
+        # 计算按当前止损价（30m ST）平仓的期望盈利
         if is_long:
-            expected_pnl_at_stop = (stop_for_pnl - entry_price) * qty * FACE_VALUE
+            expected_pnl_at_stop = (last_30m_st - entry_price) * qty * FACE_VALUE
         else:
-            expected_pnl_at_stop = (entry_price - stop_for_pnl) * qty * FACE_VALUE
+            expected_pnl_at_stop = (entry_price - last_30m_st) * qty * FACE_VALUE
 
-        # 初值处理：如果没有传入 initial_30m_st，则用当前30m ST作为初始值
-        if initial_30m_st <= 0:
-            initial_30m_st = last_30m_st
+        if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
+            print(f"[STRATEGY DEBUG] _infer_phase: entry={entry_price:.2f}, 30m_ST={last_30m_st:.2f}, expected_pnl_at_stop={expected_pnl_at_stop:.2f}, LOCK_PROFIT_BUFFER={LOCK_PROFIT_BUFFER}, 1h_ST={last_1h_st:.2f}")
 
-        self._debug_log(
-            f"_infer_phase: expected_pnl_at_stop={expected_pnl_at_stop:.2f}, LOCK_PROFIT_BUFFER={LOCK_PROFIT_BUFFER}, "
-            f"last_1h_st={last_1h_st:.2f}, stop_for_pnl={stop_for_pnl:.2f}, STOP_LOSS_MODE={STOP_LOSS_MODE}"
-        )
+        # 【阶段1 - 生存期】：30m ST 未达到开仓价（止损触发仍会亏损）
+        if is_long:
+            st_reached_entry = last_30m_st >= entry_price
+        else:
+            st_reached_entry = last_30m_st <= entry_price
 
-        # 【阶段1 - 生存期】
-        if expected_pnl_at_stop <= 0:
+        if not st_reached_entry:
             phase = Phase.SURVIVAL.value
             recommended_stop = last_30m_st
-            self._debug_log(f"Phase: SURVIVAL, expected_pnl={expected_pnl_at_stop:.2f} <= 0")
+            if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
+                print(f"[STRATEGY DEBUG] Phase: SURVIVAL, 30m_ST={last_30m_st:.2f} has not reached entry={entry_price:.2f}")
             return phase, recommended_stop
 
-        # 【阶段2 - 锁利期】
-        if expected_pnl_at_stop <= LOCK_PROFIT_BUFFER:
-            phase = Phase.LOCKED.value
-            recommended_stop = last_30m_st
-            self._debug_log(
-                f"Phase: LOCKED, 0 < expected_pnl={expected_pnl_at_stop:.2f} <= {LOCK_PROFIT_BUFFER}, follow 30m ST"
-            )
+        # 到这里说明 30m ST 已达到开仓价（止损触发至少保本）
+
+        # 【阶段3 - 换轨期】：按30m ST平仓收益 > LOCK_PROFIT_BUFFER
+        if expected_pnl_at_stop > LOCK_PROFIT_BUFFER:
+            # 跟随1H ST，止损只紧不松
+            if is_long:
+                recommended_stop = max(last_1h_st, prev_stop_loss) if prev_stop_loss > 0 else last_1h_st
+            else:
+                recommended_stop = min(last_1h_st, prev_stop_loss) if prev_stop_loss > 0 else last_1h_st
+            phase = Phase.HOURLY.value
+            if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
+                print(f"[STRATEGY DEBUG] Phase: HOURLY, expected_pnl={expected_pnl_at_stop:.2f} > {LOCK_PROFIT_BUFFER}, recommended_stop={recommended_stop:.2f}")
             return phase, recommended_stop
 
-        # 【阶段3 - 换轨期】：expected_pnl > LOCK_PROFIT_BUFFER
-        phase = Phase.HOURLY.value
-        recommended_stop = last_1h_st
-        tighter = is_1h_tighter(last_1h_st, stop_for_pnl, is_long)
-        self._debug_log(
-            f"Phase: HOURLY, follow 1h ST, tighter_than_current_stop={tighter}, STOP_LOSS_MODE={STOP_LOSS_MODE}"
-        )
+        # 【阶段2 - 锁利期】：30m ST已达开仓价，收益在缓冲范围内，继续跟随30m ST
+        phase = Phase.LOCKED.value
+        recommended_stop = last_30m_st
+        if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
+            print(f"[STRATEGY DEBUG] Phase: LOCKED, expected_pnl={expected_pnl_at_stop:.2f} <= {LOCK_PROFIT_BUFFER}, following 30m ST={last_30m_st:.2f}")
         return phase, recommended_stop
 
     def __init__(self, client: GateClient, contract: str = "ETH_USDT"):
@@ -391,7 +356,6 @@ class TradingStrategy:
         
         # 通过 API 检查连续亏损（从交易历史获取）
         from cooldown import check_cooldown
-
         cooldown = check_cooldown(self.client, self.contract)
         
         if cooldown.triggered:
@@ -653,15 +617,11 @@ class TradingStrategy:
             initial_30m_st = last_30m_st
 
         # 推导当前阶段和建议的止损，传入历史信息
-        phase, recommended_stop = self._infer_phase(entry_price, current_price, qty,
-                                                    last_30m_st, last_1h_st, is_long=True,
-                                                    initial_30m_st=initial_30m_st,
-                                                    locked_stop_loss=locked_stop_loss,
-                                                    current_stop_loss=prev_stop_loss)
-
-        # tight_only：策略侧也只收紧不放松，避免无效/冲突的止损更新提示
-        if STOP_LOSS_MODE == "tight_only" and prev_stop_loss > 0:
-            recommended_stop = max(recommended_stop, prev_stop_loss)
+        phase, recommended_stop = self._infer_phase(entry_price, current_price, qty, 
+                                                      last_30m_st, last_1h_st, is_long=True,
+                                                      initial_30m_st=initial_30m_st,
+                                                      locked_stop_loss=locked_stop_loss,
+                                                      prev_stop_loss=prev_stop_loss)
 
         # 判断离场信号
         exit_signal = False
@@ -694,35 +654,14 @@ class TradingStrategy:
         # 检查持仓状态变化 (阶段和止损)
         current_time = time.time()
         
-        # 当进入LOCKED时，更新 locked_stop_loss
-        locked_stop_for_update = 0
-        if phase == Phase.LOCKED.value and prev_phase == Phase.SURVIVAL.value:
-            # 首次进入锁利期，记录当前的 30m ST 作为锁利止损
-            locked_stop_for_update = recommended_stop
-        
         has_change, change_type = update_position_state(
             direction="long",
             phase=phase,
             stop_loss=recommended_stop,
             entry_price=entry_price,
             current_time=current_time,
-            initial_30m_st=initial_30m_st,
-            locked_stop_loss=locked_stop_for_update if locked_stop_for_update > 0 else locked_stop_loss
+            initial_30m_st=initial_30m_st
         )
-
-        # 无状态部署（如 GitHub Actions）下，position_state 可能每轮丢失。
-        # 这种情况下通过交易所实时止损单与推荐止损做差异比较，恢复 stop_updated 信号。
-        if change_type == "new_position":
-            live_stop = self._get_live_stop_price()
-            self._debug_log(
-                f"stateless_fallback(long): change_type=new_position, live_stop={live_stop}, recommended_stop={recommended_stop:.2f}"
-            )
-            if live_stop is None or abs(live_stop - recommended_stop) > 0.01:
-                change_type = "stop_updated"
-                prev_stop_loss = live_stop if live_stop is not None else prev_stop_loss
-                self._debug_log("stateless_fallback(long): promote to stop_updated")
-            else:
-                self._debug_log("stateless_fallback(long): keep hold (difference <= 0.01)")
 
         # 返回阶段和止损信息
         phase_names = {
@@ -753,7 +692,7 @@ class TradingStrategy:
 • 方向: 多 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
-• 说明: 按当前止损成交已转正，切换至锁利策略""",
+• 说明: 30m ST已达到开仓价，进入锁利期跟随30m ST""",
                 details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         elif change_type == "switch_1h":
@@ -763,7 +702,7 @@ class TradingStrategy:
 • 方向: 多 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
-• 说明: 1H ST已转向上升，以 1H ST 作为止损参考""",
+• 说明: 按30m ST平仓收益超过{LOCK_PROFIT_BUFFER}U，切换至1H ST跟踪""",
                 details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         else:
@@ -820,15 +759,11 @@ class TradingStrategy:
             initial_30m_st = last_30m_st
 
         # 推导当前阶段和建议的止损，传入历史信息
-        phase, recommended_stop = self._infer_phase(entry_price, current_price, qty,
-                                                    last_30m_st, last_1h_st, is_long=False,
-                                                    initial_30m_st=initial_30m_st,
-                                                    locked_stop_loss=locked_stop_loss,
-                                                    current_stop_loss=prev_stop_loss)
-
-        # tight_only：策略侧也只收紧不放松，避免无效/冲突的止损更新提示
-        if STOP_LOSS_MODE == "tight_only" and prev_stop_loss > 0:
-            recommended_stop = min(recommended_stop, prev_stop_loss)
+        phase, recommended_stop = self._infer_phase(entry_price, current_price, qty, 
+                                                      last_30m_st, last_1h_st, is_long=False,
+                                                      initial_30m_st=initial_30m_st,
+                                                      locked_stop_loss=locked_stop_loss,
+                                                      prev_stop_loss=prev_stop_loss)
 
         # 判断离场信号
         exit_signal = False
@@ -862,34 +797,14 @@ class TradingStrategy:
         current_time = time.time()
         
         # 当进入LOCKED时，更新 locked_stop_loss
-        locked_stop_for_update = 0
-        if phase == Phase.LOCKED.value and prev_phase == Phase.SURVIVAL.value:
-            # 首次进入锁利期，记录当前的 30m ST 作为锁利止损
-            locked_stop_for_update = recommended_stop
-        
         has_change, change_type = update_position_state(
             direction="short",
             phase=phase,
             stop_loss=recommended_stop,
             entry_price=entry_price,
             current_time=current_time,
-            initial_30m_st=initial_30m_st,
-            locked_stop_loss=locked_stop_for_update if locked_stop_for_update > 0 else locked_stop_loss
+            initial_30m_st=initial_30m_st
         )
-
-        # 无状态部署（如 GitHub Actions）下，position_state 可能每轮丢失。
-        # 这种情况下通过交易所实时止损单与推荐止损做差异比较，恢复 stop_updated 信号。
-        if change_type == "new_position":
-            live_stop = self._get_live_stop_price()
-            self._debug_log(
-                f"stateless_fallback(short): change_type=new_position, live_stop={live_stop}, recommended_stop={recommended_stop:.2f}"
-            )
-            if live_stop is None or abs(live_stop - recommended_stop) > 0.01:
-                change_type = "stop_updated"
-                prev_stop_loss = live_stop if live_stop is not None else prev_stop_loss
-                self._debug_log("stateless_fallback(short): promote to stop_updated")
-            else:
-                self._debug_log("stateless_fallback(short): keep hold (difference <= 0.01)")
 
         # 返回阶段和止损信息
         phase_names = {
@@ -920,7 +835,7 @@ class TradingStrategy:
 • 方向: 空 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
-• 说明: 按当前止损成交已转正，切换至锁利策略""",
+• 说明: 30m ST已达到开仓价，进入锁利期跟随30m ST""",
                 details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         elif change_type == "switch_1h":
@@ -930,7 +845,7 @@ class TradingStrategy:
 • 方向: 空 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
-• 说明: 1H ST已转向下降，以 1H ST 作为止损参考""",
+• 说明: 按30m ST平仓收益超过{LOCK_PROFIT_BUFFER}U，切换至1H ST跟踪""",
                 details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
             )
         else:
@@ -976,10 +891,6 @@ class TradingStrategy:
             pnl = (current_price - entry_price) * qty * FACE_VALUE
         else:
             pnl = (entry_price - current_price) * qty * FACE_VALUE
-
-        if ENABLE_AUTO_TRADING:
-            from cooldown import record_trade_result
-            record_trade_result(pnl, datetime.now(timezone.utc))
         
         if pnl < 0:
             self.state.consecutive_losses += 1
@@ -1086,10 +997,6 @@ class TradingStrategy:
             pnl = (current_price - entry_price) * qty * FACE_VALUE
         else:
             pnl = (entry_price - current_price) * qty * FACE_VALUE
-
-        if ENABLE_AUTO_TRADING:
-            from cooldown import record_trade_result
-            record_trade_result(pnl, datetime.now(timezone.utc))
         
         if pnl < 0:
             self.state.consecutive_losses += 1

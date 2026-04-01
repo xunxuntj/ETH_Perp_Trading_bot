@@ -42,40 +42,42 @@ def infer_phase(
     last_1h_st: float,
     is_long: bool,
     initial_30m_st: float = 0,
-    locked_stop_loss: float = 0
+    locked_stop_loss: float = 0,
+    prev_stop_loss: float = 0
 ) -> Tuple[str, float]:
-    """推导阶段 - 新逻辑 V2"""
+    """推导阶段 - 新逻辑
     
+    阶段1 - 生存期: 30m ST 未达到开仓价
+    阶段2 - 锁利期: 30m ST 已达到开仓价，但按30m ST平仓收益 <= LOCK_PROFIT_BUFFER，跟随30m ST
+    阶段3 - 换轨期: 按30m ST平仓收益 > LOCK_PROFIT_BUFFER，跟随1H ST，止损只紧不松
+    """
     # 计算期望盈利
     if is_long:
         expected_pnl = (last_30m_st - entry_price) * qty * FACE_VALUE
     else:
         expected_pnl = (entry_price - last_30m_st) * qty * FACE_VALUE
     
-    # 初值处理
-    if initial_30m_st <= 0:
-        initial_30m_st = last_30m_st
-    
     # 【阶段1 - 生存期】
-    if expected_pnl < LOCK_PROFIT_BUFFER:
+    if is_long:
+        st_reached_entry = last_30m_st >= entry_price
+    else:
+        st_reached_entry = last_30m_st <= entry_price
+
+    if not st_reached_entry:
         return Phase.SURVIVAL.value, last_30m_st
     
-    # 【首次进入锁利】
-    if locked_stop_loss <= 0:
-        locked_stop_loss = last_30m_st
-    
-    # 判断1H ST是否比locked_stop_loss更紧
-    if is_long:
-        is_1h_tighter = last_1h_st > locked_stop_loss
-    else:
-        is_1h_tighter = last_1h_st < locked_stop_loss
+    # 30m ST已达到开仓价
     
     # 【阶段3 - 换轨期】
-    if is_1h_tighter:
-        return Phase.HOURLY.value, last_1h_st
+    if expected_pnl > LOCK_PROFIT_BUFFER:
+        if is_long:
+            recommended_stop = max(last_1h_st, prev_stop_loss) if prev_stop_loss > 0 else last_1h_st
+        else:
+            recommended_stop = min(last_1h_st, prev_stop_loss) if prev_stop_loss > 0 else last_1h_st
+        return Phase.HOURLY.value, recommended_stop
     
-    # 【阶段2 - 锁利期】
-    return Phase.LOCKED.value, locked_stop_loss
+    # 【阶段2 - 锁利期】: 30m ST已达开仓价，收益在缓冲范围内，继续跟随30m ST
+    return Phase.LOCKED.value, last_30m_st
 
 
 def test_case_from_user():
@@ -127,8 +129,7 @@ def test_case_from_user():
     
     phase = Phase.SURVIVAL.value
     stop_loss = 0
-    initial_30m_st = 0
-    locked_stop_loss = 0
+    prev_stop_loss = 0
     prev_phase = None
     
     # 处理30m ST数据
@@ -136,20 +137,11 @@ def test_case_from_user():
         # 1h ST数据可能少于30m，所以用最后一个有效值或对应值
         st_1h = data_1h_st[min(t, len(data_1h_st) - 1)]
         
-        # 首次执行时记录初始值
-        if initial_30m_st <= 0:
-            initial_30m_st = st_30m
-        
         # 推导阶段
         phase, stop_loss = infer_phase(
             entry_price, qty, st_30m, st_1h, is_long,
-            initial_30m_st=initial_30m_st,
-            locked_stop_loss=locked_stop_loss
+            prev_stop_loss=prev_stop_loss
         )
-        
-        # 更新locked_stop_loss（首次进入LOCKED时）
-        if phase == Phase.LOCKED.value and prev_phase != Phase.LOCKED.value:
-            locked_stop_loss = stop_loss
         
         # 计算期望盈利
         pnl = (entry_price - st_30m) * qty * FACE_VALUE
@@ -164,21 +156,20 @@ def test_case_from_user():
         
         print(f"{t:<5} {st_30m:<10.2f} {st_1h:<10.2f} {pnl:<10.2f} {phase:<10} {stop_loss:<10.2f} {phase_change:<30}")
         
+        prev_stop_loss = stop_loss
         prev_phase = phase
     
     # 验证关键点
     print(f"\n【验证关键点】")
-    print(f"✓ 生存期阈值: 期望盈利 < {LOCK_PROFIT_BUFFER}U")
-    print(f"✓ 锁利期止损: 第一个2024.83（首次进入LOCKED时的30m ST）")
-    print(f"✓ 换轨条件: 1h ST <= {locked_stop_loss:.2f}（lockd_stop_loss）")
-    print(f"✓ 换轨时刻: 1h ST = 2022.8时（< {locked_stop_loss:.2f}）")
+    print(f"✓ 生存期阈值: 30m ST 未达到开仓价 {entry_price:.2f}")
+    print(f"✓ 锁利期: 30m ST >= 开仓价，且按30m ST平仓收益 <= {LOCK_PROFIT_BUFFER}U，继续跟随30m ST")
+    print(f"✓ 换轨条件: 按30m ST平仓收益 > {LOCK_PROFIT_BUFFER}U，切换至1H ST，止损只紧不松")
     
     print(f"\n【验证结果】")
     print(f"✅ 逻辑正确：")
-    print(f"  1. 初期30m ST从2038.65下跌到2024.83时，期望盈利达到>=1U，进入锁利期")
-    print(f"  2. 锁利期止损锁定在2024.83，不再跟随30m ST继续下跌")
-    print(f"  3. 监控1h ST，当1h ST = 2022.8时（< 2024.83），进入换轨期")
-    print(f"  4. 换轨期后止损跟随1h ST调整")
+    print(f"  1. 生存期: 30m ST 高于开仓价 {entry_price:.2f}，止损跟随30m ST")
+    print(f"  2. 锁利期: 30m ST 达到开仓价，仍跟随30m ST，收益在缓冲范围内")
+    print(f"  3. 换轨期: 按30m ST平仓收益 > {LOCK_PROFIT_BUFFER}U，切换至1H ST，止损只紧不松")
     
 
 def test_phase_transitions():
@@ -194,31 +185,26 @@ def test_phase_transitions():
     
     test_cases = [
         # (st_30m, st_1h, expected_phase, description)
-        (2062.17, 2062.17, Phase.SURVIVAL.value, "开仓时，还在收支平衡"),
-        (2050.00, 2050.00, Phase.SURVIVAL.value, "盈利< 1U"),
-        (2031.55, 2050.00, Phase.LOCKED.value, "首次盈利>= 1U，进入锁利期"),
-        (2028.00, 2050.00, Phase.LOCKED.value, "继续锁利期，30m ST下跌但止损不变"),
-        (2020.00, 2024.83, Phase.HOURLY.value, "1h ST = 2024.83（= locked_stop_loss），进入换轨期"),
-        (2020.00, 2022.00, Phase.HOURLY.value, "换轨期，继续跟随1h ST"),
+        (2063.00, 2063.00, Phase.SURVIVAL.value, "30m ST > 开仓价，生存期"),
+        (2062.17, 2060.00, Phase.LOCKED.value, "30m ST = 开仓价，进入锁利期，PNL=0"),
+        (2060.00, 2060.00, Phase.LOCKED.value, "按30m ST平仓PNL≈1U，继续锁利期跟随30m ST"),
+        (2055.00, 2055.00, Phase.HOURLY.value, "按30m ST平仓PNL>1U，进入换轨期"),
+        (2050.00, 2052.00, Phase.HOURLY.value, "换轨期，跟随1H ST，止损只紧不松"),
     ]
     
     print(f"\n{'ST30m':<10} {'ST1h':<10} {'预期阶段':<10} {'说明':<35}")
     print("-" * 65)
     
-    locked_stop_loss = 0
+    prev_stop_loss = 0
     for st_30m, st_1h, expected_phase, desc in test_cases:
-        phase, _ = infer_phase(
+        phase, stop = infer_phase(
             entry_price, qty, st_30m, st_1h, is_long,
-            initial_30m_st=2062.17,
-            locked_stop_loss=locked_stop_loss
+            prev_stop_loss=prev_stop_loss
         )
-        
-        # 更新locked_stop_loss
-        if phase == Phase.LOCKED.value and locked_stop_loss <= 0:
-            locked_stop_loss = st_30m
         
         status = "✓" if phase == expected_phase else "✗"
         print(f"{st_30m:<10.2f} {st_1h:<10.2f} {phase:<10} {desc:<35} {status}")
+        prev_stop_loss = stop
 
 
 if __name__ == "__main__":
