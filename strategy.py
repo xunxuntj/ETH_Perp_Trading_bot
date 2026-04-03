@@ -165,6 +165,32 @@ class TradingStrategy:
         self.state.last_processed_30m_bar_iso = bar_iso
         save_state(self.state)
 
+    def _get_live_stop_price(self) -> float:
+        """从交易所当前 open 的 price_orders 中提取止损触发价。"""
+        try:
+            orders = self.client.get_price_orders(contract=self.contract, status="open", limit=100)
+            if not orders:
+                return 0.0
+
+            # 只取 reduce_only + auto_size=close 的持仓止损单
+            for order in orders:
+                initial = order.get("initial", {})
+                if not (initial.get("reduce_only") and str(initial.get("auto_size", "")).lower() == "close"):
+                    continue
+
+                price = order.get("trigger", {}).get("price")
+                if price is None:
+                    continue
+
+                try:
+                    return float(price)
+                except Exception:
+                    continue
+
+            return 0.0
+        except Exception:
+            return 0.0
+
     def _infer_phase(self, entry_price: float, current_price: float, qty: int, 
                      last_30m_st: float, last_1h_st: float, is_long: bool,
                      initial_30m_st: float = 0, locked_stop_loss: float = 0,
@@ -609,6 +635,8 @@ class TradingStrategy:
         prev_state = load_position_state().get("long", {})
         prev_phase = prev_state.get("phase", "")
         prev_stop_loss = prev_state.get("stop_loss", 0)  # ← 记录旧止损，用于调整时验证
+        live_stop_loss = self._get_live_stop_price()
+        baseline_stop_loss = prev_stop_loss if prev_stop_loss > 0 else live_stop_loss
         initial_30m_st = prev_state.get("initial_30m_st", 0)
         locked_stop_loss = prev_state.get("locked_stop_loss", 0)
         
@@ -621,7 +649,7 @@ class TradingStrategy:
                                                       last_30m_st, last_1h_st, is_long=True,
                                                       initial_30m_st=initial_30m_st,
                                                       locked_stop_loss=locked_stop_loss,
-                                                      prev_stop_loss=prev_stop_loss)
+                                                      prev_stop_loss=baseline_stop_loss)
 
         # 判断离场信号
         exit_signal = False
@@ -662,6 +690,10 @@ class TradingStrategy:
             current_time=current_time,
             initial_30m_st=initial_30m_st
         )
+
+        # 无本地状态（例如定时任务无持久化）时，回退到交易所实时止损做差异判断
+        if change_type == "new_position" and baseline_stop_loss > 0 and abs(baseline_stop_loss - recommended_stop) > 0.01:
+            change_type = "stop_updated"
 
         # 返回阶段和止损信息
         phase_names = {
@@ -751,6 +783,8 @@ class TradingStrategy:
         prev_state = load_position_state().get("short", {})
         prev_phase = prev_state.get("phase", "")
         prev_stop_loss = prev_state.get("stop_loss", 0)  # ← 记录旧止损，用于调整时验证
+        live_stop_loss = self._get_live_stop_price()
+        baseline_stop_loss = prev_stop_loss if prev_stop_loss > 0 else live_stop_loss
         initial_30m_st = prev_state.get("initial_30m_st", 0)
         locked_stop_loss = prev_state.get("locked_stop_loss", 0)
         
@@ -763,7 +797,7 @@ class TradingStrategy:
                                                       last_30m_st, last_1h_st, is_long=False,
                                                       initial_30m_st=initial_30m_st,
                                                       locked_stop_loss=locked_stop_loss,
-                                                      prev_stop_loss=prev_stop_loss)
+                                                      prev_stop_loss=baseline_stop_loss)
 
         # 判断离场信号
         exit_signal = False
@@ -805,6 +839,10 @@ class TradingStrategy:
             current_time=current_time,
             initial_30m_st=initial_30m_st
         )
+
+        # 无本地状态（例如定时任务无持久化）时，回退到交易所实时止损做差异判断
+        if change_type == "new_position" and baseline_stop_loss > 0 and abs(baseline_stop_loss - recommended_stop) > 0.01:
+            change_type = "stop_updated"
 
         # 返回阶段和止损信息
         phase_names = {
