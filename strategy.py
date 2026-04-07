@@ -157,6 +157,16 @@ def is_1h_tighter(last_1h_st: float, threshold: float, is_long: bool) -> bool:
         return last_1h_st < threshold
 
 
+def tighten_stop_loss(candidate_stop: float, current_stop: float, is_long: bool) -> float:
+    """对候选止损应用“只紧不松”原则。"""
+    if current_stop <= 0:
+        return candidate_stop
+
+    if is_long:
+        return max(candidate_stop, current_stop)
+    return min(candidate_stop, current_stop)
+
+
 class TradingStrategy:
 
     def _mark_processed_30m_bar(self, bar_ts: int, bar_iso: str):
@@ -175,7 +185,11 @@ class TradingStrategy:
             # 只取 reduce_only + auto_size=close 的持仓止损单
             for order in orders:
                 initial = order.get("initial", {})
-                if not (initial.get("reduce_only") and str(initial.get("auto_size", "")).lower() == "close"):
+                is_reduce_only = initial.get("reduce_only")
+                if is_reduce_only is None:
+                    is_reduce_only = initial.get("is_reduce_only")
+
+                if not (is_reduce_only and str(initial.get("auto_size", "")).lower() == "close"):
                     continue
 
                 price = order.get("trigger", {}).get("price")
@@ -210,47 +224,66 @@ class TradingStrategy:
         【阶段3 - 换轨期】按30m ST平仓收益 > LOCK_PROFIT_BUFFER
             止损跟随 1H ST，止损只紧不松
         """
-        # 计算按当前止损价（30m ST）平仓的期望盈利
+        # 三阶段切换价只依赖当前持仓：成本价 + 仓位大小
+        survival_to_locked_price = entry_price
+        locked_to_hourly_price = calculate_lock_threshold(entry_price, qty, is_long)
+
+        # 计算按30m ST作为止损成交的期望盈利
         if is_long:
             expected_pnl_at_stop = (last_30m_st - entry_price) * qty * FACE_VALUE
         else:
             expected_pnl_at_stop = (entry_price - last_30m_st) * qty * FACE_VALUE
 
         if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-            print(f"[STRATEGY DEBUG] _infer_phase: entry={entry_price:.2f}, 30m_ST={last_30m_st:.2f}, expected_pnl_at_stop={expected_pnl_at_stop:.2f}, LOCK_PROFIT_BUFFER={LOCK_PROFIT_BUFFER}, 1h_ST={last_1h_st:.2f}")
+            print(
+                f"[STRATEGY DEBUG] _infer_phase: entry={entry_price:.2f}, 30m_ST={last_30m_st:.2f}, "
+                f"1h_ST={last_1h_st:.2f}, current_stop={prev_stop_loss:.2f}, "
+                f"survival_to_locked={survival_to_locked_price:.2f}, locked_to_hourly={locked_to_hourly_price:.2f}, "
+                f"expected_pnl_at_stop={expected_pnl_at_stop:.2f}, LOCK_PROFIT_BUFFER={LOCK_PROFIT_BUFFER}"
+            )
 
         # 【阶段1 - 生存期】：30m ST 未达到开仓价（止损触发仍会亏损）
         if is_long:
-            st_reached_entry = last_30m_st >= entry_price
+            st_reached_entry = last_30m_st >= survival_to_locked_price
         else:
-            st_reached_entry = last_30m_st <= entry_price
+            st_reached_entry = last_30m_st <= survival_to_locked_price
 
         if not st_reached_entry:
             phase = Phase.SURVIVAL.value
-            recommended_stop = last_30m_st
+            recommended_stop = tighten_stop_loss(last_30m_st, prev_stop_loss, is_long)
             if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                print(f"[STRATEGY DEBUG] Phase: SURVIVAL, 30m_ST={last_30m_st:.2f} has not reached entry={entry_price:.2f}")
+                print(
+                    f"[STRATEGY DEBUG] Phase: SURVIVAL, 30m_ST={last_30m_st:.2f} has not reached "
+                    f"entry={survival_to_locked_price:.2f}, recommended_stop={recommended_stop:.2f}"
+                )
             return phase, recommended_stop
 
         # 到这里说明 30m ST 已达到开仓价（止损触发至少保本）
 
-        # 【阶段3 - 换轨期】：按30m ST平仓收益 > LOCK_PROFIT_BUFFER
-        if expected_pnl_at_stop > LOCK_PROFIT_BUFFER:
-            # 跟随1H ST，止损只紧不松
-            if is_long:
-                recommended_stop = max(last_1h_st, prev_stop_loss) if prev_stop_loss > 0 else last_1h_st
-            else:
-                recommended_stop = min(last_1h_st, prev_stop_loss) if prev_stop_loss > 0 else last_1h_st
+        # 【阶段3 - 换轨期】：30m ST 已越过锁利缓冲切换价
+        if is_long:
+            switch_to_hourly = last_30m_st > locked_to_hourly_price
+        else:
+            switch_to_hourly = last_30m_st < locked_to_hourly_price
+
+        if switch_to_hourly:
+            recommended_stop = tighten_stop_loss(last_1h_st, prev_stop_loss, is_long)
             phase = Phase.HOURLY.value
             if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-                print(f"[STRATEGY DEBUG] Phase: HOURLY, expected_pnl={expected_pnl_at_stop:.2f} > {LOCK_PROFIT_BUFFER}, recommended_stop={recommended_stop:.2f}")
+                print(
+                    f"[STRATEGY DEBUG] Phase: HOURLY, 30m_ST crossed locked_to_hourly={locked_to_hourly_price:.2f}, "
+                    f"recommended_stop={recommended_stop:.2f}"
+                )
             return phase, recommended_stop
 
-        # 【阶段2 - 锁利期】：30m ST已达开仓价，收益在缓冲范围内，继续跟随30m ST
+        # 【阶段2 - 锁利期】：30m ST已达开仓价，但尚未越过换轨切换价，继续跟随30m ST
         phase = Phase.LOCKED.value
-        recommended_stop = last_30m_st
+        recommended_stop = tighten_stop_loss(last_30m_st, prev_stop_loss, is_long)
         if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
-            print(f"[STRATEGY DEBUG] Phase: LOCKED, expected_pnl={expected_pnl_at_stop:.2f} <= {LOCK_PROFIT_BUFFER}, following 30m ST={last_30m_st:.2f}")
+            print(
+                f"[STRATEGY DEBUG] Phase: LOCKED, 30m_ST between entry={survival_to_locked_price:.2f} and "
+                f"locked_to_hourly={locked_to_hourly_price:.2f}, recommended_stop={recommended_stop:.2f}"
+            )
         return phase, recommended_stop
 
     def __init__(self, client: GateClient, contract: str = "ETH_USDT"):
@@ -715,7 +748,7 @@ class TradingStrategy:
 • 方向: 多 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 新止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U""",
-                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
+                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": baseline_stop_loss if baseline_stop_loss > 0 else None, "pnl": pnl}
             )
         elif change_type == "enter_locked":
             return TradeResult(
@@ -864,7 +897,7 @@ class TradingStrategy:
 • 方向: 空 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
 • 新止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U""",
-                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": prev_stop_loss if prev_stop_loss > 0 else None, "pnl": pnl}
+                details={"phase": phase, "stop_loss": recommended_stop, "old_stop": baseline_stop_loss if baseline_stop_loss > 0 else None, "pnl": pnl}
             )
         elif change_type == "enter_locked":
             return TradeResult(

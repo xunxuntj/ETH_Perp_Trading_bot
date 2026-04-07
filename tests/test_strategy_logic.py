@@ -5,9 +5,12 @@
 """
 
 import unittest
+from unittest.mock import patch
+
+import pandas as pd
 from strategy import (
     is_1h_tighter, calculate_lock_threshold, calculate_position_size,
-    Phase, Direction, Position, FACE_VALUE
+    Phase, Direction, Position, FACE_VALUE, TradingStrategy, tighten_stop_loss
 )
 
 
@@ -63,6 +66,14 @@ class TestHelpers(unittest.TestCase):
         self.assertAlmostEqual(result['sl_distance'], 100.0, places=1)
         self.assertAlmostEqual(result['position_eth'], 0.5, places=2)
         self.assertAlmostEqual(result['actual_risk'], 50.0, places=1)
+
+    def test_tighten_stop_loss_long(self):
+        self.assertEqual(tighten_stop_loss(2300.0, 2310.0, is_long=True), 2310.0)
+        self.assertEqual(tighten_stop_loss(2320.0, 2310.0, is_long=True), 2320.0)
+
+    def test_tighten_stop_loss_short(self):
+        self.assertEqual(tighten_stop_loss(2310.0, 2300.0, is_long=False), 2300.0)
+        self.assertEqual(tighten_stop_loss(2290.0, 2300.0, is_long=False), 2290.0)
 
 
 class TestPhaseTransitions(unittest.TestCase):
@@ -383,6 +394,97 @@ class TestRealWorldScenarios(unittest.TestCase):
         should_enter_hourly_direct = is_1h_tighter(last_1h_st, lock_threshold, is_long=False)
         # 2385.21 < 2809.30? YES，应从SURVIVAL直接进HOURLY
         self.assertTrue(should_enter_hourly_direct)
+
+
+class DummyStrategyClient:
+    def __init__(self, price_orders=None):
+        self.price_orders = price_orders or []
+
+    def get_price_orders(self, contract: str, status: str = "open", limit: int = 100):
+        return self.price_orders
+
+
+class TestLiveStopFallback(unittest.TestCase):
+    def test_get_live_stop_price_supports_is_reduce_only(self):
+        client = DummyStrategyClient(price_orders=[
+            {
+                "trigger": {"price": "3000"},
+                "initial": {
+                    "is_reduce_only": True,
+                    "auto_size": "close",
+                },
+            }
+        ])
+
+        strategy = TradingStrategy(client)
+        self.assertEqual(strategy._get_live_stop_price(), 3000.0)
+
+    def test_manage_short_position_emits_stop_updated_without_local_state(self):
+        client = DummyStrategyClient(price_orders=[
+            {
+                "trigger": {"price": "3000"},
+                "initial": {
+                    "is_reduce_only": True,
+                    "auto_size": "close",
+                },
+            }
+        ])
+        strategy = TradingStrategy(client)
+
+        position = {"entry_price": 2062.17, "size": -49}
+        df_30m = pd.DataFrame({"close": [2000.0, 2000.0]})
+        df_1h = pd.DataFrame({"close": [2000.0, 2000.0]})
+        st_30m = pd.DataFrame({"supertrend": [2063.0, 2059.0], "direction": [-1, -1]})
+        st_1h = pd.DataFrame({"supertrend": [2063.0, 2052.0], "direction": [-1, -1]})
+
+        with patch("strategy.load_position_state", return_value={}), patch("strategy.update_position_state", return_value=(True, "new_position")):
+            result = strategy._manage_short_position(
+                position,
+                df_30m,
+                df_1h,
+                st_30m,
+                st_1h,
+                last_1h_close=2000.0,
+                last_1h_dema=2100.0,
+                risk_amount=10.0,
+                risk_info="test",
+            )
+
+        self.assertEqual(result.action, "stop_updated")
+        self.assertEqual(result.details["old_stop"], 3000.0)
+        self.assertAlmostEqual(result.details["stop_loss"], 2063.0, places=2)
+
+    def test_infer_phase_uses_actual_stop_for_locked_long(self):
+        strategy = TradingStrategy(DummyStrategyClient())
+
+        phase, stop_loss = strategy._infer_phase(
+            entry_price=2000.0,
+            current_price=2020.0,
+            qty=100,
+            last_30m_st=2000.5,
+            last_1h_st=1995.0,
+            is_long=True,
+            prev_stop_loss=2001.0,
+        )
+
+        self.assertEqual(phase, Phase.LOCKED.value)
+        self.assertEqual(stop_loss, 2001.0)
+
+    def test_infer_phase_uses_actual_stop_for_survival_short(self):
+        strategy = TradingStrategy(DummyStrategyClient())
+
+        phase, stop_loss = strategy._infer_phase(
+            entry_price=2000.0,
+            current_price=1980.0,
+            qty=100,
+            last_30m_st=2010.0,
+            last_1h_st=2020.0,
+            is_long=False,
+            prev_stop_loss=2008.0,
+        )
+
+        self.assertEqual(phase, Phase.SURVIVAL.value)
+        self.assertEqual(stop_loss, 2008.0)
 
 
 if __name__ == '__main__':
