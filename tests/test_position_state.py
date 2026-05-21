@@ -25,8 +25,8 @@ class TestPositionState(unittest.TestCase):
         clear_all_position_state()
     
     def test_1_first_update_no_change(self):
-        """测试第一次更新应该没有变化（前一次状态不存在）"""
-        print("\n【测试 1】第一次更新应该没有变化")
+        """测试第一次更新为 new_position"""
+        print("\n【测试 1】第一次更新为 new_position")
         
         has_change, change_type = update_position_state(
             direction="long",
@@ -36,15 +36,15 @@ class TestPositionState(unittest.TestCase):
             current_time=time.time()
         )
         
-        self.assertFalse(has_change)
-        self.assertEqual(change_type, "")
+        self.assertTrue(has_change)
+        self.assertEqual(change_type, "new_position")
         
         # 验证状态已保存
         state = load_position_state()
         self.assertIn("long", state)
         self.assertEqual(state["long"]["phase"], "SURVIVAL")
         self.assertEqual(state["long"]["stop_loss"], 2000.0)
-        print("✅ 第一次更新正确：无变化，状态已保存")
+        print("✅ 第一次更新正确：检测到新仓，状态已保存")
     
     def test_2_stop_loss_updated(self):
         """测试止损更新（超过 0.01 差异）"""

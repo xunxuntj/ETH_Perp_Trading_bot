@@ -1,203 +1,205 @@
 import os
+import time
 import pytest
-
-from gate_client import GateClient
-import trading_executor as te
-import config
-
-
-class DummyClient(GateClient):
-    def __init__(self):
-        # do not call parent init to avoid needing keys
-        self.session = type('S', (), {'post': lambda *a, **k: None})()
-
-
-def test_dry_run_open_close(tmp_path, monkeypatch):
-    # ensure auto trading disabled
-    monkeypatch.setenv('ENABLE_AUTO_TRADING', 'false')
-    # reload config module to pick env
-    import importlib
-    importlib.reload(config)
-
-    client = DummyClient()
-    executor = te.TradingExecutor(client)
-
-    open_res = executor.open_position('ETH_USDT', 'long', 10)
-    assert open_res['executed'] is False
-    assert open_res['reason'] == 'dry_run'
-
-    adjust_res = executor.adjust_stop('ETH_USDT', 'long', 10, 2400.0)
-    assert adjust_res['executed'] is False
-
-    close_res = executor.close_position('ETH_USDT', 'long', 10)
-    assert close_res['executed'] is False
-
-
-def test_enabled_run_simulated(monkeypatch):
-    # enable auto trading
-    monkeypatch.setenv('ENABLE_AUTO_TRADING', 'true')
-    import importlib
-    importlib.reload(config)
-
-    client = DummyClient()
-    executor = te.TradingExecutor(client)
-
-    # Because real calls are commented, expect executed True but simulated result
-    res = executor.open_position('ETH_USDT', 'short', 5)
-    assert res['executed'] is True
-    assert res['result']['action'] == 'open'
-
-    res2 = executor.adjust_stop('ETH_USDT', 'short', 5, 2350.0)
-    assert res2['executed'] is True
-    assert res2['result']['action'] == 'adjust_stop'
-
-    res3 = executor.close_position('ETH_USDT', 'short', 5)
-    assert res3['executed'] is True
-    assert res3['result']['action'] == 'close'
-"""
-交易执行器单元测试
-"""
-
-import pytest
+from unittest.mock import MagicMock
 from trading_executor import TradeExecutor
-
+from gate_client import GateClient
 
 class MockClient:
     """模拟 Gate.io 客户端"""
-    pass
-
+    def __init__(self):
+        self.create_order = MagicMock(return_value={"id": "mock_order_id"})
+        self.create_price_stop_order = MagicMock(return_value={"id": "mock_stop_id"})
+        self.cancel_price_orders = MagicMock(return_value=None)
+        self.cancel_orders = MagicMock(return_value=None)
+        self.get_price_orders = MagicMock(return_value=[{"id": "mock_existing_stop_id"}])
+        self.update_price_order = MagicMock(return_value={"id": "mock_existing_stop_id"})
 
 class TestTradeExecutor:
     """TradeExecutor 单元测试"""
 
     @pytest.fixture
-    def executor_dry_run(self):
-        """创建干运行模式的执行器"""
-        return TradeExecutor(MockClient(), contract="ETH_USDT", dry_run=True)
+    def mock_client(self):
+        return MockClient()
 
-    def test_open_position_long_success(self, executor_dry_run):
+    @pytest.fixture
+    def executor_dry_run(self, mock_client):
+        """创建强制干运行模式的执行器"""
+        executor = TradeExecutor(mock_client, contract="ETH_USDT")
+        executor.dry_run = True  # force dry run for testing
+        return executor
+
+    @pytest.fixture
+    def executor_live_run(self, mock_client):
+        """创建强制实盘模拟模式的执行器"""
+        executor = TradeExecutor(mock_client, contract="ETH_USDT")
+        executor.dry_run = False  # force live run for testing
+        return executor
+
+    def test_open_long_success(self, executor_dry_run):
         """测试成功开多仓"""
-        result = executor_dry_run.open_position(
-            direction="long",
+        result = executor_dry_run.open_long(
             entry_price=2813.0,
             stop_loss=2800.0,
             qty=27
         )
-        assert result["success"] == True
+        assert result["success"] is True
         assert "开多" in result["message"]
-        assert result["order_info"]["qty"] == 27
-        assert result["order_info"]["direction"] == "long"
+        assert result["details"]["qty"] == 27
+        assert result["details"]["stop_loss"] == 2800.0
 
-    def test_open_position_short_success(self, executor_dry_run):
+    def test_open_short_success(self, executor_dry_run):
         """测试成功开空仓"""
-        result = executor_dry_run.open_position(
-            direction="short",
+        result = executor_dry_run.open_short(
             entry_price=2813.0,
             stop_loss=2826.0,
             qty=27
         )
-        assert result["success"] == True
+        assert result["success"] is True
         assert "开空" in result["message"]
-        assert result["order_info"]["qty"] == 27
-        assert result["order_info"]["direction"] == "short"
+        assert result["details"]["qty"] == 27
+        assert result["details"]["stop_loss"] == 2826.0
 
-    def test_open_position_invalid_qty(self, executor_dry_run):
+    def test_open_long_invalid_qty(self, executor_dry_run):
         """测试张数 <= 0 的错误"""
-        result = executor_dry_run.open_position(
-            direction="long",
+        result = executor_dry_run.open_long(
             entry_price=2813.0,
             stop_loss=2800.0,
             qty=0
         )
-        assert result["success"] == False
+        assert result["success"] is False
         assert "张数必须 > 0" in result["message"]
+
+    def test_open_long_invalid_stop_loss(self, executor_dry_run):
+        """测试多仓止损价 >= 入场价的错误"""
+        result = executor_dry_run.open_long(
+            entry_price=2800.0,
+            stop_loss=2810.0,
+            qty=10
+        )
+        assert result["success"] is False
+        assert "止损价" in result["message"]
+
+    def test_open_short_invalid_stop_loss(self, executor_dry_run):
+        """测试空仓止损价 <= 入场价的错误"""
+        result = executor_dry_run.open_short(
+            entry_price=2800.0,
+            stop_loss=2790.0,
+            qty=10
+        )
+        assert result["success"] is False
+        assert "止损价" in result["message"]
 
     def test_adjust_stop_loss_long_up_success(self, executor_dry_run):
         """测试多仓止损上移"""
         result = executor_dry_run.adjust_stop_loss(
             direction="long",
-            current_stop=2800.0,
-            new_stop=2810.0
+            new_stop=2810.0,
+            qty=27,
+            old_stop=2800.0
         )
-        assert result["success"] == True
-        assert "调整" in result["message"]
-        assert "2800.0" in result["message"]
-        assert "2810.0" in result["message"]
+        assert result["success"] is True
+        assert "已调整" in result["message"]
+        assert result["details"]["new_stop"] == 2810.0
 
     def test_adjust_stop_loss_long_down_fail(self, executor_dry_run):
         """测试多仓止损下移（应失败）"""
         result = executor_dry_run.adjust_stop_loss(
             direction="long",
-            current_stop=2810.0,
-            new_stop=2800.0
+            new_stop=2800.0,
+            qty=27,
+            old_stop=2810.0
         )
-        assert result["success"] == False
+        assert result["success"] is False
         assert "只能上移" in result["message"]
 
     def test_adjust_stop_loss_short_down_success(self, executor_dry_run):
         """测试空仓止损下移"""
         result = executor_dry_run.adjust_stop_loss(
             direction="short",
-            current_stop=2826.0,
-            new_stop=2816.0
+            new_stop=2816.0,
+            qty=27,
+            old_stop=2826.0
         )
-        assert result["success"] == True
-        assert "调整" in result["message"]
-        assert "2826.0" in result["message"]
-        assert "2816.0" in result["message"]
+        assert result["success"] is True
+        assert "已调整" in result["message"]
+        assert result["details"]["new_stop"] == 2816.0
 
     def test_adjust_stop_loss_short_up_fail(self, executor_dry_run):
         """测试空仓止损上移（应失败）"""
         result = executor_dry_run.adjust_stop_loss(
             direction="short",
-            current_stop=2816.0,
-            new_stop=2826.0
+            new_stop=2826.0,
+            qty=27,
+            old_stop=2816.0
         )
-        assert result["success"] == False
+        assert result["success"] is False
         assert "只能下移" in result["message"]
 
-    def test_close_position_long_with_price(self, executor_dry_run):
-        """测试平多仓（指定价格）"""
+    def test_close_position_long_success(self, executor_dry_run):
+        """测试平多仓"""
         result = executor_dry_run.close_position(
             direction="long",
             qty=27,
-            exit_price=2820.0
+            pnl=10.5
         )
-        assert result["success"] == True
+        assert result["success"] is True
         assert "平多" in result["message"]
-        assert "2820.0" in result["message"]
-        assert result["order_info"]["qty"] == 27
-
-    def test_close_position_short_market(self, executor_dry_run):
-        """测试平空仓（市价）"""
-        result = executor_dry_run.close_position(
-            direction="short",
-            qty=27,
-            exit_price=None
-        )
-        assert result["success"] == True
-        assert "平空" in result["message"]
-        assert "市价" in result["message"]
+        assert result["details"]["qty"] == 27
+        assert result["details"]["pnl"] == 10.5
 
     def test_close_position_invalid_qty(self, executor_dry_run):
         """测试平仓张数 <= 0 的错误"""
         result = executor_dry_run.close_position(
             direction="long",
-            qty=-1,
-            exit_price=2820.0
+            qty=0
         )
-        assert result["success"] == False
+        assert result["success"] is False
         assert "张数必须 > 0" in result["message"]
 
     def test_order_id_generation(self, executor_dry_run):
         """验证模拟订单 ID 生成"""
-        result1 = executor_dry_run.open_position("long", 2813.0, 2800.0, 27)
-        result2 = executor_dry_run.open_position("short", 2813.0, 2826.0, 27)
+        result1 = executor_dry_run.open_long(2813.0, 2800.0, 27)
+        result2 = executor_dry_run.open_short(2813.0, 2826.0, 27)
         
         # 订单 ID 应该不同
         assert result1["order_id"] != result2["order_id"]
         assert result1["order_id"].startswith("sim_long")
         assert result2["order_id"].startswith("sim_short")
+
+    def test_live_run_methods_called(self, executor_live_run, mock_client):
+        """测试实盘模式下 client 方法被正确调用"""
+        # Test open long
+        res_long = executor_live_run.open_long(2813.0, 2800.0, 27)
+        assert res_long["success"] is True
+        mock_client.create_order.assert_called_with(
+            contract="ETH_USDT",
+            size=27,
+            price=None,
+            reduce_only=False,
+            text=mock_client.create_order.call_args[1]["text"]
+        )
+
+        # Test adjust stop loss (update existing)
+        res_adjust = executor_live_run.adjust_stop_loss(
+            direction="long",
+            new_stop=2810.0,
+            qty=27,
+            old_stop=2800.0
+        )
+        assert res_adjust["success"] is True
+        mock_client.update_price_order.assert_called_with("mock_existing_stop_id", 2810.0, "ETH_USDT")
+
+        # Test close position
+        res_close = executor_live_run.close_position(direction="long", qty=27, pnl=5.0)
+        assert res_close["success"] is True
+        mock_client.create_order.assert_called_with(
+            contract="ETH_USDT",
+            size=-27,
+            price=None,
+            reduce_only=True,
+            text=mock_client.create_order.call_args[1]["text"]
+        )
 
 
 class TestTradeExecutorIntegration:
@@ -205,70 +207,71 @@ class TestTradeExecutorIntegration:
 
     @pytest.fixture
     def executor(self):
-        return TradeExecutor(MockClient(), contract="ETH_USDT", dry_run=True)
-
+        return TradeExecutor(MockClient(), contract="ETH_USDT")
+        
     def test_full_trading_cycle(self, executor):
         """完整交易周期：开仓 → 调止损 → 平仓"""
+        executor.dry_run = True
+
         # 1. 开仓
-        open_result = executor.open_position(
-            direction="long",
+        open_result = executor.open_long(
             entry_price=2813.0,
             stop_loss=2800.0,
             qty=27
         )
-        assert open_result["success"] == True
+        assert open_result["success"] is True
         
         # 2. 调整止损（上移）
         adjust_result = executor.adjust_stop_loss(
             direction="long",
-            current_stop=2800.0,
-            new_stop=2810.0
+            new_stop=2810.0,
+            qty=27,
+            old_stop=2800.0
         )
-        assert adjust_result["success"] == True
+        assert adjust_result["success"] is True
         
         # 3. 再次调整止损（上移）
         adjust_result2 = executor.adjust_stop_loss(
             direction="long",
-            current_stop=2810.0,
-            new_stop=2815.0
+            new_stop=2815.0,
+            qty=27,
+            old_stop=2810.0
         )
-        assert adjust_result2["success"] == True
+        assert adjust_result2["success"] is True
         
         # 4. 平仓
         close_result = executor.close_position(
             direction="long",
             qty=27,
-            exit_price=2825.0
+            pnl=12.0
         )
-        assert close_result["success"] == True
+        assert close_result["success"] is True
 
     def test_short_trading_cycle(self, executor):
         """空仓完整交易周期"""
+        executor.dry_run = True
+
         # 1. 开空仓
-        open_result = executor.open_position(
-            direction="short",
+        open_result = executor.open_short(
             entry_price=2813.0,
             stop_loss=2826.0,
             qty=27
         )
-        assert open_result["success"] == True
+        assert open_result["success"] is True
         
         # 2. 调整止损（下移）
         adjust_result = executor.adjust_stop_loss(
             direction="short",
-            current_stop=2826.0,
-            new_stop=2820.0
+            new_stop=2820.0,
+            qty=27,
+            old_stop=2826.0
         )
-        assert adjust_result["success"] == True
+        assert adjust_result["success"] is True
         
         # 3. 平仓
         close_result = executor.close_position(
             direction="short",
             qty=27,
-            exit_price=2800.0
+            pnl=15.0
         )
-        assert close_result["success"] == True
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        assert close_result["success"] is True

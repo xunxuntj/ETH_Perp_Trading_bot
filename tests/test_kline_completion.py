@@ -27,7 +27,8 @@ def test_kline_completion():
     df_30m = client.get_candlesticks(CONTRACT, "30m", 5)
     print("\n最近5根30分钟K线:")
     for i, (idx, row) in enumerate(df_30m.iterrows()):
-        time_diff = (now - idx).total_seconds() / 60
+        ref_now = now if idx.tzinfo is not None else now.replace(tzinfo=None)
+        time_diff = (ref_now - idx).total_seconds() / 60
         status = "📊 当前进行中" if time_diff < 30 else "✅ 已完成"
         print(f"  {i}: {idx.strftime('%Y-%m-%d %H:%M')} (距现在{time_diff:.1f}分钟) {status}")
     
@@ -36,7 +37,8 @@ def test_kline_completion():
     df_1h = client.get_candlesticks(CONTRACT, "1h", 5)
     print("\n最近5根1小时K线:")
     for i, (idx, row) in enumerate(df_1h.iterrows()):
-        time_diff = (now - idx).total_seconds() / 60
+        ref_now = now if idx.tzinfo is not None else now.replace(tzinfo=None)
+        time_diff = (ref_now - idx).total_seconds() / 60
         status = "📊 当前进行中" if time_diff < 60 else "✅ 已完成"
         print(f"  {i}: {idx.strftime('%Y-%m-%d %H:%M')} (距现在{time_diff:.1f}分钟) {status}")
     

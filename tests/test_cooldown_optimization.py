@@ -23,7 +23,7 @@ class DummyClient:
         self._equity = equity
 
     def get_account(self):
-        return {"available": self._equity, "unrealised_pnl": 0.0}
+        return {"available": self._equity, "total": self._equity, "unrealised_pnl": 0.0}
 
     def get_position_closes(self, contract, limit=30):
         return self._closes[:limit]

@@ -33,7 +33,7 @@ RISK_PERCENT = float(os.environ.get("RISK_PERCENT", "0.02"))  # 2%
 
 # ============ 熔断规则 ============
 # 本金低于此值停止交易
-CIRCUIT_BREAKER_EQUITY = 350
+CIRCUIT_BREAKER_EQUITY = float(os.environ.get("CIRCUIT_BREAKER_EQUITY", "350"))
 
 # 连续亏损次数熔断
 MAX_CONSECUTIVE_LOSSES = 3

@@ -202,21 +202,16 @@ class GateClient:
                 total = _safe_float(entry.get('total', entry.get('equity', entry.get('wallet_balance', 0))))
                 unrealised_pnl = _safe_float(entry.get('unrealised_pnl', entry.get('unrealized_pnl', entry.get('cross_unrealised_pnl', 0))))
                 
-                # 选择最合适的本金字段
-                if cross_available > 0:
-                    final_total = cross_available  # 全仓模式，用cross_available
-                elif available > 0:
-                    final_total = available  # 隔离仓模式或cross_available不存在
-                else:
-                    final_total = total  # 其他情况
+                # 账户总资产(total)代表包含未实现盈亏的本金/总资产，可用资产(available)为可开仓余额
+                final_available = cross_available if cross_available > 0 else available
                 
                 if self.debug:
                     print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, total={total}, unrealised_pnl={unrealised_pnl}")
-                    print(f"[GATE DEBUG] selected total field: {final_total}")
+                    print(f"[GATE DEBUG] selected total equity: {total}, available: {final_available}")
                 
                 return {
-                    'total': final_total,
-                    'available': available,
+                    'total': total,
+                    'available': final_available,
                     'unrealised_pnl': unrealised_pnl
                 }
             else:
@@ -235,21 +230,16 @@ class GateClient:
             total = _safe_float(data.get('total', data.get('equity', data.get('wallet_balance', 0))))
             unrealised_pnl = _safe_float(data.get('unrealised_pnl', data.get('unrealized_pnl', data.get('cross_unrealised_pnl', 0))))
             
-            # 选择最合适的本金字段
-            if cross_available > 0:
-                final_total = cross_available
-            elif available > 0:
-                final_total = available
-            else:
-                final_total = total
+            # 账户总资产(total)代表包含未实现盈亏的本金/总资产，可用资产(available)为可开仓余额
+            final_available = cross_available if cross_available > 0 else available
             
             if self.debug:
                 print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, total={total}, unrealised_pnl={unrealised_pnl}")
-                print(f"[GATE DEBUG] selected total field: {final_total}")
+                print(f"[GATE DEBUG] selected total equity: {total}, available: {final_available}")
             
             return {
-                'total': final_total,
-                'available': available,
+                'total': total,
+                'available': final_available,
                 'unrealised_pnl': unrealised_pnl
             }
 

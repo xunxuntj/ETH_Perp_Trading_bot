@@ -210,45 +210,40 @@ class TradingStrategy:
                      initial_30m_st: float = 0, locked_stop_loss: float = 0,
                      prev_stop_loss: float = 0) -> tuple:
         """
-        从当前数据推导阶段（三阶段逻辑）
+        从当前数据推导阶段（三阶段逻辑）- 完全无缓存直接动态计算
         
         返回: (phase, recommended_stop_loss)
         
         逻辑：
         【阶段1 - 生存期】30m ST 未达到开仓价
-            止损跟随 30m ST
+            止损跟随 30m ST，只紧不松
         
-        【阶段2 - 锁利期】30m ST 已达到开仓价，但按30m ST平仓收益 <= LOCK_PROFIT_BUFFER
-            仍然跟随 30m ST（止损只紧不松）
-        
-        【阶段3 - 换轨期】按30m ST平仓收益 > LOCK_PROFIT_BUFFER
-            止损跟随 1H ST，止损只紧不松
+        【阶段3 - 换轨期】1H ST 已经比锁利阈值更紧
+            止损跟随 1H ST，只紧不松
+            
+        【阶段2 - 锁利期】30m ST已达到开仓价，但 1H ST 未比锁利阈值更紧
+            如果 30m ST 已经比锁利阈值更紧，则锁定为锁利阈值；否则跟随 30m ST。
+            均应用“只紧不松”原则。
         """
         # 三阶段切换价只依赖当前持仓：成本价 + 仓位大小
         survival_to_locked_price = entry_price
         locked_to_hourly_price = calculate_lock_threshold(entry_price, qty, is_long)
-
-        # 计算按30m ST作为止损成交的期望盈利
-        if is_long:
-            expected_pnl_at_stop = (last_30m_st - entry_price) * qty * FACE_VALUE
-        else:
-            expected_pnl_at_stop = (entry_price - last_30m_st) * qty * FACE_VALUE
 
         if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
             print(
                 f"[STRATEGY DEBUG] _infer_phase: entry={entry_price:.2f}, 30m_ST={last_30m_st:.2f}, "
                 f"1h_ST={last_1h_st:.2f}, current_stop={prev_stop_loss:.2f}, "
                 f"survival_to_locked={survival_to_locked_price:.2f}, locked_to_hourly={locked_to_hourly_price:.2f}, "
-                f"expected_pnl_at_stop={expected_pnl_at_stop:.2f}, LOCK_PROFIT_BUFFER={LOCK_PROFIT_BUFFER}"
+                f"LOCK_PROFIT_BUFFER={LOCK_PROFIT_BUFFER}"
             )
 
-        # 【阶段1 - 生存期】：30m ST 未达到开仓价（止损触发仍会亏损）
+        # 【阶段1 - 生存期】：30m ST 未达到开仓价
         if is_long:
-            st_reached_entry = last_30m_st >= survival_to_locked_price
+            is_survival = last_30m_st < survival_to_locked_price
         else:
-            st_reached_entry = last_30m_st <= survival_to_locked_price
+            is_survival = last_30m_st > survival_to_locked_price
 
-        if not st_reached_entry:
+        if is_survival:
             phase = Phase.SURVIVAL.value
             recommended_stop = tighten_stop_loss(last_30m_st, prev_stop_loss, is_long)
             if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
@@ -258,31 +253,43 @@ class TradingStrategy:
                 )
             return phase, recommended_stop
 
-        # 到这里说明 30m ST 已达到开仓价（止损触发至少保本）
+        # 到这里说明已过生存期，可触发保本或锁利
 
-        # 【阶段3 - 换轨期】：30m ST 已越过锁利缓冲切换价
+        # 【阶段3 - 换轨期】：1H ST 已越过锁利切换价（比锁利止损更紧）
         if is_long:
-            switch_to_hourly = last_30m_st > locked_to_hourly_price
+            is_hourly = last_1h_st > locked_to_hourly_price
         else:
-            switch_to_hourly = last_30m_st < locked_to_hourly_price
+            is_hourly = last_1h_st < locked_to_hourly_price
 
-        if switch_to_hourly:
-            recommended_stop = tighten_stop_loss(last_1h_st, prev_stop_loss, is_long)
+        if is_hourly:
             phase = Phase.HOURLY.value
+            recommended_stop = tighten_stop_loss(last_1h_st, prev_stop_loss, is_long)
             if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
                 print(
-                    f"[STRATEGY DEBUG] Phase: HOURLY, 30m_ST crossed locked_to_hourly={locked_to_hourly_price:.2f}, "
+                    f"[STRATEGY DEBUG] Phase: HOURLY, 1H_ST={last_1h_st:.2f} crossed locked_to_hourly={locked_to_hourly_price:.2f}, "
                     f"recommended_stop={recommended_stop:.2f}"
                 )
             return phase, recommended_stop
 
-        # 【阶段2 - 锁利期】：30m ST已达开仓价，但尚未越过换轨切换价，继续跟随30m ST
+        # 【阶段2 - 锁利期】：已达保本，且 1H ST 尚未越过锁利价
         phase = Phase.LOCKED.value
-        recommended_stop = tighten_stop_loss(last_30m_st, prev_stop_loss, is_long)
+        # 如果 30m ST 已经超过锁利切换价，则锁在锁利价上，不再随 30m ST 波动
+        if is_long:
+            if last_30m_st > locked_to_hourly_price:
+                candidate_stop = locked_to_hourly_price
+            else:
+                candidate_stop = last_30m_st
+        else:
+            if last_30m_st < locked_to_hourly_price:
+                candidate_stop = locked_to_hourly_price
+            else:
+                candidate_stop = last_30m_st
+
+        recommended_stop = tighten_stop_loss(candidate_stop, prev_stop_loss, is_long)
         if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
             print(
-                f"[STRATEGY DEBUG] Phase: LOCKED, 30m_ST between entry={survival_to_locked_price:.2f} and "
-                f"locked_to_hourly={locked_to_hourly_price:.2f}, recommended_stop={recommended_stop:.2f}"
+                f"[STRATEGY DEBUG] Phase: LOCKED, 30m_ST={last_30m_st:.2f}, candidate_stop={candidate_stop:.2f}, "
+                f"entry={entry_price:.2f}, locked_to_hourly={locked_to_hourly_price:.2f}, recommended_stop={recommended_stop:.2f}"
             )
         return phase, recommended_stop
 
