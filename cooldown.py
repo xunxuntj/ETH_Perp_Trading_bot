@@ -132,6 +132,12 @@ def record_trade_result(pnl: float, close_time: Optional[datetime] = None):
         reset_cooldown_state(reset_anchor_time=cooldown_until)
         state = load_cooldown_state()
 
+    # ==== 额外健壮性检查：若非冷静期，且距离最近一笔亏损交易已超 48 小时，则在记录新交易前将计数清零 ====
+    last_loss_time = _parse_datetime(state.get("last_loss_time"))
+    if not cooldown_until and last_loss_time and (close_time - last_loss_time) > timedelta(hours=48):
+        state["consecutive_losses"] = 0
+        state["last_loss_time"] = None
+
     if pnl < 0:
         state["consecutive_losses"] = int(state.get("consecutive_losses", 0)) + 1
         state["last_loss_time"] = _serialize_datetime(close_time)
@@ -158,7 +164,7 @@ def _build_consecutive_loss_status(consecutive_losses: int) -> CooldownStatus:
     )
 
 
-def _check_cooldown_from_state(now: datetime, notify_state: dict) -> CooldownStatus:
+def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime, notify_state: dict) -> CooldownStatus:
     state = load_cooldown_state()
     cooldown_until = _parse_datetime(state.get("cooldown_until"))
     consecutive_losses = int(state.get("consecutive_losses", 0) or 0)
@@ -195,6 +201,27 @@ def _check_cooldown_from_state(now: datetime, notify_state: dict) -> CooldownSta
             triggered=False,
             details="48 小时冷静期已结束，连续亏损计数已清零 ✅ 可以开单"
         )
+
+    # ==== 新增逻辑：若当前空仓，且距离最近的一笔交易（以 last_loss_time 为代表）已超过 48 小时，则重置连续亏损计数从 0 开始 ====
+    if consecutive_losses > 0 and last_loss_time:
+        is_empty = False
+        if hasattr(client, "get_positions"):
+            try:
+                position = client.get_positions(contract)
+                is_empty = (position is None)
+            except Exception:
+                is_empty = False
+        else:
+            is_empty = True
+
+        if is_empty and (now - last_loss_time) > timedelta(hours=48):
+            reset_cooldown_state(reset_anchor_time=now)
+            reset_cooldown_notify_state()
+            return CooldownStatus(
+                triggered=False,
+                consecutive_losses=0,
+                details="空仓且距最近交易超 48 小时，连续亏损计数已清零 ✅ 可以开单"
+            )
 
     if notify_state["notified"]:
         reset_cooldown_notify_state()
@@ -243,6 +270,29 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
         if notify_state["notified"]:
             reset_cooldown_notify_state()
         return CooldownStatus(triggered=False, details="无平仓记录")
+
+    # ==== 新增逻辑：若当前空仓，且距离最近的一笔交易已超过 48 小时，则重置连续亏损计数从 0 开始 ====
+    is_empty = False
+    if hasattr(client, "get_positions"):
+        try:
+            position = client.get_positions(contract)
+            is_empty = (position is None)
+        except Exception:
+            is_empty = False
+    else:
+        is_empty = True
+
+    if is_empty:
+        # 获取最近的一笔平仓交易时间
+        most_recent_close_time = datetime.fromtimestamp(closes[0]['time'], tz=timezone.utc)
+        if (now - most_recent_close_time) > timedelta(hours=48):
+            reset_cooldown_state(reset_anchor_time=now)
+            reset_cooldown_notify_state()
+            return CooldownStatus(
+                triggered=False,
+                consecutive_losses=0,
+                details="空仓且距最近交易超 48 小时，连续亏损计数已清零 ✅ 可以开单"
+            )
 
     consecutive_losses = 0
     last_loss_time = None
@@ -375,7 +425,7 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
     # 2. 检查连续亏损
     try:
         if ENABLE_AUTO_TRADING:
-            return _check_cooldown_from_state(now, notify_state)
+            return _check_cooldown_from_state(client, contract, now, notify_state)
         return _check_cooldown_from_history(client, contract, now, notify_state)
     except Exception as e:
         return CooldownStatus(

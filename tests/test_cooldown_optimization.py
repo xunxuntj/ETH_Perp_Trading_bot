@@ -384,6 +384,88 @@ def test_real_world_scenario():
     reset_cooldown_notify_state()
 
 
+def test_cooldown_reset_if_empty_and_idle_48h(monkeypatch):
+    """测试当前空仓，且距离最近的一笔交易已经超过48小时，则MAX_CONSECUTIVE_LOSSES重置，从0开始计数"""
+    # 1. 测试自动交易状态模式 (ENABLE_AUTO_TRADING = True)
+    monkeypatch.setattr(cooldown, "ENABLE_AUTO_TRADING", True)
+    now = datetime.now(timezone.utc)
+    last_loss_time = now - timedelta(hours=50)
+    save_cooldown_state({
+        "consecutive_losses": 2,
+        "cooldown_until": None,
+        "last_loss_time": last_loss_time.isoformat(),
+        "reset_anchor_time": None
+    })
+    reset_cooldown_notify_state()
+
+    class MockClient:
+        def get_account(self):
+            return {"total": 1000.0}
+        def get_positions(self, contract):
+            return None  # 空仓
+        def get_position_closes(self, contract, limit=30):
+            return []
+
+    client = MockClient()
+    status = check_cooldown(client)
+    state = load_cooldown_state()
+
+    assert status.triggered is False, "❌ 不应触发冷静期"
+    assert state["consecutive_losses"] == 0, "❌ 空仓超过48小时无交易，连续亏损计数应清零"
+    assert state["last_loss_time"] is None, "❌ last_loss_time应重置"
+
+    # 2. 测试信号模式交易历史模式 (ENABLE_AUTO_TRADING = False)
+    monkeypatch.setattr(cooldown, "ENABLE_AUTO_TRADING", False)
+    reset_cooldown_state()
+    reset_cooldown_notify_state()
+
+    closes = [
+        {"time": int((now - timedelta(hours=50)).timestamp()), "pnl": -5.0, "side": "long"}
+    ]
+    
+    class MockClientHistory:
+        def get_account(self):
+            return {"total": 1000.0}
+        def get_positions(self, contract):
+            return None  # 空仓
+        def get_position_closes(self, contract, limit=30):
+            return closes[:limit]
+
+    client_history = MockClientHistory()
+    status_history = check_cooldown(client_history)
+    state_history = load_cooldown_state()
+
+    assert status_history.triggered is False, "❌ 历史模式不应触发冷静期"
+    assert state_history["consecutive_losses"] == 0, "❌ 历史模式空仓超过48小时，连续亏损计数应清零"
+
+
+def test_record_trade_result_idle_48h_reset():
+    """测试在 record_trade_result 中，若距离最近一笔亏损已超 48 小时，则连续亏损计数清零。"""
+    reset_cooldown_state()
+    now = datetime.now(timezone.utc)
+    
+    # 模拟在 T-50h 记录了一笔亏损
+    last_loss_time = now - timedelta(hours=50)
+    save_cooldown_state({
+        "consecutive_losses": 2,
+        "cooldown_until": None,
+        "last_loss_time": last_loss_time.isoformat(),
+        "reset_anchor_time": None
+    })
+    
+    # 此时在 T=now 记录一笔新亏损
+    record_trade_result(-10, now)
+    
+    # 因为距离上一笔亏损已超 48 小时，计数应先清零再+1，最终 consecutive_losses 应为 1，而不是 3（不应该触发冷静期）
+    state = load_cooldown_state()
+    assert state["consecutive_losses"] == 1, "❌ 间隔超48小时，连续亏损计数应重置为1"
+    assert state["cooldown_until"] is None, "❌ 不应触发冷静期"
+    
+    # 转换为iso格式比较
+    parsed_last_loss = datetime.fromisoformat(state["last_loss_time"])
+    assert abs((parsed_last_loss - now).total_seconds()) < 1.0, "❌ last_loss_time未正确更新"
+
+
 def main():
     print("\n" + "█"*70)
     print("冷静期推送优化测试")
@@ -397,6 +479,8 @@ def main():
         test_auto_trading_profit_resets_loss_counter()
         test_signal_mode_trigger_sets_reset_anchor(lambda *args, **kwargs: None)
         test_signal_mode_ignores_losses_before_reset_anchor(lambda *args, **kwargs: None)
+        test_cooldown_reset_if_empty_and_idle_48h(lambda *args, **kwargs: None)
+        test_record_trade_result_idle_48h_reset()
         test_real_world_scenario()
         
         print("\n" + "="*70)
