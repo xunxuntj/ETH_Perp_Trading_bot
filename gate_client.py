@@ -192,21 +192,33 @@ class GateClient:
                 if self.debug:
                     print(f"[GATE DEBUG] get_account entry fields: {entry.keys()}")
                 
-                # Gate.io返回的字段优先级:
-                # 1. cross_available (全仓模式的可用余额) - 最准确
-                # 2. available (隔离仓的可用余额)
-                # 3. total (账户总资金)
-                # 4. equity (权益)
+                # Fetch cross margin specific fields
+                cross_margin_balance = _safe_float(entry.get('cross_margin_balance', 0))
                 cross_available = _safe_float(entry.get('cross_available', 0))
+                cross_initial_margin = _safe_float(entry.get('cross_initial_margin', 0))
+                cross_order_margin = _safe_float(entry.get('cross_order_margin', 0))
+                
                 available = _safe_float(entry.get('available', entry.get('free', 0)))
-                total = _safe_float(entry.get('total', entry.get('equity', entry.get('wallet_balance', 0))))
+                raw_total = _safe_float(entry.get('total', entry.get('equity', entry.get('wallet_balance', 0))))
                 unrealised_pnl = _safe_float(entry.get('unrealised_pnl', entry.get('unrealized_pnl', entry.get('cross_unrealised_pnl', 0))))
                 
-                # 账户总资产(total)代表包含未实现盈亏的本金/总资产，可用资产(available)为可开仓余额
+                # Determine total equity
+                # In cross margin mode, cross_margin_balance is preferred.
+                # If not returned (or 0) but cross margin is active (e.g. cross_available > 0),
+                # we calculate the cross-margin total equity.
+                if cross_margin_balance <= 0 and (cross_available > 0 or cross_initial_margin > 0 or cross_order_margin > 0):
+                    cross_margin_balance = cross_available + cross_initial_margin + cross_order_margin
+                
+                if cross_margin_balance > 0:
+                    total = cross_margin_balance
+                else:
+                    total = raw_total
+                
+                # Determine available margin
                 final_available = cross_available if cross_available > 0 else available
                 
                 if self.debug:
-                    print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, total={total}, unrealised_pnl={unrealised_pnl}")
+                    print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, cross_margin_balance={cross_margin_balance}, raw_total={raw_total}, total={total}, unrealised_pnl={unrealised_pnl}")
                     print(f"[GATE DEBUG] selected total equity: {total}, available: {final_available}")
                 
                 return {
@@ -224,17 +236,33 @@ class GateClient:
             if self.debug:
                 print(f"[GATE DEBUG] get_account dict fields: {data.keys()}")
             
-            # Gate.io返回的字段优先级:
+            # Fetch cross margin specific fields
+            cross_margin_balance = _safe_float(data.get('cross_margin_balance', 0))
             cross_available = _safe_float(data.get('cross_available', 0))
+            cross_initial_margin = _safe_float(data.get('cross_initial_margin', 0))
+            cross_order_margin = _safe_float(data.get('cross_order_margin', 0))
+            
             available = _safe_float(data.get('available', data.get('free', 0)))
-            total = _safe_float(data.get('total', data.get('equity', data.get('wallet_balance', 0))))
+            raw_total = _safe_float(data.get('total', data.get('equity', data.get('wallet_balance', 0))))
             unrealised_pnl = _safe_float(data.get('unrealised_pnl', data.get('unrealized_pnl', data.get('cross_unrealised_pnl', 0))))
             
-            # 账户总资产(total)代表包含未实现盈亏的本金/总资产，可用资产(available)为可开仓余额
+            # Determine total equity
+            # In cross margin mode, cross_margin_balance is preferred.
+            # If not returned (or 0) but cross margin is active (e.g. cross_available > 0),
+            # we calculate the cross-margin total equity.
+            if cross_margin_balance <= 0 and (cross_available > 0 or cross_initial_margin > 0 or cross_order_margin > 0):
+                cross_margin_balance = cross_available + cross_initial_margin + cross_order_margin
+            
+            if cross_margin_balance > 0:
+                total = cross_margin_balance
+            else:
+                total = raw_total
+            
+            # Determine available margin
             final_available = cross_available if cross_available > 0 else available
             
             if self.debug:
-                print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, total={total}, unrealised_pnl={unrealised_pnl}")
+                print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, cross_margin_balance={cross_margin_balance}, raw_total={raw_total}, total={total}, unrealised_pnl={unrealised_pnl}")
                 print(f"[GATE DEBUG] selected total equity: {total}, available: {final_available}")
             
             return {

@@ -48,7 +48,26 @@ STATE_FILE = os.environ.get("STATE_FILE", "trading_state.json")
 
 # ============ 自动化交易开关 ============
 # 默认关闭（仅发信号，不执行交易），可通过环境变量开启
-ENABLE_AUTO_TRADING = os.environ.get("ENABLE_AUTO_TRADING", "false").lower() == "true"
+class DynamicBoolean:
+    def __bool__(self):
+        import os
+        return os.environ.get("ENABLE_AUTO_TRADING", "false").lower() == "true"
+    
+    def __eq__(self, other):
+        if isinstance(other, DynamicBoolean):
+            return bool(self) == bool(other)
+        return bool(self) == other
+        
+    def __ne__(self, other):
+        return not self.__eq__(other)
+        
+    def __repr__(self):
+        return str(bool(self))
+        
+    def __str__(self):
+        return str(bool(self))
+
+ENABLE_AUTO_TRADING = DynamicBoolean()
 
 # ============ 交易执行配置 ============
 # 开仓时是否设置条件止损单（默认启用）
