@@ -58,6 +58,7 @@ jobs:
           # API 凭证 (必需)
           GATE_API_KEY: ${{ secrets.GATE_API_KEY }}
           GATE_API_SECRET: ${{ secrets.GATE_API_SECRET }}
+          ENABLE_AUTO_TRADING: ${{ secrets.ENABLE_AUTO_TRADING || vars.ENABLE_AUTO_TRADING }}
           
           # Telegram 通知 (可选)
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
