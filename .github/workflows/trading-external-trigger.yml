@@ -49,18 +49,26 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           
-          # 风险管理配置 (可选，使用默认值)
-          RISK_MODE: 'fixed'                  # "fixed" 或 "percent"
-          RISK_FIXED_AMOUNT: '10'             # 单笔风险金额 (USDT)
-          RISK_PERCENT: '0.02'                # 风险百分比 (2%)
-          LOCK_PROFIT_BUFFER: '1'             # 锁利期保底盈利 (USDT)
+          # 风险管理配置 (优先从 GitHub secrets/vars 获取，其次使用默认值)
+          RISK_MODE: ${{ secrets.RISK_MODE || vars.RISK_MODE || 'fixed' }}
+          RISK_FIXED_AMOUNT: ${{ secrets.RISK_FIXED_AMOUNT || vars.RISK_FIXED_AMOUNT || '10' }}
+          RISK_PERCENT: ${{ secrets.RISK_PERCENT || vars.RISK_PERCENT || '0.02' }}
+          CIRCUIT_BREAKER_EQUITY: ${{ secrets.CIRCUIT_BREAKER_EQUITY || vars.CIRCUIT_BREAKER_EQUITY || '350' }}
+          LOCK_PROFIT_BUFFER: ${{ secrets.LOCK_PROFIT_BUFFER || vars.LOCK_PROFIT_BUFFER || '1' }}
+          MAX_CONSECUTIVE_LOSSES: ${{ secrets.MAX_CONSECUTIVE_LOSSES || vars.MAX_CONSECUTIVE_LOSSES || '3' }}
           
-          # 状态文件配置 (可选)
-          STATE_FILE: 'trading_state.json'    # 持仓状态文件
+          # 交易执行配置
+          AUTO_SET_STOP_LOSS: ${{ secrets.AUTO_SET_STOP_LOSS || vars.AUTO_SET_STOP_LOSS || 'true' }}
+          STOP_LOSS_MODE: ${{ secrets.STOP_LOSS_MODE || vars.STOP_LOSS_MODE || 'tight_only' }}
+          CLOSE_MODE: ${{ secrets.CLOSE_MODE || vars.CLOSE_MODE || 'market' }}
+          NOTIFY_DETAILS: ${{ secrets.NOTIFY_DETAILS || vars.NOTIFY_DETAILS || 'true' }}
           
-          # 调试配置 (可选，生产环境改为 '0')
-          GATE_DEBUG: '0'                     # Gate API 请求/响应日志
-          DEBUG: '0'                          # 策略计算日志
+          # 状态文件配置
+          STATE_FILE: ${{ secrets.STATE_FILE || vars.STATE_FILE || 'trading_state.json' }}
+          
+          # 调试配置
+          GATE_DEBUG: ${{ secrets.GATE_DEBUG || vars.GATE_DEBUG || '0' }}
+          DEBUG: ${{ secrets.DEBUG || vars.DEBUG || '0' }}
         run: python main.py
       
       - name: Upload state

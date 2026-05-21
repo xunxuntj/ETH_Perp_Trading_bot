@@ -36,7 +36,7 @@ RISK_PERCENT = float(os.environ.get("RISK_PERCENT", "0.02"))  # 2%
 CIRCUIT_BREAKER_EQUITY = float(os.environ.get("CIRCUIT_BREAKER_EQUITY", "350"))
 
 # 连续亏损次数熔断
-MAX_CONSECUTIVE_LOSSES = 3
+MAX_CONSECUTIVE_LOSSES = int(os.environ.get("MAX_CONSECUTIVE_LOSSES", "3"))
 
 # ============ Buffer ============
 # 锁利期的保底盈利 (USDT)
