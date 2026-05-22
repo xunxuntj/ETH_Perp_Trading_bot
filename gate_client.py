@@ -66,7 +66,8 @@ class GateClient:
             "KEY": self.api_key,
             "Timestamp": t,
             "SIGN": sign,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "X-Gate-Size-Decimal": "1"
         }
 
     
@@ -127,11 +128,16 @@ class GateClient:
         data = resp.json()
         
         # 无持仓返回 size=0
-        if data.get('size', 0) == 0:
+        try:
+            size_val = float(data.get('size', 0))
+        except (ValueError, TypeError):
+            size_val = 0.0
+            
+        if size_val == 0:
             return None
         
         return {
-            'size': int(data['size']),  # 正=多, 负=空
+            'size': int(size_val),  # 正=多, 负=空
             'entry_price': float(data['entry_price']),
             'mark_price': float(data['mark_price']),
             'liq_price': float(data['liq_price']) if data.get('liq_price') else None,
@@ -371,7 +377,7 @@ class GateClient:
             results.append({
                 'id': item.get('id'),
                 'time': int(item.get('create_time', 0)),
-                'size': int(item.get('size', 0)),  # 正=买, 负=卖
+                'size': int(float(item.get('size', 0))),  # 正=买, 负=卖
                 'price': float(item.get('price', 0)),
                 'order_id': item.get('order_id'),
                 'role': item.get('role', ''),
@@ -403,7 +409,7 @@ class GateClient:
         cleaned_text = self._clean_text(text) if text else ""
         order = {
             "contract": contract,
-            "size": size,
+            "size": str(size),
             "reduce_only": reduce_only,
         }
         if cleaned_text:
@@ -493,7 +499,7 @@ class GateClient:
             },
             "initial": {
                 "contract": contract,
-                "size": 0,
+                "size": "0",
                 "price": "0",
                 "tif": "ioc",
                 "text": cleaned_text,
@@ -579,7 +585,7 @@ class GateClient:
                 },
                 "initial": {
                     "contract": contract,
-                    "size": 0,
+                    "size": "0",
                     "price": "0",
                     "tif": "ioc",
                     "text": cleaned_text,
