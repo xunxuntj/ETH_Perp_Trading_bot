@@ -77,7 +77,7 @@ def test_get_account_cross_margin(monkeypatch):
     monkeypatch.setattr(client.session, "get", lambda *args, **kwargs: MockResponse(200, mock_data_1))
     account = client.get_account()
     assert account["total"] == 500.0
-    assert account["available"] == 450.0
+    assert account["available"] == 225.0
     assert account["unrealised_pnl"] == -10.0
 
     # Case 2: List response with USDT lacking cross_margin_balance but having active cross_available
@@ -95,7 +95,7 @@ def test_get_account_cross_margin(monkeypatch):
     monkeypatch.setattr(client.session, "get", lambda *args, **kwargs: MockResponse(200, mock_data_2))
     account = client.get_account()
     assert account["total"] == 500.0  # 400 + 80 + 20
-    assert account["available"] == 400.0
+    assert account["available"] == 200.0
     assert account["unrealised_pnl"] == 5.0
 
     # Case 3: List response with standard/isolated margin only
@@ -110,7 +110,7 @@ def test_get_account_cross_margin(monkeypatch):
     monkeypatch.setattr(client.session, "get", lambda *args, **kwargs: MockResponse(200, mock_data_3))
     account = client.get_account()
     assert account["total"] == 300.0
-    assert account["available"] == 250.0
+    assert account["available"] == 125.0
     assert account["unrealised_pnl"] == 10.0
 
     # Case 4: Dict response with cross_margin_balance
@@ -124,7 +124,7 @@ def test_get_account_cross_margin(monkeypatch):
     monkeypatch.setattr(client.session, "get", lambda *args, **kwargs: MockResponse(200, mock_data_4))
     account = client.get_account()
     assert account["total"] == 800.0
-    assert account["available"] == 750.0
+    assert account["available"] == 375.0
     assert account["unrealised_pnl"] == -25.0
 
     # Case 5: Dict response lacking cross_margin_balance but having active cross margin
@@ -139,5 +139,5 @@ def test_get_account_cross_margin(monkeypatch):
     monkeypatch.setattr(client.session, "get", lambda *args, **kwargs: MockResponse(200, mock_data_5))
     account = client.get_account()
     assert account["total"] == 710.0  # 650 + 50 + 10
-    assert account["available"] == 650.0
+    assert account["available"] == 325.0
     assert account["unrealised_pnl"] == 0.0

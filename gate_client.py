@@ -21,7 +21,8 @@ class GateClient:
         self.api_secret = api_secret
         self.session = requests.Session()
         # Enable debug if parameter True or environment variable GATE_DEBUG is set
-        self.debug = bool(debug or os.getenv('GATE_DEBUG'))
+        gate_debug = os.getenv('GATE_DEBUG', '').lower()
+        self.debug = bool(debug or (gate_debug not in ('', '0', 'false', 'no', 'off')))
     
     def _sign(self, method: str, url: str, query_string: str = "", body: str = "") -> dict:
         """生成签名请求头"""
@@ -223,7 +224,7 @@ class GateClient:
                 
                 return {
                     'total': total,
-                    'available': final_available,
+                    'available': final_available * 0.5,
                     'unrealised_pnl': unrealised_pnl
                 }
             else:
@@ -267,7 +268,7 @@ class GateClient:
             
             return {
                 'total': total,
-                'available': final_available,
+                'available': final_available * 0.5,
                 'unrealised_pnl': unrealised_pnl
             }
 
@@ -382,16 +383,27 @@ class GateClient:
         
         if price is not None:
             order["price"] = str(price)
-            order["time_in_force"] = "gtc"  # Good-till-cancel
+            order["tif"] = "gtc"  # Good-till-cancel
         else:
-            order["price"] = "market"
-            order["time_in_force"] = "ioc"  # Immediate-or-cancel
+            order["price"] = "0"
+            order["tif"] = "ioc"  # Immediate-or-cancel
         
         body = json.dumps(order)
         headers = self._sign("POST", url_path, "", body)
         
         resp = self.session.post(full_url, data=body, headers=headers)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            try:
+                err_data = resp.json()
+                label = err_data.get("label", "")
+                msg = err_data.get("message", "")
+                if label or msg:
+                    raise Exception(f"{e} (Gate Error: {label}: {msg})") from e
+            except Exception:
+                pass
+            raise e
         
         return resp.json()
 
