@@ -24,6 +24,32 @@ class GateClient:
         gate_debug = os.getenv('GATE_DEBUG', '').lower()
         self.debug = bool(debug or (gate_debug not in ('', '0', 'false', 'no', 'off')))
     
+    def _clean_text(self, text: str) -> str:
+        """
+        格式化备注信息以符合 Gate.io API 规范：
+        1. 必须以 't-' 开头。
+        2. 去除 't-' 后长度不能超过 28 字节。
+        3. 只允许字母、数字、下划线、连字符和点号。
+        """
+        if not text:
+            return ""
+        
+        import re
+        if text.startswith("t-"):
+            content = text[2:]
+        else:
+            content = text
+            
+        # 仅保留合法字符 (a-zA-Z0-9_.-)
+        content = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", content)
+        
+        # 截断超出部分（28字节）
+        encoded = content.encode("utf-8")
+        if len(encoded) > 28:
+            content = encoded[:28].decode("utf-8", errors="ignore")
+            
+        return "t-" + content
+
     def _sign(self, method: str, url: str, query_string: str = "", body: str = "") -> dict:
         """生成签名请求头"""
         t = str(int(time.time()))
@@ -374,12 +400,14 @@ class GateClient:
         full_url = f"{BASE_URL}/futures/usdt/orders"
         
         # 构建订单体
+        cleaned_text = self._clean_text(text) if text else ""
         order = {
             "contract": contract,
             "size": size,
             "reduce_only": reduce_only,
-            "text": text
         }
+        if cleaned_text:
+            order["text"] = cleaned_text
         
         if price is not None:
             order["price"] = str(price)
@@ -395,6 +423,8 @@ class GateClient:
         try:
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
+            import sys
+            print(f"[GATE ERROR RESPONSE] POST {full_url} Status: {resp.status_code}, Body: {resp.text}", file=sys.stderr)
             try:
                 err_data = resp.json()
                 label = err_data.get("label", "")
@@ -452,6 +482,7 @@ class GateClient:
         full_url = f"{BASE_URL}/futures/usdt/price_orders"
 
         order_text = text or f"stop_loss_{position_side}_{int(time.time())}"
+        cleaned_text = self._clean_text(order_text)
         body_obj = {
             "trigger": {
                 "strategy_type": 0,
@@ -465,7 +496,7 @@ class GateClient:
                 "size": 0,
                 "price": "0",
                 "tif": "ioc",
-                "text": order_text,
+                "text": cleaned_text,
                 "reduce_only": True,
                 "auto_size": "close",
             },
@@ -474,7 +505,20 @@ class GateClient:
         body = json.dumps(body_obj)
         headers = self._sign("POST", url_path, "", body)
         resp = self.session.post(full_url, data=body, headers=headers)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            import sys
+            print(f"[GATE ERROR RESPONSE] POST {full_url} Status: {resp.status_code}, Body: {resp.text}", file=sys.stderr)
+            try:
+                err_data = resp.json()
+                label = err_data.get("label", "")
+                msg = err_data.get("message", "")
+                if label or msg:
+                    raise Exception(f"{e} (Gate Error: {label}: {msg})") from e
+            except Exception:
+                pass
+            raise e
         return resp.json()
 
     def cancel_price_order(self, order_id: str) -> dict:
@@ -484,7 +528,12 @@ class GateClient:
 
         headers = self._sign("DELETE", url_path, "", "")
         resp = self.session.delete(full_url, headers=headers)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            import sys
+            print(f"[GATE ERROR RESPONSE] DELETE {full_url} Status: {resp.status_code}, Body: {resp.text}", file=sys.stderr)
+            raise e
         return resp.json()
 
     def update_price_order(self, order_id: str, new_trigger_price: float, contract: str = "ETH_USDT") -> dict:
@@ -517,6 +566,7 @@ class GateClient:
             contract = target_order.get("initial", {}).get("contract", "ETH_USDT")
             rule = target_order.get("trigger", {}).get("rule", 1)
             original_text = target_order.get("initial", {}).get("text", "")
+            cleaned_text = self._clean_text(original_text)
             
             # 第4步：创建新订单（保留所有原始参数）
             new_body = {
@@ -532,7 +582,7 @@ class GateClient:
                     "size": 0,
                     "price": "0",
                     "tif": "ioc",
-                    "text": original_text,
+                    "text": cleaned_text,
                     "reduce_only": True,
                     "auto_size": "close",
                 },
@@ -543,7 +593,20 @@ class GateClient:
             body = json.dumps(new_body)
             headers = self._sign("POST", url_path, "", body)
             resp = self.session.post(full_url, data=body, headers=headers)
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                import sys
+                print(f"[GATE ERROR RESPONSE] POST {full_url} Status: {resp.status_code}, Body: {resp.text}", file=sys.stderr)
+                try:
+                    err_data = resp.json()
+                    label = err_data.get("label", "")
+                    msg = err_data.get("message", "")
+                    if label or msg:
+                        raise Exception(f"{e} (Gate Error: {label}: {msg})") from e
+                except Exception:
+                    pass
+                raise e
             
             new_order = resp.json()
             return {
@@ -589,7 +652,7 @@ class GateClient:
         if side:
             params["side"] = side
         if text:
-            params["text"] = text
+            params["text"] = self._clean_text(text)
         
         # 构建查询字符串
         query_parts = [f"{k}={v}" for k, v in params.items()]
@@ -597,7 +660,12 @@ class GateClient:
         
         headers = self._sign("DELETE", url_path, query_string, "")
         resp = self.session.delete(full_url, params=params, headers=headers)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            import sys
+            print(f"[GATE ERROR RESPONSE] DELETE {full_url} Status: {resp.status_code}, Body: {resp.text}", file=sys.stderr)
+            raise e
         
         return resp.json()
     

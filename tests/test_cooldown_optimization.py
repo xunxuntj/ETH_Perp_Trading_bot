@@ -268,13 +268,13 @@ def test_loss_during_cooldown_count_resets_after_cooldown_ends():
 
 
 def test_scenario_2_two_losses_gap_then_third_triggers_cooldown():
-    """场景2：2笔亏损 → 无信号48h → 第3笔亏损 → 触发冷静期。"""
+    """场景2：2笔亏损 → 无信号20h (< 48h) → 第3笔亏损 → 触发冷静期。"""
     reset_cooldown_state()
 
     now = datetime.now(timezone.utc)
-    record_trade_result(-10, now - timedelta(hours=50))
-    record_trade_result(-8,  now - timedelta(hours=49))
-    # 中间 48h+ 无交易 → 第3笔在 now 时发生
+    record_trade_result(-10, now - timedelta(hours=22))
+    record_trade_result(-8,  now - timedelta(hours=21))
+    # 中间 21h 无交易 → 第3笔在 now 时发生，不触发 48h 重置
     record_trade_result(-5, now)
 
     state = load_cooldown_state()
