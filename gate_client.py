@@ -416,7 +416,7 @@ class GateClient:
             order["text"] = cleaned_text
         
         if price is not None:
-            order["price"] = str(price)
+            order["price"] = f"{price:.2f}"
             order["tif"] = "gtc"  # Good-till-cancel
         else:
             order["price"] = "0"
@@ -493,7 +493,7 @@ class GateClient:
             "trigger": {
                 "strategy_type": 0,
                 "price_type": 0,
-                "price": str(stop_price),
+                "price": f"{stop_price:.2f}",
                 "rule": rule,
                 "expiration": 0,
             },
@@ -579,7 +579,7 @@ class GateClient:
                 "trigger": {
                     "strategy_type": 0,
                     "price_type": 0,
-                    "price": str(new_trigger_price),
+                    "price": f"{new_trigger_price:.2f}",
                     "rule": rule,
                     "expiration": 0,
                 },
