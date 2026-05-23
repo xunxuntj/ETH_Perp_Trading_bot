@@ -734,6 +734,10 @@ class TradingStrategy:
         # 无本地状态（例如定时任务无持久化）时，回退到交易所实时止损做差异判断
         if change_type == "new_position" and baseline_stop_loss > 0 and abs(baseline_stop_loss - recommended_stop) > 0.01:
             change_type = "stop_updated"
+        
+        # 如果交易所无实时止损单，且当前没有更高级的阶段切换事件，则强制设为 stop_updated 以补设止损单
+        if live_stop_loss <= 0.0 and change_type not in ["enter_locked", "switch_1h"]:
+            change_type = "stop_updated"
 
         # 返回阶段和止损信息
         phase_names = {
@@ -882,6 +886,10 @@ class TradingStrategy:
 
         # 无本地状态（例如定时任务无持久化）时，回退到交易所实时止损做差异判断
         if change_type == "new_position" and baseline_stop_loss > 0 and abs(baseline_stop_loss - recommended_stop) > 0.01:
+            change_type = "stop_updated"
+        
+        # 如果交易所无实时止损单，且当前没有更高级的阶段切换事件，则强制设为 stop_updated 以补设止损单
+        if live_stop_loss <= 0.0 and change_type not in ["enter_locked", "switch_1h"]:
             change_type = "stop_updated"
 
         # 返回阶段和止损信息
