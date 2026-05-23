@@ -499,7 +499,7 @@ class GateClient:
             },
             "initial": {
                 "contract": contract,
-                "size": "0",
+                "size": 0,
                 "price": "0",
                 "tif": "ioc",
                 "text": cleaned_text,
@@ -585,7 +585,7 @@ class GateClient:
                 },
                 "initial": {
                     "contract": contract,
-                    "size": "0",
+                    "size": 0,
                     "price": "0",
                     "tif": "ioc",
                     "text": cleaned_text,
