@@ -1,0 +1,144 @@
+//@version=5
+indicator("DEMA 200 & ADX Combined Indicator", shorttitle="DEMA+ADX HUD", overlay=true)
+
+// ==========================================
+// 1. INPUT PARAMETERS
+// ==========================================
+
+// DEMA Settings
+gp_dema = "=== DEMA 200 Settings ==="
+dema_len = input.int(200, minval=1, title="DEMA Length", group=gp_dema)
+show_dema = input.bool(true, title="Show DEMA Line", group=gp_dema)
+
+// ADX Settings
+gp_adx = "=== ADX Settings ==="
+adx_len = input.int(14, minval=1, title="ADX Length", group=gp_adx)
+adx_threshold = input.int(20, minval=1, title="ADX Trend Strength Threshold", group=gp_adx, tooltip="Values above this threshold indicate a strong trend (typically 20 or 25).")
+color_bg_low_adx = input.bool(false, title="Highlight Low ADX Zones (Choppy Markets)", group=gp_adx, tooltip="Colors the background when ADX is below the threshold.")
+
+// HUD Dashboard Settings
+gp_hud = "=== HUD Dashboard Settings ==="
+show_hud = input.bool(true, title="Show HUD Table", group=gp_hud)
+hud_pos = input.string("top_right", title="HUD Position", options=["top_right", "top_left", "bottom_right", "bottom_left"], group=gp_hud)
+hud_size = input.string("small", title="Text Size", options=["auto", "tiny", "small", "normal", "large"], group=gp_hud)
+
+// ==========================================
+// 2. INDICATOR CALCULATIONS
+// ==========================================
+
+// Double Exponential Moving Average (DEMA)
+dema(src, length) =>
+    ema1 = ta.ema(src, length)
+    ema2 = ta.ema(ema1, length)
+    2 * ema1 - ema2
+
+dema_val = dema(close, dema_len)
+
+// Average Directional Index (ADX) & Directional Movement (+DI, -DI)
+[plus_di, minus_di, adx_val] = ta.dmi(adx_len, adx_len)
+
+// Trend strength & direction conditions
+is_trending = adx_val >= adx_threshold
+is_bullish = plus_di > minus_di
+is_bearish = minus_di > plus_di
+
+// ==========================================
+// 3. CHART PLOTS
+// ==========================================
+
+// Color DEMA line dynamically based on trend strength and direction:
+// - Green: Bullish Trend (Price > DEMA and ADX >= Threshold)
+// - Red: Bearish Trend (Price < DEMA and ADX >= Threshold)
+// - Gray: Choppy / Weak Trend (ADX < Threshold)
+dema_color = not is_trending ? color.gray : 
+             (close > dema_val ? color.green : color.red)
+
+plot(show_dema ? dema_val : na, title="DEMA 200", color=dema_color, linewidth=2)
+
+// Color background when the market is choppy (Low ADX)
+bgcolor(color_bg_low_adx and not is_trending ? color.new(color.orange, 95) : na, title="Low ADX Choppy Zone")
+
+// ==========================================
+// 4. HUD DASHBOARD TABLE
+// ==========================================
+
+// Convert position string input to Pine Script position type
+getTablePosition(pos) =>
+    switch pos
+        "top_left"     => position.top_left
+        "bottom_left"  => position.bottom_left
+        "bottom_right" => position.bottom_right
+        => position.top_right
+
+// Convert text size string input to Pine Script size type
+getTableTextSize(sz) =>
+    switch sz
+        "auto"   => size.auto
+        "tiny"   => size.tiny
+        "normal" => size.normal
+        "large"  => size.large
+        => size.small
+
+var table hud = na
+if show_hud
+    hud := table.new(getTablePosition(hud_pos), 2, 5, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)
+
+if show_hud and barstate.islast
+    t_sz = getTableTextSize(hud_size)
+    
+    // Header
+    table.cell(hud, 0, 0, "Indicator", text_color=color.white, bgcolor=color.blue, text_size=t_sz)
+    table.cell(hud, 1, 0, "Status / Value", text_color=color.white, bgcolor=color.blue, text_size=t_sz)
+    
+    // Row 1: ADX (Trend Strength)
+    adx_status_text = is_trending ? "Trending (" + str.tostring(adx_val, "#.#") + ")" : "Choppy (" + str.tostring(adx_val, "#.#") + ")"
+    adx_status_color = is_trending ? color.green : color.orange
+    table.cell(hud, 0, 1, "ADX (" + str.tostring(adx_len) + ")", text_color=color.white, text_size=t_sz)
+    table.cell(hud, 1, 1, adx_status_text, text_color=adx_status_color, text_size=t_sz)
+    
+    // Row 2: DMI (+DI vs -DI)
+    dmi_status_text = is_bullish ? "+DI > -DI (Bullish)" : "-DI > +DI (Bearish)"
+    dmi_status_color = is_bullish ? color.green : color.red
+    table.cell(hud, 0, 2, "+DI / -DI", text_color=color.white, text_size=t_sz)
+    table.cell(hud, 1, 2, str.tostring(plus_di, "#.#") + " / " + str.tostring(minus_di, "#.#") + " (" + (is_bullish ? "Bull" : "Bear") + ")", text_color=dmi_status_color, text_size=t_sz)
+    
+    // Row 3: DEMA 200 Relation
+    dema_status_text = close > dema_val ? "Price > DEMA (Bullish)" : "Price < DEMA (Bearish)"
+    dema_status_color = close > dema_val ? color.green : color.red
+    table.cell(hud, 0, 3, "DEMA " + str.tostring(dema_len), text_color=color.white, text_size=t_sz)
+    table.cell(hud, 1, 3, dema_status_text, text_color=dema_status_color, text_size=t_sz)
+
+    // Row 4: Combined Signal
+    combined_signal = ""
+    combined_color = color.white
+    if is_trending
+        if close > dema_val and is_bullish
+            combined_signal := "Strong LONG Signal"
+            combined_color := color.green
+        else if close < dema_val and is_bearish
+            combined_signal := "Strong SHORT Signal"
+            combined_color := color.red
+        else
+            combined_signal := "Mixed Trend"
+            combined_color := color.yellow
+    else
+        combined_signal := "No Trend (Avoid Trading)"
+        combined_color := color.gray
+        
+    table.cell(hud, 0, 4, "Action Signal", text_color=color.white, text_size=t_sz)
+    table.cell(hud, 1, 4, combined_signal, text_color=combined_color, text_size=t_sz)
+
+// ==========================================
+// 5. ALERT CONDITIONS
+// ==========================================
+
+alertcondition(ta.crossover(close, dema_val), title="Price Crossed Above DEMA", message="Price crossed above DEMA {{interval}}")
+alertcondition(ta.crossunder(close, dema_val), title="Price Crossed Below DEMA", message="Price crossed below DEMA {{interval}}")
+alertcondition(ta.crossover(adx_val, adx_threshold), title="ADX Crossed Above Threshold (Trend Starts)", message="ADX crossed above threshold ({{value}})")
+alertcondition(ta.crossunder(adx_val, adx_threshold), title="ADX Crossed Below Threshold (Trend Ends)", message="ADX crossed below threshold ({{value}})")
+
+// Combined Alert signals
+long_alert = is_trending and ta.crossover(close, dema_val) and is_bullish
+short_alert = is_trending and ta.crossunder(close, dema_val) and is_bearish
+alertcondition(long_alert, title="Combined Buy/Long Signal", message="Combined Long Signal on {{ticker}} at {{close}}")
+alertcondition(short_alert, title="Combined Sell/Short Signal", message="Combined Short Signal on {{ticker}} at {{close}}")
