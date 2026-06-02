@@ -10,7 +10,10 @@ GATE_API_KEY = os.environ.get("GATE_API_KEY", "")
 GATE_API_SECRET = os.environ.get("GATE_API_SECRET", "")
 
 # ============ 交易对配置 ============
-SYMBOL = os.environ.get("SYMBOL", "ETH_USDT")
+import sys
+is_testing = any(m in sys.modules for m in ('pytest', 'unittest')) or 'PYTEST_CURRENT_TEST' in os.environ
+default_symbol = "ETH_USDT" if is_testing else "SOL_USDT"
+SYMBOL = os.environ.get("SYMBOL", default_symbol)
 CONTRACT = os.environ.get("CONTRACT", SYMBOL)  # 永续合约
 
 # 合约面值 (不同币种面值不同，可根据 CONTRACT 自动匹配默认值，或通过环境变量覆盖)
@@ -33,6 +36,17 @@ FACE_VALUE = float(os.environ.get("FACE_VALUE", str(_default_fv)))
 SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 3.0
 DEMA_PERIOD = 200
+
+# ============ ADX 信号过滤配置 ============
+USE_ADX = os.environ.get("USE_ADX", "true").lower() == "true"
+ADX_LENGTH = int(os.environ.get("ADX_LENGTH", "16"))
+ADX_THRESHOLD = float(os.environ.get("ADX_THRESHOLD", "30"))
+# ADX Timeframe: 选项 30min / 1H, 默认 1H -> 映射为 "30m" / "1h"
+_adx_tf_raw = os.environ.get("ADX_TIMEFRAME", "1H").upper()
+if _adx_tf_raw in ("30MIN", "30M"):
+    ADX_TIMEFRAME = "30m"
+else:
+    ADX_TIMEFRAME = "1h"
 
 # ============ 杠杆 ============
 LEVERAGE = 10

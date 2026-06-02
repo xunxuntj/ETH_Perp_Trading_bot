@@ -164,3 +164,74 @@ def detect_color_change(directions: pd.Series) -> dict:
         'from': prev,
         'to': curr
     }
+
+
+def calculate_rma(series: pd.Series, period: int) -> pd.Series:
+    """
+    计算 RMA (Wilder's Moving Average)，与 TradingView ta.rma 完全一致
+    首个有效值（索引为 period - 1）为前 period 个元素的 SMA，之后的值采用递推式：
+    rma_t = alpha * src_t + (1 - alpha) * rma_{t-1}
+    """
+    alpha = 1.0 / period
+    rma = np.zeros(len(series))
+    rma[:] = np.nan
+    
+    if len(series) >= period:
+        sma = series.iloc[:period].mean()
+        rma[period - 1] = sma
+        for i in range(period, len(series)):
+            rma[i] = alpha * series.iloc[i] + (1.0 - alpha) * rma[i - 1]
+            
+    return pd.Series(rma, index=series.index)
+
+
+def calculate_adx(df: pd.DataFrame, period: int = 16) -> pd.Series:
+    """
+    计算 ADX (Average Directional Index)，与 TradingView ta.dmi(period, period) 的 ADX 值完全一致
+    """
+    high = df['high']
+    low = df['low']
+    close = df['close']
+    prev_high = high.shift(1)
+    prev_low = low.shift(1)
+    prev_close = close.shift(1)
+    
+    # 1. 计算 True Range (TR)
+    tr1 = high - low
+    tr2 = (high - prev_close).abs()
+    tr3 = (low - prev_close).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    # 对于第一根K线，TR为high - low
+    tr.iloc[0] = high.iloc[0] - low.iloc[0]
+    
+    # 2. 计算 Directional Movement (+DM, -DM)
+    up = high - prev_high
+    down = prev_low - low
+    
+    plus_dm = np.where((up > down) & (up > 0), up, 0.0)
+    minus_dm = np.where((down > up) & (down > 0), down, 0.0)
+    
+    plus_dm = pd.Series(plus_dm, index=df.index)
+    minus_dm = pd.Series(minus_dm, index=df.index)
+    
+    # 第一根K线DM值设为0.0，与TV对齐
+    plus_dm.iloc[0] = 0.0
+    minus_dm.iloc[0] = 0.0
+    
+    # 3. 计算平滑 TR, +DM, -DM (RMA)
+    smoothed_tr = calculate_rma(tr, period)
+    smoothed_plus_dm = calculate_rma(plus_dm, period)
+    smoothed_minus_dm = calculate_rma(minus_dm, period)
+    
+    # 4. 计算 DI+ 和 DI-
+    plus_di = 100.0 * smoothed_plus_dm / np.where(smoothed_tr == 0, 1e-9, smoothed_tr)
+    minus_di = 100.0 * smoothed_minus_dm / np.where(smoothed_tr == 0, 1e-9, smoothed_tr)
+    
+    # 5. 计算 DX
+    di_diff = (plus_di - minus_di).abs()
+    di_sum = plus_di + minus_di
+    dx = 100.0 * di_diff / np.where(di_sum == 0, 1e-9, di_sum)
+    
+    # 6. 计算 ADX
+    adx = calculate_rma(dx, period)
+    return adx

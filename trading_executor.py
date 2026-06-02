@@ -24,7 +24,7 @@ from config import (
 class TradeExecutor:
     """交易执行器：按照信号逻辑执行实际交易"""
     
-    def __init__(self, client: GateClient, contract: str = "ETH_USDT"):
+    def __init__(self, client: GateClient, contract: str = "SOL_USDT"):
         self.client = client
         self.contract = contract
         self.dry_run = not ENABLE_AUTO_TRADING

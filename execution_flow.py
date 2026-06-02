@@ -16,7 +16,7 @@ from config import ENABLE_AUTO_TRADING
 class ExecutionFlow:
     """完整的交易执行流程控制器"""
     
-    def __init__(self, client: GateClient, contract: str = "ETH_USDT"):
+    def __init__(self, client: GateClient, contract: str = "SOL_USDT"):
         self.client = client
         self.contract = contract
         self.strategy = TradingStrategy(client, contract)

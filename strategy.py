@@ -17,10 +17,11 @@ from config import (
     SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER, DEMA_PERIOD,
     MAX_CONSECUTIVE_LOSSES, STATE_FILE,
     LEVERAGE, CIRCUIT_BREAKER_EQUITY, get_risk_amount,
-    LOCK_PROFIT_BUFFER, FACE_VALUE
+    LOCK_PROFIT_BUFFER, FACE_VALUE,
+    USE_ADX, ADX_LENGTH, ADX_THRESHOLD, ADX_TIMEFRAME
 )
 from position_state import update_position_state, clear_position_state, load_position_state
-from indicators import calculate_supertrend, calculate_dema
+from indicators import calculate_supertrend, calculate_dema, calculate_adx
 from gate_client import GateClient
 
 
@@ -94,21 +95,21 @@ def save_state(pos: Position):
         }, f, indent=2)
 
 
-def calculate_lock_threshold(entry_price: float, qty: int, is_long: bool) -> float:
+def calculate_lock_threshold(entry_price: float, qty: int, is_long: bool, risk_amount: float = 1.0) -> float:
     """
     计算锁利阈值
     
-    空单: 止损 ≤ 入场 - Buffer / 仓位(ETH)
-    多单: 止损 ≥ 入场 + Buffer / 仓位(ETH)
+    期望盈利 = risk_amount * LOCK_PROFIT_BUFFER (单位: USDT)
     """
     position_eth = qty * FACE_VALUE
     if position_eth == 0:
         return entry_price
     
+    buffer_usdt = risk_amount * LOCK_PROFIT_BUFFER
     if is_long:
-        return entry_price + LOCK_PROFIT_BUFFER / position_eth
+        return entry_price + buffer_usdt / position_eth
     else:
-        return entry_price - LOCK_PROFIT_BUFFER / position_eth
+        return entry_price - buffer_usdt / position_eth
 
 
 def calculate_position_size(risk_amount: float, entry_price: float, stop_loss: float) -> dict:
@@ -207,7 +208,7 @@ class TradingStrategy:
     def _infer_phase(self, entry_price: float, current_price: float, qty: int, 
                      last_30m_st: float, last_1h_st: float, is_long: bool,
                      initial_30m_st: float = 0, locked_stop_loss: float = 0,
-                     prev_stop_loss: float = 0) -> tuple:
+                     prev_stop_loss: float = 0, risk_amount: float = 1.0) -> tuple:
         """
         从当前数据推导阶段（三阶段逻辑）- 完全无缓存直接动态计算
         
@@ -226,7 +227,7 @@ class TradingStrategy:
         """
         # 三阶段切换价只依赖当前持仓：成本价 + 仓位大小
         survival_to_locked_price = entry_price
-        locked_to_hourly_price = calculate_lock_threshold(entry_price, qty, is_long)
+        locked_to_hourly_price = calculate_lock_threshold(entry_price, qty, is_long, risk_amount)
 
         if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
             print(
@@ -292,7 +293,7 @@ class TradingStrategy:
             )
         return phase, recommended_stop
 
-    def __init__(self, client: GateClient, contract: str = "ETH_USDT"):
+    def __init__(self, client: GateClient, contract: str = "SOL_USDT"):
         self.client = client
         self.contract = contract
         self.state = load_state()
@@ -350,6 +351,12 @@ class TradingStrategy:
         st_30m = calculate_supertrend(df_30m, SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER)
         st_1h = calculate_supertrend(df_1h, SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER)
         dema_1h = calculate_dema(df_1h['close'], DEMA_PERIOD)
+        
+        # 计算 ADX (使用配置的时间周期和周期长度)
+        df_adx_source = df_30m if ADX_TIMEFRAME == "30m" else df_1h
+        adx_series = calculate_adx(df_adx_source, ADX_LENGTH)
+        last_adx = adx_series.iloc[-2]
+        adx_is_trending = (not USE_ADX) or (last_adx > ADX_THRESHOLD)
         
         # 1H 数据 (上一根完整K线 = iloc[-2])
         last_1h_close = df_1h['close'].iloc[-2]
@@ -493,15 +500,17 @@ class TradingStrategy:
         risk_info = risk['message']
         
         # 开仓条件检查
-        # 开多: 1H绿 + 价格>DEMA + 30m绿
+        # 开多: 1H绿 + 价格>DEMA + 30m绿 + ADX趋势过滤
         can_long = (last_1h_dir == 1 and 
                     last_1h_close > last_1h_dema and 
-                    last_30m_dir == 1)
+                    last_30m_dir == 1 and
+                    adx_is_trending)
         
-        # 开空: 1H红 + 价格<DEMA + 30m红
+        # 开空: 1H红 + 价格<DEMA + 30m红 + ADX趋势过滤
         can_short = (last_1h_dir == -1 and 
                      last_1h_close < last_1h_dema and 
-                     last_30m_dir == -1)
+                     last_30m_dir == -1 and
+                     adx_is_trending)
         
         # 1H 刚变色？（最佳入场点标记）
         h1_just_changed = prev_1h_dir != last_1h_dir
@@ -526,12 +535,16 @@ class TradingStrategy:
             dema_short = f"1H收盘 {last_1h_close:.2f} < DEMA {last_1h_dema:.2f} ✅"
         else:
             dema_short = f"1H收盘 {last_1h_close:.2f} > DEMA {last_1h_dema:.2f} ❌"
+            
+        adx_trend_symbol = '✅' if adx_is_trending else '❌'
+        adx_info_line = f"• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f} (阈值: {ADX_THRESHOLD}) {adx_trend_symbol}\n"
         
         filter_info_long = (
             f"【过滤条件检查】\n"
             f"• 1H ST: {h1_st_color} {'✅' if last_1h_dir == 1 else '❌'}\n"
             f"• {dema_long}\n"
             f"• 30m ST: {h30m_st_color} {'✅' if last_30m_dir == 1 else '❌'}\n"
+            f"{adx_info_line}"
         )
         
         filter_info_short = (
@@ -539,13 +552,14 @@ class TradingStrategy:
             f"• 1H ST: {h1_st_color} {'✅' if last_1h_dir == -1 else '❌'}\n"
             f"• {dema_short}\n"
             f"• 30m ST: {h30m_st_color} {'✅' if last_30m_dir == -1 else '❌'}\n"
+            f"{adx_info_line}"
         )
         
         # ============ 无持仓: 检查开仓条件 ============
         if not has_position:
             if can_long:
                 pos_info = calculate_position_size(risk_amount, current_price, last_30m_st)
-                lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=True)
+                lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=True, risk_amount=risk_amount)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
                 
                 return finalize(TradeResult(
@@ -561,6 +575,10 @@ class TradingStrategy:
 
 【30分钟线】
 • 30m ST: {last_30m_st:.2f} 🟢 绿 ✅
+
+【ADX 过滤器】
+• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f}
+• 条件: ADX > {ADX_THRESHOLD} (启用: {'是' if USE_ADX else '否'}) ✅
 
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开多 {pos_info['qty']}张 @ {current_price:.2f}
@@ -579,13 +597,14 @@ class TradingStrategy:
                         "1h_st": last_1h_st,
                         "1h_close": last_1h_close,
                         "1h_dema": last_1h_dema,
-                        "30m_st": last_30m_st
+                        "30m_st": last_30m_st,
+                        "adx": last_adx
                     }
                 ))
             
             elif can_short:
                 pos_info = calculate_position_size(risk_amount, current_price, last_30m_st)
-                lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=False)
+                lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=False, risk_amount=risk_amount)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
                 
                 return finalize(TradeResult(
@@ -601,6 +620,10 @@ class TradingStrategy:
 
 【30分钟线】
 • 30m ST: {last_30m_st:.2f} 🔴 红 ✅
+
+【ADX 过滤器】
+• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f}
+• 条件: ADX > {ADX_THRESHOLD} (启用: {'是' if USE_ADX else '否'}) ✅
 
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开空 {pos_info['qty']}张 @ {current_price:.2f}
@@ -619,7 +642,8 @@ class TradingStrategy:
                         "1h_st": last_1h_st,
                         "1h_close": last_1h_close,
                         "1h_dema": last_1h_dema,
-                        "30m_st": last_30m_st
+                        "30m_st": last_30m_st,
+                        "adx": last_adx
                     }
                 ))
             
@@ -641,6 +665,10 @@ class TradingStrategy:
 【30分钟线】
 • 30m ST: {last_30m_st:.2f} {'🟢 绿' if last_30m_dir == 1 else '🔴 红'}
 
+━━━━━━━━━━ ADX 过滤 ━━━━━━━━━━
+• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f} (阈值: {ADX_THRESHOLD})
+• 状态: {'满足 ✅' if last_adx > ADX_THRESHOLD else '过滤中 ❌' if USE_ADX else '已关闭 ⚠️'}
+
 ━━━━━━━━━━ 账户状态 ━━━━━━━━━━
 • 本金: {equity:.2f}U
 • 风险额: {risk_amount:.2f}U""",
@@ -652,6 +680,7 @@ class TradingStrategy:
                         "1h_dema": last_1h_dema,
                         "30m_st": last_30m_st,
                         "30m_st_dir": last_30m_dir,
+                        "adx": last_adx,
                         "equity": equity
                     }
                 ))
@@ -674,7 +703,8 @@ class TradingStrategy:
             # 否则继续持有，检查止损调整
             return finalize(self._manage_long_position(
                 position, df_30m, df_1h, st_30m, st_1h,
-                last_1h_close, last_1h_dema, risk_amount, risk_info
+                last_1h_close, last_1h_dema, risk_amount, risk_info,
+                last_adx=last_adx
             ))
         
         # ============ 已持空仓 ============
@@ -695,14 +725,27 @@ class TradingStrategy:
             # 如果仍满足开空条件（已持空仓）→ 不提示，检查止损调整
             return finalize(self._manage_short_position(
                 position, df_30m, df_1h, st_30m, st_1h,
-                last_1h_close, last_1h_dema, risk_amount, risk_info
+                last_1h_close, last_1h_dema, risk_amount, risk_info,
+                last_adx=last_adx
             ))
         
         return finalize(TradeResult(action="none", message="未知状态"))
     
     def _manage_long_position(self, position, df_30m, df_1h, st_30m, st_1h,
-                               last_1h_close, last_1h_dema, risk_amount, risk_info) -> TradeResult:
+                               last_1h_close, last_1h_dema, risk_amount, risk_info,
+                               last_adx: float = None) -> TradeResult:
         """管理多仓（无状态，每次推导）"""
+        # 兼容性处理：如果没有传入 last_adx，则动态计算
+        if last_adx is None:
+            if 'high' in df_30m.columns and 'low' in df_30m.columns:
+                df_adx_source = df_30m if ADX_TIMEFRAME == "30m" else df_1h
+                adx_series = calculate_adx(df_adx_source, ADX_LENGTH)
+                last_adx = adx_series.iloc[-2]
+            else:
+                last_adx = 0.0
+                
+        adx_is_trending = (not USE_ADX) or (last_adx > ADX_THRESHOLD)
+
         current_price = df_30m['close'].iloc[-1]
         entry_price = position['entry_price']
         qty = abs(position['size'])
@@ -744,7 +787,8 @@ class TradingStrategy:
         if exit_signal:
             can_reverse = (last_1h_dir == -1 and 
                           last_1h_close < last_1h_dema and 
-                          last_30m_dir == -1)
+                          last_30m_dir == -1 and
+                          adx_is_trending)
             
             return self._close_with_reverse_check(
                 position, entry_price, current_price, 
@@ -752,12 +796,13 @@ class TradingStrategy:
                 can_reverse=can_reverse, reverse_direction="short",
                 reverse_stop=last_30m_st, risk_amount=risk_amount, risk_info=risk_info,
                 last_1h_close=last_1h_close, last_1h_dema=last_1h_dema,
-                last_1h_dir=last_1h_dir, last_30m_dir=last_30m_dir
+                last_1h_dir=last_1h_dir, last_30m_dir=last_30m_dir,
+                last_adx=last_adx
             )
 
         # 计算浮盈
         pnl = (current_price - entry_price) * qty * FACE_VALUE
-        lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=True)
+        lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=True, risk_amount=risk_amount)
 
         # 检查持仓状态变化 (阶段和止损)
         current_time = time.time()
@@ -853,8 +898,20 @@ class TradingStrategy:
 
     
     def _manage_short_position(self, position, df_30m, df_1h, st_30m, st_1h,
-                                last_1h_close, last_1h_dema, risk_amount, risk_info) -> TradeResult:
+                                last_1h_close, last_1h_dema, risk_amount, risk_info,
+                                last_adx: float = None) -> TradeResult:
         """管理空仓（无状态，每次推导）"""
+        # 兼容性处理：如果没有传入 last_adx，则动态计算
+        if last_adx is None:
+            if 'high' in df_30m.columns and 'low' in df_30m.columns:
+                df_adx_source = df_30m if ADX_TIMEFRAME == "30m" else df_1h
+                adx_series = calculate_adx(df_adx_source, ADX_LENGTH)
+                last_adx = adx_series.iloc[-2]
+            else:
+                last_adx = 0.0
+                
+        adx_is_trending = (not USE_ADX) or (last_adx > ADX_THRESHOLD)
+
         current_price = df_30m['close'].iloc[-1]
         entry_price = position['entry_price']
         qty = abs(position['size'])
@@ -896,7 +953,8 @@ class TradingStrategy:
         if exit_signal:
             can_reverse = (last_1h_dir == 1 and 
                           last_1h_close > last_1h_dema and 
-                          last_30m_dir == 1)
+                          last_30m_dir == 1 and
+                          adx_is_trending)
 
             return self._close_with_reverse_check(
                 position, entry_price, current_price,
@@ -904,12 +962,13 @@ class TradingStrategy:
                 can_reverse=can_reverse, reverse_direction="long",
                 reverse_stop=last_30m_st, risk_amount=risk_amount, risk_info=risk_info,
                 last_1h_close=last_1h_close, last_1h_dema=last_1h_dema,
-                last_1h_dir=last_1h_dir, last_30m_dir=last_30m_dir
+                last_1h_dir=last_1h_dir, last_30m_dir=last_30m_dir,
+                last_adx=last_adx
             )
 
         # 计算浮盈
         pnl = (entry_price - current_price) * qty * FACE_VALUE
-        lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=False)
+        lock_threshold = calculate_lock_threshold(entry_price, qty, is_long=False, risk_amount=risk_amount)
 
         # 检查持仓状态变化 (阶段和止损)
         current_time = time.time()
@@ -1010,7 +1069,8 @@ class TradingStrategy:
                                    can_reverse: bool, reverse_direction: str,
                                    reverse_stop: float, risk_amount: float, risk_info: str,
                                    last_1h_close: float, last_1h_dema: float,
-                                   last_1h_dir: int, last_30m_dir: int) -> TradeResult:
+                                   last_1h_dir: int, last_30m_dir: int,
+                                   last_adx: float = 0.0) -> TradeResult:
         """平仓并检查反手条件"""
         qty = abs(position['size'])
         if is_long:
@@ -1047,12 +1107,14 @@ class TradingStrategy:
             pos_info = calculate_position_size(risk_amount, current_price, reverse_stop)
             lock_threshold = calculate_lock_threshold(
                 current_price, pos_info['qty'], 
-                is_long=(reverse_direction == "long")
+                is_long=(reverse_direction == "long"),
+                risk_amount=risk_amount
             )
             
             # 构建过滤条件信息 - 显示真实数据
             h1_st_color = "🟢绿" if last_1h_dir == 1 else "🔴红"
             h30m_st_color = "🟢绿" if last_30m_dir == 1 else "🔴红"
+            adx_info = f"• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f} ✅\n"
             
             if reverse_direction == "long":
                 filter_info = (
@@ -1060,6 +1122,7 @@ class TradingStrategy:
                     f"• 1H ST: {h1_st_color} ✅\n"
                     f"• 1H收盘 {last_1h_close:.2f} > DEMA {last_1h_dema:.2f} ✅\n"
                     f"• 30m ST: {h30m_st_color} ✅\n"
+                    f"{adx_info}"
                 )
             else:
                 filter_info = (
@@ -1067,6 +1130,7 @@ class TradingStrategy:
                     f"• 1H ST: {h1_st_color} ✅\n"
                     f"• 1H收盘 {last_1h_close:.2f} < DEMA {last_1h_dema:.2f} ✅\n"
                     f"• 30m ST: {h30m_st_color} ✅\n"
+                    f"{adx_info}"
                 )
             
             reverse_msg = (
