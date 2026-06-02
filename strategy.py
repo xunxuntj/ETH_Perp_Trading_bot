@@ -384,6 +384,47 @@ class TradingStrategy:
         # 检查持仓状态（无缓存依赖）
         has_api_position = position is not None and position.get('size', 0) != 0
 
+        # ==== 风控与冷静期对账逻辑 ====
+        # 检测本地状态里记录的持仓是否已在交易所被平仓（例如触及交易所止损条件单）
+        try:
+            pos_state = load_position_state()
+            for dir_key in ["long", "short"]:
+                if dir_key in pos_state:
+                    still_exists = False
+                    if has_api_position and position is not None:
+                        if dir_key == "long" and position.get('size', 0) > 0:
+                            still_exists = True
+                        elif dir_key == "short" and position.get('size', 0) < 0:
+                            still_exists = True
+                    
+                    if not still_exists:
+                        # 仓位已平仓（多半是触及交易所止损触发单）
+                        print(f"\n[RECONCILE] 检测到本地记录的 {dir_key} 仓位已在交易所平仓。开始提取平仓信息...")
+                        
+                        # 尝试从平仓历史获取真实 PnL 和平仓时间
+                        try:
+                            closes = self.client.get_position_closes(self.contract, limit=5)
+                            if closes:
+                                # 寻找最符合当前平仓的记录 (一般为最近的一笔)
+                                last_close = closes[0]
+                                pnl = last_close.get('pnl', 0.0)
+                                close_time = datetime.fromtimestamp(last_close.get('time', 0), tz=timezone.utc)
+                                
+                                from cooldown import record_trade_result
+                                record_trade_result(pnl, close_time)
+                                print(f"[RECONCILE] 成功记录已平仓交易：PnL={pnl:+.2f}U, 时间={close_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                            else:
+                                print("[RECONCILE] 未获取到交易所平仓历史记录")
+                        except Exception as close_err:
+                            print(f"[RECONCILE ERROR] 获取或记录平仓历史失败: {close_err}")
+                        
+                        # 清除本地持仓状态
+                        clear_position_state(dir_key)
+                        print(f"[RECONCILE] 已清除本地 {dir_key} 仓位状态。")
+        except Exception as state_err:
+            print(f"[RECONCILE ERROR] 读取或处理本地持仓状态失败: {state_err}")
+
+
         # 计算账户本金（用于显示和风控判断）:
         # gate_client.get_account() 返回的 'total' 已经是处理后的结果:
         #   优先级: cross_available (全仓) > available (隔离) > total > equity
@@ -983,6 +1024,10 @@ class TradingStrategy:
         else:
             self.state.consecutive_losses = 0
         
+        # 记录交易结果（用于冷静期计算）
+        from cooldown import record_trade_result
+        record_trade_result(pnl)
+        
         direction = "多" if is_long else "空"
         
         # 构建平仓消息
@@ -1088,6 +1133,10 @@ class TradingStrategy:
             self.state.consecutive_losses += 1
         else:
             self.state.consecutive_losses = 0
+        
+        # 记录交易结果（用于冷静期计算）
+        from cooldown import record_trade_result
+        record_trade_result(pnl)
         
         direction = "多" if is_long else "空"
         direction_key = "long" if is_long else "short"
