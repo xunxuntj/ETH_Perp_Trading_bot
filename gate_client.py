@@ -720,7 +720,7 @@ class GateClient:
         """
         import json
         
-        url_path = "/api/v4/futures/usdt/positions/ETH_USDT/margin"
+        url_path = f"/api/v4/futures/usdt/positions/{contract}/margin"
         full_url = f"{BASE_URL}/futures/usdt/positions/{contract}/margin"
         
         body = json.dumps({"change": str(change)})

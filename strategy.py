@@ -17,7 +17,7 @@ from config import (
     SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER, DEMA_PERIOD,
     MAX_CONSECUTIVE_LOSSES, STATE_FILE,
     LEVERAGE, CIRCUIT_BREAKER_EQUITY, get_risk_amount,
-    LOCK_PROFIT_BUFFER
+    LOCK_PROFIT_BUFFER, FACE_VALUE
 )
 from position_state import update_position_state, clear_position_state, load_position_state
 from indicators import calculate_supertrend, calculate_dema
@@ -48,8 +48,7 @@ class Position:
     last_processed_30m_bar_iso: str = ""  # 去重: 最近一次已处理的30m已收盘K线时间
 
 
-# 合约面值（每张对应的 ETH），用于仓位/盈亏计算。测试套件使用 0.01
-FACE_VALUE = 0.01
+# 合约面值（每张对应的代币数量），用于仓位/盈亏计算。由 config 模块提供
 
 
 @dataclass

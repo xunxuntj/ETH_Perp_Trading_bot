@@ -10,8 +10,24 @@ GATE_API_KEY = os.environ.get("GATE_API_KEY", "")
 GATE_API_SECRET = os.environ.get("GATE_API_SECRET", "")
 
 # ============ 交易对配置 ============
-SYMBOL = "ETH_USDT"
-CONTRACT = "ETH_USDT"  # 永续合约
+SYMBOL = os.environ.get("SYMBOL", "ETH_USDT")
+CONTRACT = os.environ.get("CONTRACT", SYMBOL)  # 永续合约
+
+# 合约面值 (不同币种面值不同，可根据 CONTRACT 自动匹配默认值，或通过环境变量覆盖)
+def _get_default_face_value(contract: str) -> float:
+    c_upper = contract.upper()
+    if "ETH" in c_upper:
+        return 0.01
+    elif "BTC" in c_upper:
+        return 0.0001
+    elif "SOL" in c_upper:
+        return 1.0
+    elif "DOGE" in c_upper:
+        return 10.0
+    return 0.01
+
+_default_fv = _get_default_face_value(CONTRACT)
+FACE_VALUE = float(os.environ.get("FACE_VALUE", str(_default_fv)))
 
 # ============ 指标参数 ============
 SUPERTREND_PERIOD = 10
@@ -44,7 +60,10 @@ MAX_CONSECUTIVE_LOSSES = int(os.environ.get("MAX_CONSECUTIVE_LOSSES", "3"))
 LOCK_PROFIT_BUFFER = float(os.environ.get("LOCK_PROFIT_BUFFER", "1"))  # 1 USDT
 
 # ============ 状态文件 ============
-STATE_FILE = os.environ.get("STATE_FILE", "trading_state.json")
+if CONTRACT == "ETH_USDT" and not os.environ.get("STATE_FILE"):
+    STATE_FILE = "trading_state.json"
+else:
+    STATE_FILE = os.environ.get("STATE_FILE", f"trading_state_{CONTRACT.lower()}.json")
 
 # ============ 自动化交易开关 ============
 # 默认关闭（仅发信号，不执行交易），可通过环境变量开启

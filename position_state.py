@@ -9,7 +9,12 @@ from typing import Optional, Tuple
 from dataclasses import dataclass
 
 
-POSITION_STATE_FILE = "position_state.json"
+from config import CONTRACT
+
+if CONTRACT == "ETH_USDT":
+    POSITION_STATE_FILE = "position_state.json"
+else:
+    POSITION_STATE_FILE = f"position_state_{CONTRACT.lower()}.json"
 
 
 @dataclass

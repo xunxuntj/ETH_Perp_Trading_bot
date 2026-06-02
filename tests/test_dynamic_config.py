@@ -141,3 +141,64 @@ def test_get_account_cross_margin(monkeypatch):
     assert account["total"] == 710.0  # 650 + 50 + 10
     assert account["available"] == 325.0
     assert account["unrealised_pnl"] == 0.0
+
+
+def test_custom_symbol_and_face_value_resolution(monkeypatch):
+    import config
+    import position_state
+    import cooldown
+    import importlib
+
+    # 1. Test SOL
+    monkeypatch.setenv("SYMBOL", "SOL_USDT")
+    monkeypatch.delenv("FACE_VALUE", raising=False)
+    importlib.reload(config)
+    importlib.reload(position_state)
+    importlib.reload(cooldown)
+    assert config.SYMBOL == "SOL_USDT"
+    assert config.CONTRACT == "SOL_USDT"
+    assert config.FACE_VALUE == 1.0
+    assert position_state.POSITION_STATE_FILE == "position_state_sol_usdt.json"
+    assert cooldown.COOLDOWN_STATE_FILE == "cooldown_state_sol_usdt.json"
+    assert cooldown.COOLDOWN_NOTIFY_STATE_FILE == "cooldown_notify_state_sol_usdt.json"
+
+    # 2. Test DOGE
+    monkeypatch.setenv("SYMBOL", "DOGE_USDT")
+    monkeypatch.delenv("FACE_VALUE", raising=False)
+    importlib.reload(config)
+    importlib.reload(position_state)
+    importlib.reload(cooldown)
+    assert config.SYMBOL == "DOGE_USDT"
+    assert config.CONTRACT == "DOGE_USDT"
+    assert config.FACE_VALUE == 10.0
+    assert position_state.POSITION_STATE_FILE == "position_state_doge_usdt.json"
+
+    # 3. Test BTC
+    monkeypatch.setenv("SYMBOL", "BTC_USDT")
+    monkeypatch.delenv("FACE_VALUE", raising=False)
+    importlib.reload(config)
+    assert config.SYMBOL == "BTC_USDT"
+    assert config.CONTRACT == "BTC_USDT"
+    assert config.FACE_VALUE == 0.0001
+    assert config.STATE_FILE == "trading_state_btc_usdt.json"
+
+    # 4. Test overrides
+    monkeypatch.setenv("SYMBOL", "SOL_USDT")
+    monkeypatch.setenv("FACE_VALUE", "5.0")
+    importlib.reload(config)
+    assert config.FACE_VALUE == 5.0
+
+    # 5. Test ETH (Default / backward compatibility)
+    monkeypatch.setenv("SYMBOL", "ETH_USDT")
+    monkeypatch.delenv("FACE_VALUE", raising=False)
+    monkeypatch.delenv("STATE_FILE", raising=False)
+    importlib.reload(config)
+    importlib.reload(position_state)
+    importlib.reload(cooldown)
+    assert config.SYMBOL == "ETH_USDT"
+    assert config.FACE_VALUE == 0.01
+    assert config.STATE_FILE == "trading_state.json"
+    assert position_state.POSITION_STATE_FILE == "position_state.json"
+    assert cooldown.COOLDOWN_STATE_FILE == "cooldown_state.json"
+    assert cooldown.COOLDOWN_NOTIFY_STATE_FILE == "cooldown_notify_state.json"
+

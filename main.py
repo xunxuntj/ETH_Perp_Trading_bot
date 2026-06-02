@@ -136,7 +136,7 @@ def main():
         # GitHub Actions summary
         if os.environ.get("GITHUB_STEP_SUMMARY"):
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
-                f.write(f"## ETH Trading Signal\n\n")
+                f.write(f"## {CONTRACT} Trading Signal\n\n")
                 f.write(f"**Time:** {now.strftime('%Y-%m-%d %H:%M UTC')}\n\n")
                 f.write(f"**Mode:** {'🤖 Auto Trading' if ENABLE_AUTO_TRADING else '🔔 Signal Only'}\n\n")
                 f.write(f"**Action:** `{strategy_action}`\n\n")
@@ -146,7 +146,8 @@ def main():
         # 保存执行日志（生产环境）
         if ENABLE_AUTO_TRADING and trade_executed:
             try:
-                flow.save_execution_log("execution_log.json")
+                log_file = "execution_log.json" if CONTRACT == "ETH_USDT" else f"execution_log_{CONTRACT.lower()}.json"
+                flow.save_execution_log(log_file)
             except Exception as e:
                 print(f"⚠️ 保存执行日志失败: {str(e)}")
         
@@ -160,7 +161,7 @@ def main():
         traceback.print_exc()
         
         # 错误也发送通知
-        send_telegram_message(f"⚠️ ETH交易脚本错误\n\n{error_msg}")
+        send_telegram_message(f"⚠️ {CONTRACT}交易脚本错误\n\n{error_msg}")
         sys.exit(1)
 
 

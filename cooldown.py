@@ -49,8 +49,14 @@ class CooldownStatus:
 
 
 # 冷静期通知状态文件
-COOLDOWN_NOTIFY_STATE_FILE = "cooldown_notify_state.json"
-COOLDOWN_STATE_FILE = "cooldown_state.json"
+from config import CONTRACT
+
+if CONTRACT == "ETH_USDT":
+    COOLDOWN_STATE_FILE = "cooldown_state.json"
+    COOLDOWN_NOTIFY_STATE_FILE = "cooldown_notify_state.json"
+else:
+    COOLDOWN_STATE_FILE = f"cooldown_state_{CONTRACT.lower()}.json"
+    COOLDOWN_NOTIFY_STATE_FILE = f"cooldown_notify_state_{CONTRACT.lower()}.json"
 
 
 def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
