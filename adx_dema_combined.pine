@@ -14,6 +14,7 @@ show_dema = input.bool(true, title="Show DEMA Line", group=gp_dema)
 gp_adx = "=== ADX Settings ==="
 adx_len = input.int(14, minval=1, title="ADX Length", group=gp_adx)
 adx_threshold = input.int(20, minval=1, title="ADX Trend Strength Threshold", group=gp_adx, tooltip="Values above this threshold indicate a strong trend (typically 20 or 25).")
+adx_tf = input.timeframe("30", "ADX Timeframe", options=["30", "60"], group=gp_adx, tooltip="Select ADX calculation timeframe: 30 (30 minutes), 60 (1 hour).")
 color_bg_low_adx = input.bool(false, title="Highlight Low ADX Zones (Choppy Markets)", group=gp_adx, tooltip="Colors the background when ADX is below the threshold.")
 
 // HUD Dashboard Settings
@@ -34,8 +35,13 @@ dema(src, length) =>
 
 dema_val = dema(close, dema_len)
 
-// Average Directional Index (ADX) & Directional Movement (+DI, -DI)
-[plus_di, minus_di, adx_val] = ta.dmi(adx_len, adx_len)
+// Helper function to calculate DMI/ADX
+f_dmi(len) =>
+    [p_di, m_di, adx] = ta.dmi(len, len)
+    [p_di, m_di, adx]
+
+// Calculate ADX & Directional Movement on the requested timeframe
+[plus_di, minus_di, adx_val] = request.security(syminfo.tickerid, adx_tf, f_dmi(adx_len), barmerge.gaps_off, barmerge.lookahead_off)
 
 // Trend strength & direction conditions
 is_trending = adx_val >= adx_threshold
@@ -93,7 +99,8 @@ if show_hud and barstate.islast
     // Row 1: ADX (Trend Strength)
     adx_status_text = is_trending ? "Trending (" + str.tostring(adx_val, "#.#") + ")" : "Choppy (" + str.tostring(adx_val, "#.#") + ")"
     adx_status_color = is_trending ? color.green : color.orange
-    table.cell(hud, 0, 1, "ADX (" + str.tostring(adx_len) + ")", text_color=color.white, text_size=t_sz)
+    tf_suffix = adx_tf == "60" ? "1H" : adx_tf == "30" ? "30m" : adx_tf
+    table.cell(hud, 0, 1, "ADX (" + str.tostring(adx_len) + ") [" + tf_suffix + "]", text_color=color.white, text_size=t_sz)
     table.cell(hud, 1, 1, adx_status_text, text_color=adx_status_color, text_size=t_sz)
     
     // Row 2: DMI (+DI vs -DI)
