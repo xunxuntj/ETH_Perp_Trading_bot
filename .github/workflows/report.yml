@@ -1,0 +1,56 @@
+name: Generate Strategy Evaluation Report
+
+on:
+  schedule:
+    # 每天北京时间早上 08:08 自动执行（对应 UTC 00:08）
+    - cron: '8 0 * * *'
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: '评估的合约交易对（留空则使用默认配置中的 SYMBOL）'
+        required: false
+        default: ''
+      days:
+        description: '评估的天数天数（留空则自动计算从 2026年6月2日 到现在的实际天数）'
+        required: false
+        default: ''
+
+jobs:
+  build-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install numpy
+
+      - name: Run evaluation report generator
+        env:
+          # API 凭证 (必需)
+          GATE_API_KEY: ${{ secrets.GATE_API_KEY }}
+          GATE_API_SECRET: ${{ secrets.GATE_API_SECRET }}
+          
+          # Telegram 凭证 (必需)
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          
+          # 报告参数传递 (可空，脚本自适应默认值)
+          REPORT_SYMBOL: ${{ github.event.inputs.symbol }}
+          REPORT_DAYS: ${{ github.event.inputs.days }}
+          
+          # AI 诊断配置 (可选，GitHub Secrets 选填)
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_API_URL: ${{ secrets.AI_API_URL }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+        run: python generate_report.py

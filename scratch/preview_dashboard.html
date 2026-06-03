@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate.io 交易策略评估面板 (预览)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            bg: '#0e1117',
+                            card: '#1e222b',
+                            primary: '#00cfb4',
+                            danger: '#ff3e60',
+                            textMuted: '#8a99ad'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0e1117;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        /* 隐藏滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0e1117;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #232733;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+    <!-- 顶部导航栏 -->
+    <header class="border-b border-gray-800 bg-brand-card px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">📊</span>
+            <div>
+                <h1 class="text-lg font-bold tracking-wider text-white">Gate.io 自动化交易策略评估系统</h1>
+                <p class="text-xs text-brand-textMuted">通过平仓记录提取实盘数据，多维度评估交易策略收益、风险与效率</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+                <span class="w-1.5 h-1.5 mr-1.5 bg-green-400 rounded-full animate-ping"></span>
+                本地预览模式
+            </span>
+        </div>
+    </header>
+
+    <!-- 主体内容 -->
+    <div class="flex flex-1 flex-col lg:flex-row">
+        <!-- 侧边栏配置区 -->
+        <aside class="w-full lg:w-80 bg-brand-card/50 border-r border-gray-800 p-6 flex flex-col space-y-6">
+            <div>
+                <h3 class="text-sm font-semibold text-brand-textMuted uppercase tracking-wider mb-3">🛠️ 参数配置</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-brand-textMuted mb-1">GATE_API_KEY</label>
+                        <input type="password" value="••••••••••••••••••••••••" disabled class="w-full bg-brand-bg border border-gray-700 rounded px-3 py-2 text-sm text-gray-400 focus:outline-none" />
+                    </div>
+                    <div>
+                        <label class="block text-xs text-brand-textMuted mb-1">GATE_API_SECRET</label>
+                        <input type="password" value="••••••••••••••••••••••••" disabled class="w-full bg-brand-bg border border-gray-700 rounded px-3 py-2 text-sm text-gray-400 focus:outline-none" />
+                    </div>
+                </div>
+            </div>
+
+            <hr class="border-gray-800">
+
+            <div>
+                <h3 class="text-sm font-semibold text-brand-textMuted uppercase tracking-wider mb-3">📈 评估范围</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-brand-textMuted mb-1">合约交易对</label>
+                        <select id="symbolSelect" class="w-full bg-brand-bg border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary">
+                            <option value="SOL_USDT">SOL_USDT (当前运行)</option>
+                            <option value="ETH_USDT">ETH_USDT</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-brand-textMuted mb-1">快速选择时间段</label>
+                        <select id="timeSelect" class="w-full bg-brand-bg border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary">
+                            <option value="7">最近 7 天</option>
+                            <option value="30" selected>最近 30 天</option>
+                            <option value="90">最近 90 天</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="border-gray-800">
+
+            <div>
+                <h3 class="text-sm font-semibold text-brand-textMuted uppercase tracking-wider mb-3">🤖 智能诊断配置</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-brand-textMuted mb-1">AI 服务商</label>
+                        <select id="aiSelect" class="w-full bg-brand-bg border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-primary">
+                            <option value="none">无 (仅使用规则诊断)</option>
+                            <option value="openai" selected>OpenAI (模拟激活)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <button id="runBtn" class="w-full bg-brand-primary hover:bg-opacity-90 text-brand-bg font-bold py-2.5 px-4 rounded text-sm transition duration-200">
+                🚀 运行评估
+            </button>
+        </aside>
+
+        <!-- 主展示区 -->
+        <main class="flex-1 p-6 space-y-6 overflow-y-auto">
+            <!-- KPI 卡片 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- KPI 1 -->
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
+                    <div class="text-xs text-brand-textMuted font-medium">累计净利润 (扣手续费)</div>
+                    <div id="kpiNetProfit" class="text-2xl font-bold mt-2 text-white">+342.50 U</div>
+                    <div id="kpiFee" class="text-xs text-brand-primary mt-1">手续费已扣除: 24.80 U</div>
+                </div>
+                <!-- KPI 2 -->
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
+                    <div class="text-xs text-brand-textMuted font-medium">策略胜率 (Win Rate)</div>
+                    <div id="kpiWinRate" class="text-2xl font-bold mt-2 text-white">42.3%</div>
+                    <div id="kpiTradesCount" class="text-xs text-brand-textMuted mt-1">总笔数: 52 (赢: 22 | 输: 30)</div>
+                </div>
+                <!-- KPI 3 -->
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
+                    <div class="text-xs text-brand-textMuted font-medium">获利因子 (Profit Factor)</div>
+                    <div id="kpiPF" class="text-2xl font-bold mt-2 text-white">1.82</div>
+                    <div id="kpiRatioWL" class="text-xs text-brand-primary mt-1">盈亏比 (Avg W/L): 2.48</div>
+                </div>
+                <!-- KPI 4 -->
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
+                    <div class="text-xs text-brand-textMuted font-medium">最大回撤率 (Max DD)</div>
+                    <div id="kpiMaxDD" class="text-2xl font-bold mt-2 text-white">-6.4%</div>
+                    <div id="kpiSharpe" class="text-xs text-brand-primary mt-1">估算夏普比率: 1.65</div>
+                </div>
+            </div>
+
+            <!-- 图表与统计特征 -->
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <!-- 折线图 -->
+                <div class="xl:col-span-2 bg-brand-card rounded-lg p-5 border border-gray-800">
+                    <h3 class="text-base font-bold text-white mb-4">📈 累计盈亏曲线图 (USDT)</h3>
+                    <div class="h-80 relative">
+                        <canvas id="profitChart"></canvas>
+                    </div>
+                </div>
+                <!-- 统计表 -->
+                <div class="bg-brand-card rounded-lg p-5 border border-gray-800 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-base font-bold text-white mb-4">💡 交易分布特征</h3>
+                        <table class="w-full text-sm">
+                            <tbody>
+                                <tr class="border-b border-gray-800">
+                                    <td class="py-2.5 text-brand-textMuted">单笔最大盈利</td>
+                                    <td id="maxWin" class="py-2.5 text-right font-semibold text-white">125.40 U</td>
+                                </tr>
+                                <tr class="border-b border-gray-800">
+                                    <td class="py-2.5 text-brand-textMuted">单笔最大亏损</td>
+                                    <td id="maxLoss" class="py-2.5 text-right font-semibold text-white">-35.20 U</td>
+                                </tr>
+                                <tr class="border-b border-gray-800">
+                                    <td class="py-2.5 text-brand-textMuted">平均每笔盈利</td>
+                                    <td id="avgWin" class="py-2.5 text-right font-semibold text-brand-primary">48.20 U</td>
+                                </tr>
+                                <tr class="border-b border-gray-800">
+                                    <td class="py-2.5 text-brand-textMuted">平均每笔亏损</td>
+                                    <td id="avgLoss" class="py-2.5 text-right font-semibold text-brand-danger">-19.43 U</td>
+                                </tr>
+                                <tr class="border-b border-gray-800">
+                                    <td class="py-2.5 text-brand-textMuted">每笔平均净损益</td>
+                                    <td id="avgNet" class="py-2.5 text-right font-semibold text-white">6.59 U</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-gray-800">
+                        <div class="text-xs text-brand-textMuted mb-2">多空仓位分布</div>
+                        <div class="flex items-center space-x-4">
+                            <div class="flex-1">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span>多仓平仓次数</span>
+                                    <span>28 次</span>
+                                </div>
+                                <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-brand-primary h-full" style="width: 54%"></div>
+                                </div>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span>空仓平仓次数</span>
+                                    <span>24 次</span>
+                                </div>
+                                <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-brand-danger h-full" style="width: 46%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 诊断与深度分析报告 -->
+            <div class="bg-brand-card rounded-lg p-6 border border-gray-800 space-y-4">
+                <h3 class="text-lg font-bold text-white">📝 策略诊断与深度分析报告</h3>
+                <div class="prose prose-invert max-w-none text-sm text-gray-300 space-y-4">
+                    <div>
+                        <h4 class="text-base font-semibold text-brand-primary mb-2">📊 策略评估诊断报告 (规则引擎)</h4>
+                        <p id="ruleEngineReport">
+                            🟢 **总体表现**: 策略在评估期内实现**盈利 (+342.50 USDT)**。<br>
+                            该策略表现为**低胜率、高盈亏比**的特征，典型代表为**趋势跟踪策略**（如项目配置的 ADX + SuperTrend 组合）。这类策略的特点是‘输小赢大’，靠少数大趋势盈利，震荡期会有连续的小幅亏损，属于正常现象。
+                        </p>
+                    </div>
+                    <div class="border-t border-gray-800 pt-4">
+                        <h4 class="text-base font-semibold text-brand-primary mb-2">🛡️ 风控与诊断建议</h4>
+                        <ul id="riskAdviceList" class="list-disc pl-5 space-y-1 text-gray-300">
+                            <li>✅ **回撤控制**: 最大回撤控制在 **6.40%**，处于健康水平，系统杠杆（10x）匹配良好。</li>
+                            <li>✅ **手续费占比**: 手续费共计 **24.80 USDT**，损耗在合理区间，策略信号过滤有效，无过度交易磨损。</li>
+                            <li>🔄 **策略版本对比**: 检测到此期间运行的策略版本为 `t-v9.6-exec`。</li>
+                        </ul>
+                    </div>
+                    <div id="aiReportBox" class="border-t border-gray-800 pt-4">
+                        <h4 class="text-base font-semibold text-purple-400 mb-2">🤖 AI 智能诊断 (大模型深度分析)</h4>
+                        <p id="aiReportText" class="italic text-gray-400">
+                            "根据数据分析，当前策略展示了非常优秀的风险控制水平（最大回撤 6.4%），且盈亏比达到 2.48，表明入场信号具有较高的倾向性和高爆发力。尽管胜率仅为 42.3%，但依靠极佳的盈亏比依然实现了稳定的累积收益。策略的手续费占比较低，代表 SuperTrend 结合 ADX 起到了很好的震荡过滤作用。建议继续维持当前 10x 杠杆。当面临剧烈的单边震荡行情时，可适当下调风险因子以保护利润。"
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据明细表格 -->
+            <div class="bg-brand-card rounded-lg p-5 border border-gray-800">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-base font-bold text-white">🗂️ 平仓交易历史明细 (最近 5 笔示范)</h3>
+                    <div class="flex space-x-2">
+                        <span class="text-xs text-brand-textMuted bg-brand-bg px-2.5 py-1 rounded border border-gray-700">演示筛选: 全部</span>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs uppercase bg-brand-bg text-brand-textMuted border-b border-gray-800">
+                            <tr>
+                                <th class="px-4 py-3">平仓时间</th>
+                                <th class="px-4 py-3">平仓方向</th>
+                                <th class="px-4 py-3">合约盈亏(U)</th>
+                                <th class="px-4 py-3">手续费(U)</th>
+                                <th class="px-4 py-3 text-right">净盈亏(U)</th>
+                                <th class="px-4 py-3">建仓均价</th>
+                                <th class="px-4 py-3">订单备注/版本</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradesTableBody" class="divide-y divide-gray-800 text-gray-300">
+                            <tr class="hover:bg-brand-bg/50">
+                                <td class="px-4 py-3">2026-06-03 14:30:12</td>
+                                <td class="px-4 py-3"><span class="text-brand-primary">Long (平多)</span></td>
+                                <td class="px-4 py-3 text-brand-primary">+82.40</td>
+                                <td class="px-4 py-3">-1.20</td>
+                                <td class="px-4 py-3 text-right text-brand-primary font-bold">+81.20</td>
+                                <td class="px-4 py-3">18.450</td>
+                                <td class="px-4 py-3 text-xs text-gray-400">t-v9.6-exec</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/50">
+                                <td class="px-4 py-3">2026-06-03 11:00:45</td>
+                                <td class="px-4 py-3"><span class="text-brand-danger">Short (平空)</span></td>
+                                <td class="px-4 py-3 text-brand-danger">-12.50</td>
+                                <td class="px-4 py-3">-0.85</td>
+                                <td class="px-4 py-3 text-right text-brand-danger font-bold">-13.35</td>
+                                <td class="px-4 py-3">18.210</td>
+                                <td class="px-4 py-3 text-xs text-gray-400">t-v9.6-exec</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/50">
+                                <td class="px-4 py-3">2026-06-02 23:15:02</td>
+                                <td class="px-4 py-3"><span class="text-brand-primary">Long (平多)</span></td>
+                                <td class="px-4 py-3 text-brand-primary">+125.40</td>
+                                <td class="px-4 py-3">-1.50</td>
+                                <td class="px-4 py-3 text-right text-brand-primary font-bold">+123.90</td>
+                                <td class="px-4 py-3">17.950</td>
+                                <td class="px-4 py-3 text-xs text-gray-400">t-v9.6-exec</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/50">
+                                <td class="px-4 py-3">2026-06-02 08:30:19</td>
+                                <td class="px-4 py-3"><span class="text-brand-primary">Long (平多)</span></td>
+                                <td class="px-4 py-3 text-brand-danger">-8.20</td>
+                                <td class="px-4 py-3">-0.60</td>
+                                <td class="px-4 py-3 text-right text-brand-danger font-bold">-8.80</td>
+                                <td class="px-4 py-3">18.120</td>
+                                <td class="px-4 py-3 text-xs text-gray-400">t-v9.6-exec</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/50">
+                                <td class="px-4 py-3">2026-06-01 19:45:00</td>
+                                <td class="px-4 py-3"><span class="text-brand-danger">Short (平空)</span></td>
+                                <td class="px-4 py-3 text-brand-primary">+65.80</td>
+                                <td class="px-4 py-3">-1.10</td>
+                                <td class="px-4 py-3 text-right text-brand-primary font-bold">+64.70</td>
+                                <td class="px-4 py-3">18.330</td>
+                                <td class="px-4 py-3 text-xs text-gray-400">t-v9.6-exec</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="border-t border-gray-800 bg-brand-card/30 text-center py-4 text-xs text-brand-textMuted">
+        &copy; 2026 ETH Perp Trading Bot Strategy Evaluator. 本页面为静态交互预览页面，双击本地即可随时查看界面结构。
+    </footer>
+
+    <!-- 图表交互 JS 脚本 -->
+    <script>
+        let myChart = null;
+
+        // 初始化图表数据
+        function initChart(labels, data) {
+            const ctx = document.getElementById('profitChart').getContext('2d');
+            if (myChart) {
+                myChart.destroy();
+            }
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '累计净盈亏 (USDT)',
+                        data: data,
+                        borderColor: '#00cfb4',
+                        backgroundColor: 'rgba(0, 207, 180, 0.05)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#00cfb4',
+                        pointBorderColor: '#1e222b',
+                        pointHoverRadius: 6,
+                        tension: 0.15,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: '#232733'
+                            },
+                            ticks: {
+                                color: '#8a99ad',
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: '#232733'
+                            },
+                            ticks: {
+                                color: '#8a99ad',
+                                callback: function(value) {
+                                    return value + ' U';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Mock 数据库
+        const mockDatabase = {
+            SOL_USDT: {
+                "30": {
+                    netProfit: "+342.50 U",
+                    fee: "手续费已扣除: 24.80 U",
+                    winRate: "42.3%",
+                    tradesCount: "总笔数: 52 (赢: 22 | 输: 30)",
+                    pf: "1.82",
+                    wl: "盈亏比 (Avg W/L): 2.48",
+                    maxDD: "-6.4%",
+                    sharpe: "估算夏普比率: 1.65",
+                    maxWin: "125.40 U",
+                    maxLoss: "-35.20 U",
+                    avgWin: "48.20 U",
+                    avgLoss: "-19.43 U",
+                    avgNet: "6.59 U",
+                    labels: ["05-05", "05-10", "05-15", "05-20", "05-25", "06-01", "06-03"],
+                    data: [0, 45.2, 32.1, 110.5, 92.3, 275.4, 342.5],
+                    ruleText: "🟢 **总体表现**: 策略在评估期内实现**盈利 (+342.50 USDT)**。<br>该策略表现为**低胜率、高盈亏比**的特征，典型代表为**趋势跟踪策略**（如项目配置的 ADX + SuperTrend 组合）。这类策略的特点是‘输小赢大’，靠少数大趋势盈利，震荡期会有连续的小幅亏损，属于正常现象。",
+                    riskAdvice: [
+                        "✅ **回撤控制**: 最大回撤控制在 **6.40%**，处于健康水平，系统杠杆（10x）配置良好。",
+                        "✅ **手续费占比**: 手续费共计 **24.80 USDT**，损耗在合理区间，策略信号过滤有效，无过度交易磨损。",
+                        "🔄 **策略版本对比**: 检测到此期间运行的策略版本为 `t-v9.6-exec`。"
+                    ],
+                    aiText: '"根据数据分析，当前策略展示了非常优秀的风险控制水平（最大回撤 6.4%），且盈亏比达到 2.48，表明入场信号具有较高的倾向性和高爆发力。尽管胜率仅为 42.3%，但依靠极佳的盈亏比依然实现了稳定的累积收益。策略的手续费占比较低，代表 SuperTrend 结合 ADX 起到了很好的震荡过滤作用。建议继续维持当前 10x 杠杆。当面临剧烈的单边震荡行情时，可适当下调风险因子以保护利润。"'
+                },
+                "7": {
+                    netProfit: "+156.20 U",
+                    fee: "手续费已扣除: 8.50 U",
+                    winRate: "50.0%",
+                    tradesCount: "总笔数: 12 (赢: 6 | 输: 6)",
+                    pf: "2.10",
+                    wl: "盈亏比 (Avg W/L): 2.10",
+                    maxDD: "-2.3%",
+                    sharpe: "估算夏普比率: 2.20",
+                    maxWin: "82.40 U",
+                    maxLoss: "-12.50 U",
+                    avgWin: "38.50 U",
+                    avgLoss: "-18.30 U",
+                    avgNet: "13.01 U",
+                    labels: ["05-28", "05-30", "06-01", "06-02", "06-03"],
+                    data: [0, 64.7, 55.9, 179.8, 156.2],
+                    ruleText: "🟢 **总体表现**: 策略在最近7天内实现**盈利 (+156.20 USDT)**。<br>最近一周市场趋势较强，策略胜率提升至 50.0%，回撤仅 2.30%，策略在单边拉升中表现极其稳健。",
+                    riskAdvice: [
+                        "✅ **回撤极低**: 最大回撤仅为 **2.30%**，近期策略参数非常贴合行情。",
+                        "✅ **磨损极小**: 7天内交易12次，手续费仅 8.50U，信号过滤极其高效。"
+                    ],
+                    aiText: '"近7天的表现堪称完美。胜率达到 50% 的同时盈亏比仍旧维持在 2.1 以上。这往往是因为近期 SOL 表现出了明显的单边大趋势，避开了震荡洗盘区。在单边行情中此策略具有超高期望值，建议继续维持。"'
+                },
+                "90": {
+                    netProfit: "-82.10 U",
+                    fee: "手续费已扣除: 112.40 U",
+                    winRate: "35.2%",
+                    tradesCount: "总笔数: 142 (赢: 50 | 输: 92)",
+                    pf: "0.92",
+                    wl: "盈亏比 (Avg W/L): 1.70",
+                    maxDD: "-18.5%",
+                    sharpe: "估算夏普比率: -0.42",
+                    maxWin: "145.20 U",
+                    maxLoss: "-65.40 U",
+                    avgWin: "45.10 U",
+                    avgLoss: "-26.50 U",
+                    avgNet: "-0.58 U",
+                    labels: ["03-05", "03-20", "04-05", "04-20", "05-05", "05-20", "06-03"],
+                    data: [0, -52.4, 25.1, -120.4, -205.2, -12.1, -82.1],
+                    ruleText: "🔴 **总体表现**: 策略在90天内处于**小幅亏损 (-82.10 USDT)**。<br>前60天经历长达数周的宽幅震荡洗盘行情。虽然盈亏比仍有 1.70，但因低胜率（35.2%）和频繁交易摩擦，导致累积收益告负。",
+                    riskAdvice: [
+                        "⚠️ **回撤较大**: 最大回撤达到了 **18.50%**，逼近 20% 风控阀值。如果在高杠杆下建议暂时降低 `RISK_FIXED_AMOUNT`。",
+                        "⚠️ **手续费磨损过重**: 手续费高达 **112.40 USDT**，已大幅超出净损益，存在震荡市频繁刷单被磨损的情况。强烈建议优化 ADX 过滤机制或改用更大周期。"
+                    ],
+                    aiText: '"90天维度的长周期诊断揭示了该趋势策略的软肋：宽幅震荡市。在此期间，多空频繁换手，虽然单笔损耗均控制在安全线内，但 112U 的手续费已经吃掉了全部潜在利润。建议引入波动率（ATR）过滤或者提高 ADX 过滤门槛（例如在 CONFIGURATION 中将 ADX_THRESHOLD 从 30 提升至 35），以抑制震荡市中的频繁止损开仓。"'
+                }
+            },
+            ETH_USDT: {
+                "30": {
+                    netProfit: "+210.40 U",
+                    fee: "手续费已扣除: 18.20 U",
+                    winRate: "45.8%",
+                    tradesCount: "总笔数: 48 (赢: 22 | 输: 26)",
+                    pf: "1.65",
+                    wl: "盈亏比 (Avg W/L): 1.95",
+                    maxDD: "-4.8%",
+                    sharpe: "估算夏普比率: 1.45",
+                    maxWin: "98.50 U",
+                    maxLoss: "-25.60 U",
+                    avgWin: "35.40 U",
+                    avgLoss: "-18.15 U",
+                    avgNet: "4.38 U",
+                    labels: ["05-05", "05-10", "05-15", "05-20", "05-25", "06-01", "06-03"],
+                    data: [0, 25.1, 12.4, 78.5, 62.4, 150.3, 210.4],
+                    ruleText: "🟢 **总体表现**: ETH 策略在30天内实现**盈利 (+210.40 USDT)**。<br>ETH 相比 SOL 波动更为温和，因此最大回撤更低（4.80%），但总体盈利总额由于波动率低也略小于 SOL。",
+                    riskAdvice: [
+                        "✅ **风险水平极低**: 最大回撤仅 **4.80%**，策略在 ETH 上的回撤曲线极为平缓。",
+                        "✅ **信号平稳**: 手续费耗费 18.20U，处于良性水平。"
+                    ],
+                    aiText: '"ETH 的交易表现呈现典型低波低风险特征。最大回撤仅 4.8%，对于 10x 杠杆而言非常安全。由于 ETH 走势稳定性优于 SOL，盈亏比 1.95 虽低但胜率更高。如果在资金配置上追求稳健，可以考虑稍微调大 ETH 的单笔敞口比例，实现风险分散。"'
+                },
+                "7": {
+                    netProfit: "+89.30 U",
+                    fee: "手续费已扣除: 4.20 U",
+                    winRate: "44.4%",
+                    tradesCount: "总笔数: 9 (赢: 4 | 输: 5)",
+                    pf: "1.85",
+                    wl: "盈亏比 (Avg W/L): 2.31",
+                    maxDD: "-1.5%",
+                    sharpe: "估算夏普比率: 1.98",
+                    maxWin: "45.00 U",
+                    maxLoss: "-10.20 U",
+                    avgWin: "32.00 U",
+                    avgLoss: "-13.84 U",
+                    avgNet: "9.92 U",
+                    labels: ["05-28", "05-30", "06-01", "06-02", "06-03"],
+                    data: [0, 31.2, 28.5, 99.4, 89.3],
+                    ruleText: "🟢 **总体表现**: 策略在最近7天内实现**盈利 (+89.30 USDT)**。<br>交易次数较少，以短线波段落袋为安为主。",
+                    riskAdvice: [
+                        "✅ **高效率**: 平均每笔盈利 32U 远大于亏损，回撤几乎可以忽略不计。"
+                    ],
+                    aiText: '"ETH 近7天波动较为平缓，仅成交 9 次。策略的锁定利润机制（LOCK_PROFIT_BUFFER）在震荡反弹中起到了保本效果，确保了整体资金曲线平滑爬坡。"'
+                },
+                "90": {
+                    netProfit: "+12.50 U",
+                    fee: "手续费已扣除: 68.20 U",
+                    winRate: "38.5%",
+                    tradesCount: "总笔数: 96 (赢: 37 | 输: 59)",
+                    pf: "1.05",
+                    wl: "盈亏比 (Avg W/L): 1.68",
+                    maxDD: "-12.3%",
+                    sharpe: "估算夏普比率: 0.12",
+                    maxWin: "115.00 U",
+                    maxLoss: "-45.00 U",
+                    avgWin: "36.20 U",
+                    avgLoss: "-21.50 U",
+                    avgNet: "0.13 U",
+                    labels: ["03-05", "03-20", "04-05", "04-20", "05-05", "05-20", "06-03"],
+                    data: [0, -22.5, 45.3, -35.2, -88.4, 32.5, 12.5],
+                    ruleText: "🟢 **总体表现**: 策略在90天内实现**微利保本 (+12.50 USDT)**。<br>ETH 经历了长期的盘整期，策略在前半阶段回撤 12.30%，在后半段趋势行情中收回失地，基本打平。",
+                    riskAdvice: [
+                        "✅ **抗风险测试通过**: 经历了长达3个月的市场牛熊交替，最终实现保本，验证了风控逻辑的容错率。",
+                        "⚠️ **交易成本较高**: 产生了 68.20U 的手续费磨损，几乎抹平了所有利润。对于小本金来说需警惕磨损比例。"
+                    ],
+                    aiText: '"ETH 90天回测实盘数据刚好盈亏平衡。由于有 SuperTrend 的止损调整逻辑（tight_only 模式），我们在很多次砸盘中被保护提前出场，成功抵御了 4 月底的连阴下跌。缺点是在低波幅环境下盈亏比没有拉开。若想提升长线收益率，建议引入多重时间框架过滤以降低震荡阶段入场次数。"'
+                }
+            }
+        };
+
+        // 更新界面数据
+        function updateDashboard() {
+            const symbol = document.getElementById('symbolSelect').value;
+            const timeRange = document.getElementById('timeSelect').value;
+            const aiProvider = document.getElementById('aiSelect').value;
+
+            const dataset = mockDatabase[symbol][timeRange];
+            if (!dataset) return;
+
+            // 1. 更新 KPI
+            document.getElementById('kpiNetProfit').innerText = dataset.netProfit;
+            document.getElementById('kpiFee').innerText = dataset.fee;
+            document.getElementById('kpiWinRate').innerText = dataset.winRate;
+            document.getElementById('kpiTradesCount').innerText = dataset.tradesCount;
+            document.getElementById('kpiPF').innerText = dataset.pf;
+            document.getElementById('kpiRatioWL').innerText = dataset.wl;
+            document.getElementById('kpiMaxDD').innerText = dataset.maxDD;
+            document.getElementById('kpiSharpe').innerText = dataset.sharpe;
+
+            // 2. 更新特征分布表
+            document.getElementById('maxWin').innerText = dataset.maxWin;
+            document.getElementById('maxLoss').innerText = dataset.maxLoss;
+            document.getElementById('avgWin').innerText = dataset.avgWin;
+            document.getElementById('avgLoss').innerText = dataset.avgLoss;
+            document.getElementById('avgNet').innerText = dataset.avgNet;
+
+            // 3. 更新折线图
+            initChart(dataset.labels, dataset.data);
+
+            // 4. 更新诊断报告
+            document.getElementById('ruleEngineReport').innerHTML = dataset.ruleText;
+            
+            // 风险建议列表
+            const adviceBox = document.getElementById('riskAdviceList');
+            adviceBox.innerHTML = '';
+            dataset.riskAdvice.forEach(advice => {
+                const li = document.createElement('li');
+                li.innerHTML = advice;
+                adviceBox.appendChild(li);
+            });
+
+            // AI 诊断面板
+            const aiBox = document.getElementById('aiReportBox');
+            if (aiProvider === 'openai') {
+                aiBox.style.display = 'block';
+                document.getElementById('aiReportText').innerText = dataset.aiText;
+            } else {
+                aiBox.style.display = 'none';
+            }
+
+            // 5. 更新明细表格（根据交易对做演示数据渲染）
+            const tableBody = document.getElementById('tradesTableBody');
+            tableBody.innerHTML = '';
+            
+            const isETH = (symbol === 'ETH_USDT');
+            const tradeData = isETH ? [
+                { time: "2026-06-03 12:15:32", dir: "Long (平多)", pnl: "+45.30", fee: "-0.90", net: "+44.40", price: "3210.5", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-02 18:22:11", dir: "Short (平空)", pnl: "-15.20", fee: "-0.75", net: "-15.95", price: "3185.0", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-06-02 04:30:19", dir: "Long (平多)", pnl: "+98.50", fee: "-1.20", net: "+97.30", price: "3120.0", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-01 15:45:00", dir: "Short (平空)", pnl: "-25.60", fee: "-0.80", net: "-26.40", price: "3195.4", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-05-31 09:12:05", dir: "Long (平多)", pnl: "+35.40", fee: "-0.65", net: "+34.75", price: "3085.0", tag: "t-v9.5-legacy", isWin: true }
+            ] : [
+                { time: "2026-06-03 14:30:12", dir: "Long (平多)", pnl: "+82.40", fee: "-1.20", net: "+81.20", price: "18.450", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-03 11:00:45", dir: "Short (平空)", pnl: "-12.50", fee: "-0.85", net: "-13.35", price: "18.210", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-06-02 23:15:02", dir: "Long (平多)", pnl: "+125.40", fee: "-1.50", net: "+123.90", price: "17.950", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-02 08:30:19", dir: "Long (平多)", pnl: "-8.20", fee: "-0.60", net: "-8.80", price: "18.120", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-06-01 19:45:00", dir: "Short (平空)", pnl: "+65.80", fee: "-1.10", net: "+64.70", price: "18.330", tag: "t-v9.6-exec", isWin: true }
+            ];
+
+            tradeData.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-brand-bg/50";
+                
+                const dirColor = item.dir.includes('Long') ? 'text-brand-primary' : 'text-brand-danger';
+                const netColor = item.isWin ? 'text-brand-primary' : 'text-brand-danger';
+                
+                tr.innerHTML = `
+                    <td class="px-4 py-3">${item.time}</td>
+                    <td class="px-4 py-3"><span class="${dirColor}">${item.dir}</span></td>
+                    <td class="px-4 py-3 ${item.isWin ? 'text-brand-primary' : 'text-brand-danger'}">${item.pnl}</td>
+                    <td class="px-4 py-3">${item.fee}</td>
+                    <td class="px-4 py-3 text-right ${netColor} font-bold">${item.net}</td>
+                    <td class="px-4 py-3">${item.price}</td>
+                    <td class="px-4 py-3 text-xs text-gray-400">${item.tag}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // 按钮点击事件监听
+        document.getElementById('runBtn').addEventListener('click', function() {
+            const btn = this;
+            btn.disabled = true;
+            btn.innerText = "⏳ 正在加载 API 数据...";
+            
+            setTimeout(() => {
+                updateDashboard();
+                btn.disabled = false;
+                btn.innerText = "🚀 运行评估";
+            }, 800);
+        });
+
+        // 默认初始化
+        window.onload = function() {
+            updateDashboard();
+        };
+    </script>
+</body>
+</html>

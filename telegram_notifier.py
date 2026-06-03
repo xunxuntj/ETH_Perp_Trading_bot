@@ -61,6 +61,31 @@ class TelegramNotifier:
         # 目前信号已经是纯文本，直接发送（不指定 parse_mode）
         return self.send(signal_message, parse_mode=None)
 
+    def send_document(self, file_path: str, caption: Optional[str] = None) -> bool:
+        """
+        发送文档/文件到 Telegram
+        """
+        if not self.bot_token or not self.chat_id:
+            print("⚠️ Telegram 未配置 (缺少 BOT_TOKEN 或 CHAT_ID)")
+            return False
+        
+        url = f"{self.base_url}/sendDocument"
+        try:
+            with open(file_path, 'rb') as f:
+                files = {'document': f}
+                payload = {'chat_id': self.chat_id}
+                if caption:
+                    payload['caption'] = caption
+                resp = requests.post(url, data=payload, files=files, timeout=20)
+                if resp.status_code == 200:
+                    return True
+                else:
+                    print(f"⚠️ Telegram 发送文档失败: {resp.status_code} - {resp.text}")
+                    return False
+        except Exception as e:
+            print(f"⚠️ Telegram 发送文档异常: {e}")
+            return False
+
 
 def send_telegram_message(message: str) -> bool:
     """
@@ -69,6 +94,15 @@ def send_telegram_message(message: str) -> bool:
     """
     notifier = TelegramNotifier()
     return notifier.send_signal(message)
+
+
+def send_telegram_document(file_path: str, caption: Optional[str] = None) -> bool:
+    """
+    便捷函数：发送 Telegram 文档
+    使用环境变量中的配置
+    """
+    notifier = TelegramNotifier()
+    return notifier.send_document(file_path, caption)
 
 
 # 测试
