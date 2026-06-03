@@ -48,8 +48,6 @@ def get_face_value(contract: str) -> float:
 def get_tick_size(contract: str) -> float:
     """
     智能获取交易对的最小 Tick 大小，用于滑点 Ticks 计算
-    SOL_USDT 1 Tick = 0.01 U
-    ETH_USDT 1 Tick = 0.1 U (或根据实盘精度，ETH 通常是 0.05 或 0.1)
     """
     c_upper = contract.upper()
     if "ETH" in c_upper:
@@ -68,17 +66,12 @@ def get_kline_close(client: GateClient, contract: str, timestamp: int) -> float:
     if timestamp <= 0:
         return 0.0
         
-    # 对齐到 30 分钟边界 (30 * 60 = 1800 秒)
     aligned_t = (timestamp // 1800) * 1800
-    
-    # 优先查缓存
     cache_key = f"{contract}_{aligned_t}"
     if cache_key in kline_cache:
         return kline_cache[cache_key]
         
-    # 对于收盘于 aligned_t 的 K 线，它的开盘时间是 aligned_t - 1800
     target_open_t = aligned_t - 1800
-    
     from_t = aligned_t - 3600
     to_t = aligned_t + 3600
     
@@ -184,6 +177,7 @@ def fetch_all_position_closes(client: GateClient, contract: str, start_dt: datet
         params = {"contract": contract, "limit": limit, "to": to_timestamp}
         
         try:
+            # 🚨 必须设置 timeout 防止在 Actions 中无限挂起
             resp = client.session.get(full_url, params=params, headers=headers, timeout=15)
             if resp.status_code != 200:
                 print(f"❌ API 请求失败 status={resp.status_code}: {resp.text}")
@@ -331,6 +325,7 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
             "risk_advice": ["请确认在此期间该交易对是否有实盘交易。"],
             "ai_analysis": "",
             "total_slippage_tax": 0.0,
+            "avg_slippage_u": 0.0,
             "avg_slippage_ticks": 0.0,
             "total_funding_fee": 0.0,
             "friction_ratio": 0.0,
@@ -393,21 +388,18 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
         total_slippage_ticks += (row['total_slippage'] / tick_size)
         
     avg_slippage_ticks = total_slippage_ticks / total_trades if total_trades > 0 else 0
+    avg_slippage_u = total_slippage_tax / total_trades if total_trades > 0 else 0.0
     total_funding_fee = df['funding_fee'].sum()
     
     # 合计摩擦占总毛利润比例
-    # 毛利润 = 净盈亏 + 手续费 + 滑点 + 资金费 对应的负向损耗总额，或者以 (手续费 + 滑点 + 资金费) / (净利润(若为正) + 损耗) 评估。
-    # 简化定义：摩擦损耗比 = abs(Slippage + Funding) / (total_gains + 1.0)
     friction_ratio = abs(total_slippage_tax + total_funding_fee) / (total_gains + 1.0)
     
     # 3. 风控与生存极限
-    # 最大连亏次数 (Losing streak)
     is_loss = df['pnl'] <= 0
     max_losing_streak = is_loss.groupby((~is_loss).cumsum()).cumsum().max()
     if pd.isna(max_losing_streak):
         max_losing_streak = 0
         
-    # 当前连亏次数
     current_losing_streak = 0
     for val in reversed(df['pnl'].tolist()):
         if val <= 0:
@@ -415,7 +407,6 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
         else:
             break
             
-    # 当前水下深度 (Current Drawdown)
     current_equity = capital_curve.iloc[-1]
     peak_equity = max(initial_capital, capital_curve.max())
     current_drawdown = min(0.0, current_equity - peak_equity)
@@ -432,8 +423,6 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
     avg_loss_hold_str = format_duration(avg_loss_hold)
     
     # 5. 动态计算 R 倍数
-    # R 模式从 config 读取；如果是 percent，动态计算建仓时的 1R = 当时本金 * RISK_PERCENT
-    # 如果是 fixed，1R = RISK_FIXED_AMOUNT
     r_multiples = []
     current_cap = initial_capital
     for _, row in df.iterrows():
@@ -465,7 +454,7 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
     chart_data = [0] + cum_pnl.tolist()
     chart_labels = ["开始"] + chart_labels
     
-    # 转换交易历史列表 (增加审计列)
+    # 转换交易历史列表
     trades_list = []
     for idx, row in df.iterrows():
         trades_list.append({
@@ -512,6 +501,7 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
         "risk_advice": risk_advice,
         "ai_analysis": ai_analysis,
         "total_slippage_tax": float(total_slippage_tax),
+        "avg_slippage_u": float(avg_slippage_u),
         "avg_slippage_ticks": float(avg_slippage_ticks),
         "total_funding_fee": float(total_funding_fee),
         "friction_ratio": float(friction_ratio),
@@ -532,7 +522,6 @@ def generate_advanced_rules(total_pnl: float, win_rate: float, wl_ratio: float, 
     """
     win_rate_pct = win_rate * 100
     
-    # 规则 1：连亏熔断
     is_circuit_broken = False
     if current_losing_streak >= 3:
         rule_text = "<span style='color: #ff3e60; font-weight: bold; font-size: 1.1rem;'>🚨 触发连亏熔断阈值！请检查服务器是否已自动切断 API！</span><br>"
@@ -543,22 +532,18 @@ def generate_advanced_rules(total_pnl: float, win_rate: float, wl_ratio: float, 
         else:
             rule_text = f"🔴 **总体表现**: 策略在评估期内处于**亏损 ({total_pnl:.2f} USDT)**。 "
             
-    # 策略风格
     if win_rate_pct < 45 and wl_ratio > 1.8:
         rule_text += "策略呈现典型**趋势跟踪**架构 (SuperTrend+ADX)，通过大盈亏比弥补胜率的不足。震荡期出现连亏或低效率属正常规律。"
     else:
         rule_text += "策略运行平稳，多空转换健康。"
         
-    # 风控诊断建议列表
     risk_advice = []
     
-    # 规则 2：滑点异常
     if avg_slippage_ticks > 15.0:
         risk_advice.append(f"<span style='color: #ff3e60; font-weight: bold;'>⚠️ 异常流动性警告！平均滑点 ({avg_slippage_ticks:.1f} Ticks) 已超出 15 Ticks 预警线，滑点税严重侵蚀预期利润，建议调低单笔仓位或暂停交易。</span>")
     else:
         risk_advice.append(f"✅ **流动性滑点**: 平均每单滑点 {avg_slippage_ticks:.1f} Ticks，在正常流动性范围内。")
         
-    # 规则 3：获利因子生死线
     if total_trades > 10 and pf < 1.15:
         risk_advice.append(f"<span style='color: #ff3e60; font-weight: bold;'>💀 获利因子 ({pf:.2f}) 跌破实盘生死线 (1.15)，系统长期数学期望值为负，建议立即停机复盘！</span>")
     else:
@@ -631,7 +616,6 @@ def fetch_ai_report(df: pd.DataFrame, total_trades: int, win_rate: float, total_
 
 
 def main():
-    # 1. 验证 Gate API 凭证
     api_key = os.environ.get("GATE_API_KEY")
     api_secret = os.environ.get("GATE_API_SECRET")
     
@@ -639,7 +623,6 @@ def main():
         print("❌ 错误: 缺少 GATE_API_KEY 或 GATE_API_SECRET 环境变量！")
         sys.exit(1)
         
-    # 2. 载入参数配置
     symbol, days = get_report_config()
     print("=" * 60)
     print(f"🚀 开始生成策略评估报告...")
@@ -647,7 +630,6 @@ def main():
     print(f"📅 评估天数范围: {days} 天")
     print("=" * 60)
     
-    # 3. 初始化 Gate 客户端并抓取数据
     client = GateClient(api_key, api_secret)
     
     end_dt = datetime.datetime.now(datetime.timezone.utc)
@@ -655,7 +637,6 @@ def main():
     
     df = fetch_all_position_closes(client, symbol, start_dt, end_dt)
     
-    # 获取当前最新本金权益，倒推资产变化
     try:
         acct = client.get_account()
         current_equity = acct.get('total', 1000.0)
@@ -663,10 +644,8 @@ def main():
         print(f"⚠️ 无法获取当前账户本金，默认使用 1000.0 U: {e}")
         current_equity = 1000.0
         
-    # 4. 计算指标
     report_dict = calculate_metrics_to_json(df, symbol, days, start_dt, end_dt, current_equity)
     
-    # 5. 替换模板文件
     template_path = os.path.join(os.path.dirname(__file__), "templates", "report_template.html")
     if not os.path.exists(template_path):
         print(f"❌ 错误: 找不到模板文件 {template_path}，请确认其是否存在！")
@@ -678,7 +657,6 @@ def main():
     report_json_str = json.dumps(report_dict, ensure_ascii=False)
     output_html_content = html_content.replace("__REPORT_DATA_PLACEHOLDER__", report_json_str)
     
-    # 6. 保存报告文件
     start_date_str = start_dt.strftime("%Y%m%d")
     end_date_str = end_dt.strftime("%Y%m%d")
     report_filename = f"report_{symbol.lower()}_{start_date_str}_to_{end_date_str}.html"
@@ -689,18 +667,15 @@ def main():
         
     print(f"✅ HTML 报告已成功渲染并保存为: {report_filepath}")
     
-    # 7. 格式化 Telegram 推送的战报消息 (深度优化)
     pnl_sign = "+" if report_dict['total_pnl'] >= 0 else ""
     pf_str = f"{report_dict['profit_factor']:.2f}" if report_dict['profit_factor'] is not None else "∞"
     
-    # 风控提示文案
     streak_warning = ""
     if report_dict['current_losing_streak'] >= 3:
         streak_warning = "🔴 连亏熔断触发！请检查系统！"
     elif report_dict['current_losing_streak'] > 0:
         streak_warning = f"⚠️ {report_dict['current_losing_streak']} 连亏中"
         
-    # 风控官诊断总结 (提取风控建议里的警告或首条建议作为战报总结)
     diagnostic_summary = "策略运行中，摩擦损耗在预算内。"
     if report_dict['current_losing_streak'] >= 3:
         diagnostic_summary = "🚨 警告：已触发连亏熔断阈值，系统已被叫停，请核实持仓！"
@@ -725,7 +700,7 @@ def main():
 • 水下深度： *{report_dict['current_drawdown']:.2f} U* (({report_dict['current_drawdown_pct']*100:.1f}%))
 
 ⚙️ *【摩擦异常】*
-• 平均滑点： *{report_dict['total_slippage_tax']/report_dict['total_trades']:.2f if report_dict['total_trades'] > 0 else 0:.2f} U* / 单 (约 *{report_dict['avg_slippage_ticks']:.1f} Ticks*)
+• 平均滑点： *{report_dict['avg_slippage_u']:.2f} U* / 单 (约 *{report_dict['avg_slippage_ticks']:.1f} Ticks*)
 • 资金费率： *{report_dict['total_funding_fee']:.2f} U*
 • 摩擦损耗比： *{report_dict['friction_ratio']*100:.1f}%*
 
@@ -734,11 +709,6 @@ _{diagnostic_summary}_
 
 💡 _请点击下方 HTML 文件在浏览器中打开，查看完整交互图表与风控审计细则。_"""
 
-    # Telegram 的 MarkdownV2 转义
-    # 由于 MarkdownV2 对 . - + 等符号有严苛转义要求，我们用 HTML 模式发送可能更稳健，
-    # 或者我们在 send 接口中通过 MarkdownV2 兼容或者简单转义。
-    # 最稳妥的方法是使用 HTML 格式在 Telegram 发送，不易报错卡死。
-    # 我们将上面的内容整理为 HTML 格式：
     html_caption = f"""📊 <b>[Gate.io 实盘战报] - {symbol}</b>
 ⏱ <b>统计周期</b>：自 {start_dt.strftime('%m-%d')} 至 {end_dt.strftime('%m-%d')} ({days} 天)
 
@@ -753,7 +723,7 @@ _{diagnostic_summary}_
 • 水下深度： <b>{report_dict['current_drawdown']:.2f} U</b> ({report_dict['current_drawdown_pct']*100:.1f}%)
 
 ⚙️ <b>【摩擦异常】</b>
-• 平均滑点： <b>{report_dict['total_slippage_tax']/report_dict['total_trades']:.2f if report_dict['total_trades'] > 0 else 0.00:.2f} U</b> / 单 (约 <b>{report_dict['avg_slippage_ticks']:.1f} Ticks</b>)
+• 平均滑点： <b>{report_dict['avg_slippage_u']:.2f} U</b> / 单 (约 <b>{report_dict['avg_slippage_ticks']:.1f} Ticks</b>)
 • 资金费率： <b>{report_dict['total_funding_fee']:.2f} U</b>
 • 摩擦损耗比： <b>{report_dict['friction_ratio']*100:.1f}%</b>
 
