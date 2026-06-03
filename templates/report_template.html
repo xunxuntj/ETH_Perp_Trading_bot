@@ -74,7 +74,7 @@
                     <div>
                         <label class="block text-xs text-brand-textMuted mb-1">评估标的 (合约)</label>
                         <div id="infoSymbol" class="w-full bg-brand-bg border border-gray-800 rounded px-3 py-2 text-sm text-white font-bold">
-                            SOL_USDT
+                            ---
                         </div>
                     </div>
                     <div>
@@ -111,27 +111,59 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <!-- KPI 1 -->
                 <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
-                    <div class="text-xs text-brand-textMuted font-medium">累计净利润 (扣手续费)</div>
+                    <div class="text-xs text-brand-textMuted font-medium">累计净利润 (扣手续费/资金费)</div>
                     <div id="kpiNetProfit" class="text-2xl font-bold mt-2 text-white">0.00 U</div>
                     <div id="kpiFee" class="text-xs text-brand-primary mt-1">手续费已扣除: 0.00 U</div>
                 </div>
                 <!-- KPI 2 -->
-                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
-                    <div class="text-xs text-brand-textMuted font-medium">策略胜率 (Win Rate)</div>
-                    <div id="kpiWinRate" class="text-2xl font-bold mt-2 text-white">0.0%</div>
-                    <div id="kpiTradesCount" class="text-xs text-brand-textMuted mt-1">总笔数: 0 (赢: 0 | 输: 0)</div>
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="text-xs text-brand-textMuted font-medium">策略胜率 (Win Rate)</div>
+                        <div id="kpiWinRate" class="text-2xl font-bold mt-2 text-white">0.0%</div>
+                    </div>
+                    <div class="mt-2 space-y-1">
+                        <div id="kpiTradesCount" class="text-xs text-brand-textMuted">总笔数: 0 (赢: 0 | 输: 0)</div>
+                        <div id="kpiMaxLosingStreak" class="text-xs text-red-400 font-semibold">最大连亏次数: 0 次</div>
+                    </div>
                 </div>
                 <!-- KPI 3 -->
-                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
-                    <div class="text-xs text-brand-textMuted font-medium">获利因子 (Profit Factor)</div>
-                    <div id="kpiPF" class="text-2xl font-bold mt-2 text-white">0.00</div>
-                    <div id="kpiRatioWL" class="text-xs text-brand-primary mt-1">盈亏比 (Avg W/L): 0.00</div>
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="text-xs text-brand-textMuted font-medium">获利因子 (Profit Factor)</div>
+                        <div id="kpiPF" class="text-2xl font-bold mt-2 text-white">0.00</div>
+                    </div>
+                    <div class="mt-2 space-y-1">
+                        <div id="kpiRatioWL" class="text-xs text-brand-primary">盈亏比 (Avg W/L): 0.00</div>
+                        <div id="kpiCurrentDD" class="text-xs text-red-400 font-semibold">当前水下深度: 0.00 U (0.0%)</div>
+                    </div>
                 </div>
                 <!-- KPI 4 -->
                 <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
-                    <div class="text-xs text-brand-textMuted font-medium">最大回撤率 (Max DD)</div>
+                    <div class="text-xs text-brand-textMuted font-medium">最大静态回撤率 (Max DD)</div>
                     <div id="kpiMaxDD" class="text-2xl font-bold mt-2 text-white">0.0%</div>
                     <div id="kpiSharpe" class="text-xs text-brand-primary mt-1">估算夏普比率: 0.00</div>
+                </div>
+            </div>
+
+            <!-- 🔬 摩擦损耗审计 (Friction Audit) -->
+            <div class="bg-brand-card rounded-lg p-5 border border-gray-800">
+                <h3 class="text-sm font-semibold text-brand-textMuted uppercase tracking-wider mb-3">🔍 隐形摩擦损耗审计 (Friction Audit)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-brand-bg rounded p-4 border border-gray-800/80">
+                        <div class="text-xs text-brand-textMuted">总滑点损耗 (Total Slippage Tax)</div>
+                        <div id="auditSlippage" class="text-xl font-bold mt-1 text-red-400">0.00 U</div>
+                        <div id="auditSlippageTicks" class="text-xs text-brand-textMuted mt-1">平均每单滑点: 0.0 Ticks</div>
+                    </div>
+                    <div class="bg-brand-bg rounded p-4 border border-gray-800/80">
+                        <div class="text-xs text-brand-textMuted">累计资金费率 (Total Funding Fees)</div>
+                        <div id="auditFunding" class="text-xl font-bold mt-1 text-red-400">0.00 U</div>
+                        <div class="text-xs text-brand-textMuted mt-1">永续持仓资金费收支磨损</div>
+                    </div>
+                    <div class="bg-brand-bg rounded p-4 border border-gray-800/80">
+                        <div class="text-xs text-brand-textMuted">合计摩擦占比 (Friction ratio)</div>
+                        <div id="auditTotalFriction" class="text-xl font-bold mt-1 text-red-400">0.00 U</div>
+                        <div id="auditFrictionPct" class="text-xs text-brand-textMuted mt-1">占毛利润百分比: 0.0%</div>
+                    </div>
                 </div>
             </div>
 
@@ -167,8 +199,12 @@
                                     <td id="avgLoss" class="py-2.5 text-right font-semibold text-brand-danger">0.00 U</td>
                                 </tr>
                                 <tr class="border-b border-gray-800">
-                                    <td class="py-2.5 text-brand-textMuted">每笔平均净损益</td>
-                                    <td id="avgNet" class="py-2.5 text-right font-semibold text-white">0.00 U</td>
+                                    <td class="py-2.5 text-brand-textMuted">平均盈利持仓时间</td>
+                                    <td id="avgWinHold" class="py-2.5 text-right font-semibold text-brand-primary">---</td>
+                                </tr>
+                                <tr class="border-b border-gray-800">
+                                    <td class="py-2.5 text-brand-textMuted">平均亏损持仓时间</td>
+                                    <td id="avgLossHold" class="py-2.5 text-right font-semibold text-brand-danger">---</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -227,18 +263,20 @@
             <!-- 数据明细表格 -->
             <div class="bg-brand-card rounded-lg p-5 border border-gray-800">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-base font-bold text-white">🗂️ 平仓交易历史明细</h3>
+                    <h3 class="text-base font-bold text-white">🗂️ 平仓交易历史明细 (审计流)</h3>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
                         <thead class="text-xs uppercase bg-brand-bg text-brand-textMuted border-b border-gray-800">
                             <tr>
                                 <th class="px-4 py-3">平仓时间</th>
-                                <th class="px-4 py-3">平仓方向</th>
-                                <th class="px-4 py-3">合约盈亏(U)</th>
+                                <th class="px-4 py-3">方向</th>
+                                <th class="px-4 py-3">建仓均价</th>
+                                <th class="px-4 py-3">平仓均价</th>
+                                <th class="px-4 py-3">持仓时长</th>
                                 <th class="px-4 py-3">手续费(U)</th>
                                 <th class="px-4 py-3 text-right">净盈亏(U)</th>
-                                <th class="px-4 py-3">建仓均价</th>
+                                <th class="px-4 py-3 text-right">R 倍数</th>
                                 <th class="px-4 py-3">订单备注/版本</th>
                             </tr>
                         </thead>
@@ -341,17 +379,28 @@
             document.getElementById('kpiFee').innerText = "手续费已扣除: " + Math.abs(reportData.total_fee).toFixed(2) + " U";
             document.getElementById('kpiWinRate').innerText = (reportData.win_rate * 100).toFixed(1) + "%";
             document.getElementById('kpiTradesCount').innerText = "总笔数: " + reportData.total_trades + " (赢: " + reportData.win_count + " | 输: " + reportData.loss_count + ")";
+            document.getElementById('kpiMaxLosingStreak').innerText = "最大连亏次数: " + reportData.max_losing_streak + " 次";
             
             const pf_str = reportData.profit_factor === null || reportData.profit_factor === Infinity ? "∞" : reportData.profit_factor.toFixed(2);
             document.getElementById('kpiPF').innerText = pf_str;
             
             const wl_str = reportData.ratio_avg_win_loss === null || reportData.ratio_avg_win_loss === Infinity ? "∞" : reportData.ratio_avg_win_loss.toFixed(2);
             document.getElementById('kpiRatioWL').innerText = "盈亏比 (Avg W/L): " + wl_str;
-            
+            document.getElementById('kpiCurrentDD').innerText = "当前水下深度: " + reportData.current_drawdown.toFixed(2) + " U (" + (reportData.current_drawdown_pct * 100).toFixed(1) + "%)";
+
             document.getElementById('kpiMaxDD').innerText = (reportData.max_drawdown * 100).toFixed(1) + "%";
             document.getElementById('kpiSharpe').innerText = "估算夏普比率: " + reportData.sharpe_ratio.toFixed(2);
 
-            // 3. 更新特征分布表
+            // 🔬 3. 更新摩擦损耗审计面板
+            document.getElementById('auditSlippage').innerText = reportData.total_slippage_tax.toFixed(2) + " U";
+            document.getElementById('auditSlippageTicks').innerText = "平均每单滑点: " + reportData.avg_slippage_ticks.toFixed(1) + " Ticks";
+            document.getElementById('auditFunding').innerText = reportData.total_funding_fee.toFixed(2) + " U";
+            
+            const totalFriction = reportData.total_slippage_tax + reportData.total_funding_fee;
+            document.getElementById('auditTotalFriction').innerText = totalFriction.toFixed(2) + " U";
+            document.getElementById('auditFrictionPct').innerText = "占总收益损耗比: " + (reportData.friction_ratio * 100).toFixed(1) + "%";
+
+            // 4. 更新特征分布表
             document.getElementById('maxWin').innerText = reportData.max_win.toFixed(2) + " U";
             document.getElementById('maxLoss').innerText = reportData.max_loss.toFixed(2) + " U";
             document.getElementById('avgWin').innerText = reportData.avg_win.toFixed(2) + " U";
@@ -359,8 +408,10 @@
             
             const avgNet = reportData.total_pnl / reportData.total_trades;
             document.getElementById('avgNet').innerText = (isNaN(avgNet) ? 0 : avgNet).toFixed(2) + " U";
+            document.getElementById('avgWinHold').innerText = reportData.avg_win_hold_str || 'N/A';
+            document.getElementById('avgLossHold').innerText = reportData.avg_loss_hold_str || 'N/A';
 
-            // 4. 更新多空占比柱状图
+            // 5. 更新多空占比柱状图
             const longCount = reportData.long_count || 0;
             const shortCount = reportData.short_count || 0;
             const totalCount = longCount + shortCount;
@@ -372,10 +423,10 @@
             document.getElementById('longBar').style.width = longPct + "%";
             document.getElementById('shortBar').style.width = shortPct + "%";
 
-            // 5. 更新折线图
+            // 6. 更新折线图
             initChart(reportData.chart_labels, reportData.chart_data);
 
-            // 6. 更新诊断报告
+            // 7. 更新诊断报告
             document.getElementById('ruleEngineReport').innerHTML = reportData.rule_analysis;
             
             // 风险建议列表
@@ -396,7 +447,7 @@
                 aiBox.style.display = 'none';
             }
 
-            // 7. 更新明细表格
+            // 8. 更新明细表格 (审计流)
             const tableBody = document.getElementById('tradesTableBody');
             tableBody.innerHTML = '';
             
@@ -405,7 +456,7 @@
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-brand-bg/50";
                     
-                    const isWin = item.pnl > 0;
+                    const isWin = item.net_pnl > 0;
                     const dirText = item.side === 'long' ? 'Long (平多)' : item.side === 'short' ? 'Short (平空)' : item.side;
                     const dirColor = item.side === 'long' ? 'text-brand-primary' : item.side === 'short' ? 'text-brand-danger' : 'text-white';
                     const netColor = isWin ? 'text-brand-primary' : 'text-brand-danger';
@@ -413,19 +464,26 @@
                     const pnlSign = item.pnl > 0 ? "+" : "";
                     const netPnlSign = item.net_pnl > 0 ? "+" : "";
 
+                    // R 倍数高亮
+                    const rVal = item.r_multiple || 0;
+                    const rSign = rVal > 0 ? "+" : "";
+                    const rColor = rVal > 0 ? 'text-brand-primary' : rVal < 0 ? 'text-brand-danger' : 'text-white';
+
                     tr.innerHTML = `
                         <td class="px-4 py-3">${item.datetime}</td>
                         <td class="px-4 py-3"><span class="${dirColor}">${dirText}</span></td>
-                        <td class="px-4 py-3 ${item.pnl > 0 ? 'text-brand-primary' : 'text-brand-danger'}">${pnlSign}${item.pnl.toFixed(2)}</td>
+                        <td class="px-4 py-3">${item.entry_price.toFixed(4)}</td>
+                        <td class="px-4 py-3">${item.close_price ? item.close_price.toFixed(4) : '---'}</td>
+                        <td class="px-4 py-3">${item.duration_str || '---'}</td>
                         <td class="px-4 py-3">${item.fee.toFixed(2)}</td>
                         <td class="px-4 py-3 text-right ${netColor} font-bold">${netPnlSign}${item.net_pnl.toFixed(2)}</td>
-                        <td class="px-4 py-3">${item.entry_price.toFixed(4)}</td>
+                        <td class="px-4 py-3 text-right ${rColor} font-semibold">${rSign}${rVal.toFixed(2)}R</td>
                         <td class="px-4 py-3 text-xs text-gray-400">${item.text || ''}</td>
                     `;
                     tableBody.appendChild(tr);
                 });
             } else {
-                tableBody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-brand-textMuted">暂无平仓历史明细</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="9" class="px-4 py-8 text-center text-brand-textMuted">暂无平仓历史明细</td></tr>`;
             }
         }
 
