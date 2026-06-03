@@ -61,7 +61,7 @@ class TelegramNotifier:
         # 目前信号已经是纯文本，直接发送（不指定 parse_mode）
         return self.send(signal_message, parse_mode=None)
 
-    def send_document(self, file_path: str, caption: Optional[str] = None) -> bool:
+    def send_document(self, file_path: str, caption: Optional[str] = None, parse_mode: Optional[str] = "HTML") -> bool:
         """
         发送文档/文件到 Telegram
         """
@@ -76,6 +76,8 @@ class TelegramNotifier:
                 payload = {'chat_id': self.chat_id}
                 if caption:
                     payload['caption'] = caption
+                if parse_mode:
+                    payload['parse_mode'] = parse_mode
                 resp = requests.post(url, data=payload, files=files, timeout=20)
                 if resp.status_code == 200:
                     return True
@@ -96,13 +98,13 @@ def send_telegram_message(message: str) -> bool:
     return notifier.send_signal(message)
 
 
-def send_telegram_document(file_path: str, caption: Optional[str] = None) -> bool:
+def send_telegram_document(file_path: str, caption: Optional[str] = None, parse_mode: Optional[str] = "HTML") -> bool:
     """
     便捷函数：发送 Telegram 文档
     使用环境变量中的配置
     """
     notifier = TelegramNotifier()
-    return notifier.send_document(file_path, caption)
+    return notifier.send_document(file_path, caption, parse_mode)
 
 
 # 测试
