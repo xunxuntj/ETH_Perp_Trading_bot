@@ -686,7 +686,7 @@ def main():
     elif report_dict['current_losing_streak'] > 0:
         diagnostic_summary = f"⚠️ 连亏次数逼近熔断红线，请密切关注下一单执行情况。"
         
-    caption = f"""📊 *[Gate.io 实盘战报]* \- {symbol}
+    caption = f"""📊 *[实盘战报]* \- {symbol}
 ⏱ *统计周期*：自 {start_dt.strftime('%m-%d')} 至 {end_dt.strftime('%m-%d')} ({days} 天)
 
 💰 *【盈亏速览】*
