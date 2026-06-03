@@ -82,6 +82,9 @@ def fetch_all_position_closes(client: GateClient, contract: str, start_dt: datet
     print(f"🔍 启动分页获取 {contract} 平仓记录...")
     print(f"📅 查询时间区间: {start_dt.strftime('%Y-%m-%d %H:%M:%S UTC')} ~ {end_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     
+    # 记录上一轮的时间戳，作为死循环的安全防线
+    last_timestamp = to_timestamp
+    
     while to_timestamp > start_timestamp and page < max_pages:
         page += 1
         query_string = f"contract={contract}&limit={limit}&to={to_timestamp}"
@@ -90,7 +93,8 @@ def fetch_all_position_closes(client: GateClient, contract: str, start_dt: datet
         params = {"contract": contract, "limit": limit, "to": to_timestamp}
         
         try:
-            resp = client.session.get(full_url, params=params, headers=headers)
+            # 🚨 必须设置 timeout 防止在 Actions 中无限挂起
+            resp = client.session.get(full_url, params=params, headers=headers, timeout=15)
             if resp.status_code != 200:
                 print(f"❌ API 请求失败 status={resp.status_code}: {resp.text}")
                 break
@@ -132,6 +136,11 @@ def fetch_all_position_closes(client: GateClient, contract: str, start_dt: datet
                 to_timestamp -= 1
             else:
                 to_timestamp = min_time_in_page - 1
+                
+            # 🚨 终极安全阀：保证 to_timestamp 必须严格递减，拒绝任何可能的边界情况死循环
+            if to_timestamp >= last_timestamp:
+                to_timestamp = last_timestamp - 1
+            last_timestamp = to_timestamp
                 
             print(f"   已加载第 {page} 页，总计拉取 {len(all_closes)} 笔平仓记录...")
             time.sleep(0.1)
