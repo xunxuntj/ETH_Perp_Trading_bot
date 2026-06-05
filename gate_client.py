@@ -730,3 +730,52 @@ class GateClient:
         resp.raise_for_status()
         
         return resp.json()
+
+    def get_position_detail(self, contract: str) -> Optional[dict]:
+        """
+        获取合约的持仓/配置详情（即使无持仓也能返回配置信息，包含 pos_margin_mode, leverage 等）
+        """
+        url_path = f"/api/v4/futures/usdt/positions/{contract}"
+        full_url = f"{BASE_URL}/futures/usdt/positions/{contract}"
+        
+        headers = self._sign("GET", url_path, "", "")
+        resp = self.session.get(full_url, headers=headers)
+        if self.debug:
+            try:
+                print(f"[GATE DEBUG] GET {full_url} status={resp.status_code} text={resp.text[:1000]}")
+            except Exception:
+                pass
+        
+        if resp.status_code == 404:
+            return None
+        
+        resp.raise_for_status()
+        return resp.json()
+
+    def update_position_leverage(self, contract: str, leverage: str, cross_leverage_limit: str = "") -> dict:
+        """
+        更新合约持仓杠杆
+        
+        Args:
+            contract: 交易对，如 "ETH_USDT"
+            leverage: 杠杆数，字符型。对于全仓模式，应设为 "0"。
+            cross_leverage_limit: 全仓杠杆限制（仅在 leverage 为 "0" 时有效），字符型。
+        """
+        import json
+        
+        url_path = f"/api/v4/futures/usdt/positions/{contract}/leverage"
+        full_url = f"{BASE_URL}/futures/usdt/positions/{contract}/leverage"
+        
+        body_obj = {
+            "leverage": str(leverage)
+        }
+        if str(leverage) == "0" and cross_leverage_limit:
+            body_obj["cross_leverage_limit"] = str(cross_leverage_limit)
+            
+        body = json.dumps(body_obj)
+        headers = self._sign("POST", url_path, "", body)
+        
+        resp = self.session.post(full_url, data=body, headers=headers)
+        resp.raise_for_status()
+        
+        return resp.json()

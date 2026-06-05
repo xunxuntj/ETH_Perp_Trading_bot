@@ -14,6 +14,8 @@ class MockClient:
         self.cancel_orders = MagicMock(return_value=None)
         self.get_price_orders = MagicMock(return_value=[{"id": "mock_existing_stop_id"}])
         self.update_price_order = MagicMock(return_value={"id": "mock_existing_stop_id"})
+        self.get_position_detail = MagicMock(return_value={"pos_margin_mode": "cross", "leverage": 0, "cross_leverage_limit": 0})
+        self.update_position_leverage = MagicMock(return_value={"success": True})
 
 class TestTradeExecutor:
     """TradeExecutor 单元测试"""
@@ -89,6 +91,40 @@ class TestTradeExecutor:
         )
         assert result["success"] is False
         assert "止损价" in result["message"]
+
+    def test_sync_leverage_cross_mode(self, executor_live_run, mock_client):
+        """测试全仓模式下的杠杆同步"""
+        mock_client.get_position_detail = MagicMock(return_value={
+            "pos_margin_mode": "cross",
+            "leverage": 0,
+            "cross_leverage_limit": 100
+        })
+        mock_client.update_position_leverage = MagicMock(return_value={"status": "success"})
+        
+        result = executor_live_run.sync_leverage()
+        assert result is True
+        mock_client.update_position_leverage.assert_called_with(
+            contract="ETH_USDT",
+            leverage="0",
+            cross_leverage_limit="10"
+        )
+
+    def test_sync_leverage_isolated_mode(self, executor_live_run, mock_client):
+        """测试逐仓模式下的杠杆同步"""
+        mock_client.get_position_detail = MagicMock(return_value={
+            "pos_margin_mode": "isolated",
+            "leverage": 100,
+            "cross_leverage_limit": 0
+        })
+        mock_client.update_position_leverage = MagicMock(return_value={"status": "success"})
+        
+        result = executor_live_run.sync_leverage()
+        assert result is True
+        mock_client.update_position_leverage.assert_called_with(
+            contract="ETH_USDT",
+            leverage="10",
+            cross_leverage_limit=""
+        )
 
     def test_adjust_stop_loss_long_up_success(self, executor_dry_run):
         """测试多仓止损上移"""

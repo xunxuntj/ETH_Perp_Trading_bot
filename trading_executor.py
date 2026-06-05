@@ -60,6 +60,59 @@ class TradeExecutor:
             stop_price=stop_loss,
             text=f"stop_loss_{direction}_{int(time.time())}"
         )
+
+    def sync_leverage(self) -> bool:
+        """
+        同步本地配置的杠杆（LEVERAGE）到 Gate.io 交易所。
+        根据交易所当前的仓位保证金模式（cross/isolated）自动决定设置方式：
+        - 全仓模式 (cross)：设置 leverage 为 "0"，并将 cross_leverage_limit 设为 LEVERAGE。
+        - 逐仓模式 (isolated)：设置 leverage 为 LEVERAGE。
+        """
+        if self._is_dry_run():
+            self._log("SYNC_LEVERAGE", f"✅ [模拟] 同步杠杆为 {LEVERAGE}x")
+            return True
+            
+        try:
+            # 获取当前合约的仓位配置详情
+            pos_detail = self.client.get_position_detail(self.contract)
+            if not pos_detail:
+                self._log("SYNC_LEVERAGE_WARNING", f"⚠️ 未能获取到合约 {self.contract} 的持仓详情，跳过同步杠杆")
+                return False
+                
+            pos_margin_mode = pos_detail.get("pos_margin_mode", "cross")
+            current_leverage = int(pos_detail.get("leverage", 0))
+            current_cross_limit = int(pos_detail.get("cross_leverage_limit", 0))
+            
+            # 判断是否需要更新
+            need_update = False
+            leverage_param = "0"
+            cross_limit_param = ""
+            
+            if pos_margin_mode == "cross":
+                leverage_param = "0"
+                cross_limit_param = str(LEVERAGE)
+                if current_leverage != 0 or current_cross_limit != LEVERAGE:
+                    need_update = True
+            else: # isolated
+                leverage_param = str(LEVERAGE)
+                cross_limit_param = ""
+                if current_leverage != LEVERAGE:
+                    need_update = True
+                    
+            if need_update:
+                self._log("SYNC_LEVERAGE", f"🔄 同步交易所杠杆配置 (模式: {pos_margin_mode}): leverage={leverage_param}, cross_leverage_limit={cross_limit_param or 'N/A'}")
+                result = self.client.update_position_leverage(
+                    contract=self.contract,
+                    leverage=leverage_param,
+                    cross_leverage_limit=cross_limit_param
+                )
+                self._log("SYNC_LEVERAGE_SUCCESS", f"✅ 杠杆同步成功: {json.dumps(result)}")
+            else:
+                self._log("SYNC_LEVERAGE", f"✅ 交易所杠杆已是最新，无需更新 (模式: {pos_margin_mode}, leverage={current_leverage}, cross_limit={current_cross_limit})")
+            return True
+        except Exception as e:
+            self._log("SYNC_LEVERAGE_ERROR", f"❌ 同步杠杆异常: {str(e)}")
+            return False
     
     def open_long(self, entry_price: float, stop_loss: float, qty: int) -> Dict[str, Any]:
         """
@@ -95,7 +148,10 @@ class TradeExecutor:
             }
         
         try:
-            # 第1步：下开仓单（市价）
+            # 第1步：同步杠杆到交易所
+            self.sync_leverage()
+
+            # 第2步：下开仓单（市价）
             if self._is_dry_run():
                 main_order = {
                     "id": f"sim_long_{int(time.time())}",
@@ -117,7 +173,7 @@ class TradeExecutor:
                 )
                 self._log("OPEN_LONG", f"✅ 开多 {qty}张 @ 市价")
             
-            # 第2步：设置止损条件单
+            # 第3步：设置止损条件单
             stop_order = None
             if AUTO_SET_STOP_LOSS:
                 if self._is_dry_run():
@@ -193,7 +249,10 @@ class TradeExecutor:
             }
         
         try:
-            # 第1步：下开仓单（市价）
+            # 第1步：同步杠杆到交易所
+            self.sync_leverage()
+
+            # 第2步：下开仓单（市价）
             if self._is_dry_run():
                 main_order = {
                     "id": f"sim_short_{int(time.time())}",
@@ -215,7 +274,7 @@ class TradeExecutor:
                 )
                 self._log("OPEN_SHORT", f"✅ 开空 {qty}张 @ 市价")
             
-            # 第2步：设置止损条件单
+            # 第3步：设置止损条件单
             stop_order = None
             if AUTO_SET_STOP_LOSS:
                 if self._is_dry_run():
