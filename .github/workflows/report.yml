@@ -1,9 +1,6 @@
 name: Generate Strategy Evaluation Report
 
 on:
-  schedule:
-    # 每天北京时间早上 08:08 自动执行（对应 UTC 00:08）
-    - cron: '8 0 * * *'
   workflow_dispatch:
     inputs:
       symbol:
