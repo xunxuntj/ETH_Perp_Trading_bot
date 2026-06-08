@@ -134,6 +134,8 @@ def fetch_position_closes(client: GateClient, contract: str, start_dt: datetime.
                     'pnl_fee': float(item.get('pnl_fee', 0)),  # 手续费 (负数)
                     'text': item.get('text', ''),  # 订单备注，通常包含策略版本
                     'entry_price': float(item.get('long_price', 0) or item.get('short_price', 0) or 0),
+                    'close_price': float(item.get('price', 0)),
+                    'size': float(item.get('accumulated_size', 0)),
                 })
             
             if not page_closes:
@@ -274,6 +276,24 @@ def generate_explanation(metrics: dict, df: pd.DataFrame, api_key: str = "") -> 
         rule_analysis += f"- ⚠️ **磨损警告**: 手续费总计 **{abs(metrics['total_fee']):.2f} USDT**，已超过您的净利润。策略频繁交易导致手续费损耗过重，建议考虑合并信号，或切换到更长周期（如从 30m 切换到 1h 过滤）。\n"
     else:
         rule_analysis += f"- ✅ **手续费占比**: 手续费共计 **{abs(metrics['total_fee']):.2f} USDT**，损耗在合理区间。\n"
+        
+    # 诊断获利因子 (Profit Factor)
+    pf_val = metrics.get('profit_factor', 0.0)
+    pf_str = f"{pf_val:.2f}" if pf_val != float('inf') else "∞"
+    if pf_val == float('inf') or np.isinf(pf_val) or np.isnan(pf_val) or pf_val is None:
+        rule_analysis += f"- 👑 **获利因子评估**: 卓越/无回撤 (PF: {pf_str}) - 期间无任何亏损笔数。注：若交易笔数极少，需谨防样本偏差。\n"
+    elif pf_val < 1.0:
+        rule_analysis += f"- 💀 **获利因子评估**: 期望值为负/极差 (PF: {pf_val:.2f}) - 策略总盈利未能覆盖总亏损，系统处于实质亏损状态，建议立即停机复盘优化。\n"
+    elif pf_val < 1.25:
+        rule_analysis += f"- ⚠️ **获利因子评估**: 边际生存/较差 (PF: {pf_val:.2f}) - 扣除手续费及亏损后利润微薄，回撤抵御能力低，生存状态脆弱。\n"
+    elif pf_val < 1.5:
+        rule_analysis += f"- 🟡 **获利因子评估**: 合格/基本盈利 (PF: {pf_val:.2f}) - 策略可实现基本盈亏覆盖，但抗震荡行情侵蚀的边际空间较小。\n"
+    elif pf_val < 2.0:
+        rule_analysis += f"- 🟢 **获利因子评估**: 良好/稳健特征 (PF: {pf_val:.2f}) - 盈利能力良好，收益稳健覆盖风险，具备持续实盘运行基础。\n"
+    elif pf_val < 3.0:
+        rule_analysis += f"- 🚀 **获利因子评估**: 优秀/高效盈利 (PF: {pf_val:.2f}) - 收益显著优于风险，策略对当前行情具有明显期望优势。\n"
+    else:
+        rule_analysis += f"- 👑 **获利因子评估**: 卓越/异常表现 (PF: {pf_val:.2f}) - 获利能力极其强劲。注：若交易笔数较少（如<20笔），需谨防小样本特征偏差。\n"
         
     # 诊断版本变化
     if 'text' in df.columns:
@@ -564,9 +584,12 @@ if st.session_state.get('data_loaded'):
         display_df = df
         
     # 重命名列使之更易读
-    readable_df = display_df[['datetime', 'side', 'pnl_pnl', 'pnl_fee', 'pnl', 'entry_price', 'text']].copy()
+    readable_df = display_df[['datetime', 'side', 'size', 'entry_price', 'close_price', 'pnl_pnl', 'pnl_fee', 'pnl', 'text']].copy()
+    readable_df['datetime'] = readable_df['datetime'].dt.strftime('%Y-%m-%d %H:%M')
     readable_df['side'] = readable_df['side'].map({'long': 'Sell (平多)', 'short': 'Buy (平空)'}).fillna(readable_df['side'])
-    readable_df.columns = ['平仓时间', '平仓方向', '合约盈亏(U)', '手续费(U)', '净盈亏(U)', '建仓均价', '订单备注/版本']
+    readable_df['entry_price'] = readable_df['entry_price'].map(lambda x: f"{x:.4f}" if pd.notna(x) else "---")
+    readable_df['close_price'] = readable_df['close_price'].map(lambda x: f"{x:.4f}" if pd.notna(x) else "---")
+    readable_df.columns = ['平仓时间', '平仓方向', '张数', '建仓均价', '平仓均价', '合约盈亏(U)', '手续费(U)', '净盈亏(U)', '订单备注/版本']
     
     # 对净盈亏列进行高亮
     def highlight_pnl(val):

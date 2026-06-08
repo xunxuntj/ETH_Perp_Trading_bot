@@ -239,7 +239,7 @@ def fetch_all_position_closes(client: GateClient, contract: str, start_dt: datet
                 
                 page_closes.append({
                     'time': t,
-                    'datetime': datetime.datetime.fromtimestamp(t, tz=datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                    'datetime': datetime.datetime.fromtimestamp(t, tz=datetime.timezone.utc).strftime('%Y-%m-%d %H:%M'),
                     'side': side,
                     'pnl': pnl,  # 净盈亏 (已扣手续费/资金费)
                     'pnl_pnl': pnl_pnl,  # 盘面盈亏
@@ -472,6 +472,7 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
             "net_pnl": row['pnl'],
             "entry_price": row['entry_price'],
             "close_price": row['close_price'],
+            "size": row['size'],
             "duration_str": format_duration(row['duration_sec']),
             "r_multiple": r_multiples[idx],
             "text": row['text']
@@ -551,11 +552,22 @@ def generate_advanced_rules(total_pnl: float, win_rate: float, wl_ratio: float, 
     else:
         risk_advice.append(f"✅ **流动性滑点**: 平均每单滑点 {avg_slippage_ticks:.1f} Ticks，在正常流动性范围内。")
         
-    if total_trades > 10 and pf < 1.15:
-        risk_advice.append(f"<span style='color: #ff3e60; font-weight: bold;'>💀 获利因子 ({pf:.2f}) 跌破实盘生死线 (1.15)，系统长期数学期望值为负，建议立即停机复盘！</span>")
+    # 获利因子分档评估
+    pf_str = f"{pf:.2f}" if pf != float('inf') else "∞"
+    if pf == float('inf') or np.isinf(pf) or np.isnan(pf):
+        risk_advice.append(f"👑 **获利因子评估**: 卓越/无回撤 (PF: {pf_str}) — 期间无任何亏损笔数。注：若交易笔数极少，需谨防样本偏差。")
+    elif pf < 1.0:
+        risk_advice.append(f"<span style='color: #ff3e60; font-weight: bold;'>💀 获利因子评估: 期望值为负/极差 (PF: {pf:.2f}) — 策略总盈利未能覆盖总亏损，系统处于实质亏损状态，建议立即停机复盘优化。</span>")
+    elif pf < 1.25:
+        risk_advice.append(f"<span style='color: #ffaa00; font-weight: bold;'>⚠️ 获利因子评估: 边际生存/较差 (PF: {pf:.2f}) — 扣除手续费及亏损后利润微薄，回撤抵御能力低，生存状态脆弱。</span>")
+    elif pf < 1.5:
+        risk_advice.append(f"🟡 **获利因子评估**: 合格/基本盈利 (PF: {pf:.2f}) — 策略可实现基本盈亏覆盖，但抗震荡行情侵蚀的边际空间较小。")
+    elif pf < 2.0:
+        risk_advice.append(f"🟢 **获利因子评估**: 良好/稳健特征 (PF: {pf:.2f}) — 盈利能力良好，收益稳健覆盖风险，具备持续实盘运行基础。")
+    elif pf < 3.0:
+        risk_advice.append(f"🚀 **获利因子评估**: 优秀/高效盈利 (PF: {pf:.2f}) — 收益显著优于风险，策略对当前行情具有明显期望优势。")
     else:
-        pf_str = f"{pf:.2f}" if pf != float('inf') else "∞"
-        risk_advice.append(f"✅ **获利因子**: 当前 PF 为 {pf_str}，策略收益覆盖风险能力正常。")
+        risk_advice.append(f"👑 **获利因子评估**: 卓越/异常表现 (PF: {pf:.2f}) — 获利能力极其强劲。注：若交易笔数较少（如<{total_trades if total_trades < 20 else 20}笔），需谨防小样本特征偏差。")
         
     if current_losing_streak > 0 and not is_circuit_broken:
         risk_advice.append(f"⚠️ **连亏警报**: 当前处于 {current_losing_streak} 连亏中，请关注风控限额。")

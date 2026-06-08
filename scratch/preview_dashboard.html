@@ -260,11 +260,14 @@
                         <thead class="text-xs uppercase bg-brand-bg text-brand-textMuted border-b border-gray-800">
                             <tr>
                                 <th class="px-4 py-3">平仓时间</th>
-                                <th class="px-4 py-3">平仓方向</th>
-                                <th class="px-4 py-3">合约盈亏(U)</th>
+                                <th class="px-4 py-3">方向</th>
+                                <th class="px-4 py-3">张数</th>
+                                <th class="px-4 py-3">建仓均价</th>
+                                <th class="px-4 py-3">平仓均价</th>
+                                <th class="px-4 py-3">持仓时长</th>
                                 <th class="px-4 py-3">手续费(U)</th>
                                 <th class="px-4 py-3 text-right">净盈亏(U)</th>
-                                <th class="px-4 py-3">建仓均价</th>
+                                <th class="px-4 py-3 text-right">R 倍数</th>
                                 <th class="px-4 py-3">订单备注/版本</th>
                             </tr>
                         </thead>
@@ -410,6 +413,7 @@
                     data: [0, 45.2, 32.1, 110.5, 92.3, 275.4, 342.5],
                     ruleText: "🟢 **总体表现**: 策略在评估期内实现**盈利 (+342.50 USDT)**。<br>该策略表现为**低胜率、高盈亏比**的特征，典型代表为**趋势跟踪策略**（如项目配置的 ADX + SuperTrend 组合）。这类策略的特点是‘输小赢大’，靠少数大趋势盈利，震荡期会有连续的小幅亏损，属于正常现象。",
                     riskAdvice: [
+                        "🟢 **获利因子评估**: 良好/稳健特征 (PF: 1.82) — 盈利能力良好，收益稳健覆盖风险，具备持续实盘运行基础。",
                         "✅ **回撤控制**: 最大回撤控制在 **6.40%**，处于健康水平，系统杠杆（10x）配置良好。",
                         "✅ **手续费占比**: 手续费共计 **24.80 USDT**，损耗在合理区间，策略信号过滤有效，无过度交易磨损。",
                         "🔄 **策略版本对比**: 检测到此期间运行的策略版本为 `t-v9.6-exec`。"
@@ -434,6 +438,7 @@
                     data: [0, 64.7, 55.9, 179.8, 156.2],
                     ruleText: "🟢 **总体表现**: 策略在最近7天内实现**盈利 (+156.20 USDT)**。<br>最近一周市场趋势较强，策略胜率提升至 50.0%，回撤仅 2.30%，策略在单边拉升中表现极其稳健。",
                     riskAdvice: [
+                        "🚀 **获利因子评估**: 优秀/高效盈利 (PF: 2.10) — 收益显著优于风险，策略对当前行情具有明显期望优势。",
                         "✅ **回撤极低**: 最大回撤仅为 **2.30%**，近期策略参数非常贴合行情。",
                         "✅ **磨损极小**: 7天内交易12次，手续费仅 8.50U，信号过滤极其高效。"
                     ],
@@ -457,6 +462,7 @@
                     data: [0, -52.4, 25.1, -120.4, -205.2, -12.1, -82.1],
                     ruleText: "🔴 **总体表现**: 策略在90天内处于**小幅亏损 (-82.10 USDT)**。<br>前60天经历长达数周的宽幅震荡洗盘行情。虽然盈亏比仍有 1.70，但因低胜率（35.2%）和频繁交易摩擦，导致累积收益告负。",
                     riskAdvice: [
+                        "<span style='color: #ff3e60; font-weight: bold;'>💀 获利因子评估: 期望值为负/极差 (PF: 0.92) — 策略总盈利未能覆盖总亏损，系统处于实质亏损状态，建议立即停机复盘优化。</span>",
                         "⚠️ **回撤较大**: 最大回撤达到了 **18.50%**，逼近 20% 风控阀值。如果在高杠杆下建议暂时降低 `RISK_FIXED_AMOUNT`。",
                         "⚠️ **手续费磨损过重**: 手续费高达 **112.40 USDT**，已大幅超出净损益，存在震荡市频繁刷单被磨损的情况。强烈建议优化 ADX 过滤机制或改用更大周期。"
                     ],
@@ -482,6 +488,7 @@
                     data: [0, 25.1, 12.4, 78.5, 62.4, 150.3, 210.4],
                     ruleText: "🟢 **总体表现**: ETH 策略在30天内实现**盈利 (+210.40 USDT)**。<br>ETH 相比 SOL 波动更为温和，因此最大回撤更低（4.80%），但总体盈利总额由于波动率低也略小于 SOL。",
                     riskAdvice: [
+                        "🟢 **获利因子评估**: 良好/稳健特征 (PF: 1.65) — 盈利能力良好，收益稳健覆盖风险，具备持续实盘运行基础。",
                         "✅ **风险水平极低**: 最大回撤仅 **4.80%**，策略在 ETH 上的回撤曲线极为平缓。",
                         "✅ **信号平稳**: 手续费耗费 18.20U，处于良性水平。"
                     ],
@@ -505,6 +512,7 @@
                     data: [0, 31.2, 28.5, 99.4, 89.3],
                     ruleText: "🟢 **总体表现**: 策略在最近7天内实现**盈利 (+89.30 USDT)**。<br>交易次数较少，以短线波段落袋为安为主。",
                     riskAdvice: [
+                        "🟢 **获利因子评估**: 良好/稳健特征 (PF: 1.85) — 盈利能力良好，收益稳健覆盖风险，具备持续实盘运行基础。",
                         "✅ **高效率**: 平均每笔盈利 32U 远大于亏损，回撤几乎可以忽略不计。"
                     ],
                     aiText: '"ETH 近7天波动较为平缓，仅成交 9 次。策略的锁定利润机制（LOCK_PROFIT_BUFFER）在震荡反弹中起到了保本效果，确保了整体资金曲线平滑爬坡。"'
@@ -527,6 +535,7 @@
                     data: [0, -22.5, 45.3, -35.2, -88.4, 32.5, 12.5],
                     ruleText: "🟢 **总体表现**: 策略在90天内实现**微利保本 (+12.50 USDT)**。<br>ETH 经历了长期的盘整期，策略在前半阶段回撤 12.30%，在后半段趋势行情中收回失地，基本打平。",
                     riskAdvice: [
+                        "<span style='color: #ffaa00; font-weight: bold;'>⚠️ 获利因子评估: 边际生存/较差 (PF: 1.05) — 扣除手续费及亏损后利润微薄，回撤抵御能力低，生存状态脆弱。</span>",
                         "✅ **抗风险测试通过**: 经历了长达3个月的市场牛熊交替，最终实现保本，验证了风控逻辑的容错率。",
                         "⚠️ **交易成本较高**: 产生了 68.20U 的手续费磨损，几乎抹平了所有利润。对于小本金来说需警惕磨损比例。"
                     ],
@@ -591,17 +600,17 @@
             
             const isETH = (symbol === 'ETH_USDT');
             const tradeData = isETH ? [
-                { time: "2026-06-03 12:15:32", dir: "Sell (平多)", pnl: "+45.30", fee: "-0.90", net: "+44.40", price: "3210.5", tag: "t-v9.6-exec", isWin: true },
-                { time: "2026-06-02 18:22:11", dir: "Buy (平空)", pnl: "-15.20", fee: "-0.75", net: "-15.95", price: "3185.0", tag: "t-v9.6-exec", isWin: false },
-                { time: "2026-06-02 04:30:19", dir: "Sell (平多)", pnl: "+98.50", fee: "-1.20", net: "+97.30", price: "3120.0", tag: "t-v9.6-exec", isWin: true },
-                { time: "2026-06-01 15:45:00", dir: "Buy (平空)", pnl: "-25.60", fee: "-0.80", net: "-26.40", price: "3195.4", tag: "t-v9.6-exec", isWin: false },
-                { time: "2026-05-31 09:12:05", dir: "Sell (平多)", pnl: "+35.40", fee: "-0.65", net: "+34.75", price: "3085.0", tag: "t-v9.5-legacy", isWin: true }
+                { time: "2026-06-03 12:15", dir: "Sell (平多)", size: 10, entry_price: 3190.5, close_price: 3210.5, duration: "2h 15m", fee: "-0.90", net: "+44.40", r: "2.22", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-02 18:22", dir: "Buy (平空)", size: 15, entry_price: 3200.0, close_price: 3185.0, duration: "1h 30m", fee: "-0.75", net: "-15.95", r: "-0.80", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-06-02 04:30", dir: "Sell (平多)", size: 20, entry_price: 3100.0, close_price: 3120.0, duration: "4h 00m", fee: "-1.20", net: "+97.30", r: "4.86", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-01 15:45", dir: "Buy (平空)", size: 12, entry_price: 3220.0, close_price: 3195.4, duration: "5h 15m", fee: "-0.80", net: "-26.40", r: "-1.32", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-05-31 09:12", dir: "Sell (平多)", size: 8, entry_price: 3050.0, close_price: 3085.0, duration: "3h 45m", fee: "-0.65", net: "+34.75", r: "1.74", tag: "t-v9.5-legacy", isWin: true }
             ] : [
-                { time: "2026-06-03 14:30:12", dir: "Sell (平多)", pnl: "+82.40", fee: "-1.20", net: "+81.20", price: "18.450", tag: "t-v9.6-exec", isWin: true },
-                { time: "2026-06-03 11:00:45", dir: "Buy (平空)", pnl: "-12.50", fee: "-0.85", net: "-13.35", price: "18.210", tag: "t-v9.6-exec", isWin: false },
-                { time: "2026-06-02 23:15:02", dir: "Sell (平多)", pnl: "+125.40", fee: "-1.50", net: "+123.90", price: "17.950", tag: "t-v9.6-exec", isWin: true },
-                { time: "2026-06-02 08:30:19", dir: "Sell (平多)", pnl: "-8.20", fee: "-0.60", net: "-8.80", price: "18.120", tag: "t-v9.6-exec", isWin: false },
-                { time: "2026-06-01 19:45:00", dir: "Buy (平空)", pnl: "+65.80", fee: "-1.10", net: "+64.70", price: "18.330", tag: "t-v9.6-exec", isWin: true }
+                { time: "2026-06-03 14:30", dir: "Sell (平多)", size: 50, entry_price: 18.250, close_price: 18.450, duration: "1h 15m", fee: "-1.20", net: "+81.20", r: "4.06", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-03 11:00", dir: "Buy (平空)", size: 30, entry_price: 18.350, close_price: 18.210, duration: "45m", fee: "-0.85", net: "-13.35", r: "-0.67", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-06-02 23:15", dir: "Sell (平多)", size: 80, entry_price: 17.800, close_price: 17.950, duration: "6h 30m", fee: "-1.50", net: "+123.90", r: "6.19", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-02 08:30", dir: "Sell (平多)", size: 40, entry_price: 18.300, close_price: 18.120, duration: "2h 10m", fee: "-0.60", net: "-8.80", r: "-0.44", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-06-01 19:45", dir: "Buy (平空)", size: 60, entry_price: 18.150, close_price: 18.330, duration: "3h 20m", fee: "-1.10", net: "+64.70", r: "3.24", tag: "t-v9.6-exec", isWin: true }
             ];
 
             tradeData.forEach(item => {
@@ -614,10 +623,13 @@
                 tr.innerHTML = `
                     <td class="px-4 py-3">${item.time}</td>
                     <td class="px-4 py-3"><span class="${dirColor}">${item.dir}</span></td>
-                    <td class="px-4 py-3 ${item.isWin ? 'text-brand-primary' : 'text-brand-danger'}">${item.pnl}</td>
+                    <td class="px-4 py-3">${item.size}</td>
+                    <td class="px-4 py-3">${parseFloat(item.entry_price).toFixed(4)}</td>
+                    <td class="px-4 py-3">${parseFloat(item.close_price).toFixed(4)}</td>
+                    <td class="px-4 py-3">${item.duration || '---'}</td>
                     <td class="px-4 py-3">${item.fee}</td>
                     <td class="px-4 py-3 text-right ${netColor} font-bold">${item.net}</td>
-                    <td class="px-4 py-3">${item.price}</td>
+                    <td class="px-4 py-3 text-right ${netColor} font-semibold">${item.r}R</td>
                     <td class="px-4 py-3 text-xs text-gray-400">${item.tag}</td>
                 `;
                 tableBody.appendChild(tr);

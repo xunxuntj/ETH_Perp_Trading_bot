@@ -275,6 +275,7 @@
                             <tr>
                                 <th class="px-4 py-3">平仓时间</th>
                                 <th class="px-4 py-3">方向</th>
+                                <th class="px-4 py-3">张数</th>
                                 <th class="px-4 py-3">建仓均价</th>
                                 <th class="px-4 py-3">平仓均价</th>
                                 <th class="px-4 py-3">持仓时长</th>
@@ -473,11 +474,16 @@
                     const rSign = rVal > 0 ? "+" : "";
                     const rColor = rVal > 0 ? 'text-brand-primary' : rVal < 0 ? 'text-brand-danger' : 'text-white';
 
+                    const sizeVal = (item.size !== undefined && item.size !== null) ? item.size : 0;
+                    const entryPriceVal = (item.entry_price !== undefined && item.entry_price !== null) ? item.entry_price.toFixed(4) : '---';
+                    const closePriceVal = (item.close_price !== undefined && item.close_price !== null) ? item.close_price.toFixed(4) : '---';
+
                     tr.innerHTML = `
                         <td class="px-4 py-3">${item.datetime}</td>
                         <td class="px-4 py-3"><span class="${dirColor}">${dirText}</span></td>
-                        <td class="px-4 py-3">${item.entry_price.toFixed(4)}</td>
-                        <td class="px-4 py-3">${item.close_price ? item.close_price.toFixed(4) : '---'}</td>
+                        <td class="px-4 py-3">${sizeVal}</td>
+                        <td class="px-4 py-3">${entryPriceVal}</td>
+                        <td class="px-4 py-3">${closePriceVal}</td>
                         <td class="px-4 py-3">${item.duration_str || '---'}</td>
                         <td class="px-4 py-3">${item.fee.toFixed(2)}</td>
                         <td class="px-4 py-3 text-right ${netColor} font-bold">${netPnlSign}${item.net_pnl.toFixed(2)}</td>
@@ -487,7 +493,7 @@
                     tableBody.appendChild(tr);
                 });
             } else {
-                tableBody.innerHTML = `<tr><td colspan="9" class="px-4 py-8 text-center text-brand-textMuted">暂无平仓历史明细</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="10" class="px-4 py-8 text-center text-brand-textMuted">暂无平仓历史明细</td></tr>`;
             }
         }
 
