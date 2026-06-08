@@ -191,6 +191,11 @@ def fetch_all_position_closes(client: GateClient, contract: str, start_dt: datet
             min_time_in_page = to_timestamp
             
             for item in data:
+                # 1. 确保标的合约名称匹配 (防止 API 返回其他合约数据)
+                item_contract = item.get('contract', '')
+                if item_contract and item_contract != contract:
+                    continue
+                
                 t = int(item.get('time', 0))
                 if t < min_time_in_page:
                     min_time_in_page = t
@@ -204,8 +209,10 @@ def fetch_all_position_closes(client: GateClient, contract: str, start_dt: datet
                 first_open_time = int(item.get('first_open_time', 0))
                 entry_price = float(item.get('long_price', 0) or item.get('short_price', 0) or 0)
                 
-                # 确定方向：如果返回里是 long_price > 0 说明原持仓是多头
-                side = 'long' if float(item.get('long_price', 0)) > 0 else 'short'
+                # 确定方向：优先读取 API 返回的官方 side 字段，否则使用 long_price 兜底判断
+                side = item.get('side', '')
+                if not side:
+                    side = 'long' if float(item.get('long_price', 0)) > 0 else 'short'
                 
                 # 滑点计算 (需要请求 K 线，加入防错)
                 sig_open_price = get_kline_close(client, contract, first_open_time) if first_open_time > 0 else 0

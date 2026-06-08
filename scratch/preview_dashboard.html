@@ -591,24 +591,24 @@
             
             const isETH = (symbol === 'ETH_USDT');
             const tradeData = isETH ? [
-                { time: "2026-06-03 12:15:32", dir: "Long (平多)", pnl: "+45.30", fee: "-0.90", net: "+44.40", price: "3210.5", tag: "t-v9.6-exec", isWin: true },
-                { time: "2026-06-02 18:22:11", dir: "Short (平空)", pnl: "-15.20", fee: "-0.75", net: "-15.95", price: "3185.0", tag: "t-v9.6-exec", isWin: false },
-                { time: "2026-06-02 04:30:19", dir: "Long (平多)", pnl: "+98.50", fee: "-1.20", net: "+97.30", price: "3120.0", tag: "t-v9.6-exec", isWin: true },
-                { time: "2026-06-01 15:45:00", dir: "Short (平空)", pnl: "-25.60", fee: "-0.80", net: "-26.40", price: "3195.4", tag: "t-v9.6-exec", isWin: false },
-                { time: "2026-05-31 09:12:05", dir: "Long (平多)", pnl: "+35.40", fee: "-0.65", net: "+34.75", price: "3085.0", tag: "t-v9.5-legacy", isWin: true }
+                { time: "2026-06-03 12:15:32", dir: "Sell (平多)", pnl: "+45.30", fee: "-0.90", net: "+44.40", price: "3210.5", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-02 18:22:11", dir: "Buy (平空)", pnl: "-15.20", fee: "-0.75", net: "-15.95", price: "3185.0", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-06-02 04:30:19", dir: "Sell (平多)", pnl: "+98.50", fee: "-1.20", net: "+97.30", price: "3120.0", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-01 15:45:00", dir: "Buy (平空)", pnl: "-25.60", fee: "-0.80", net: "-26.40", price: "3195.4", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-05-31 09:12:05", dir: "Sell (平多)", pnl: "+35.40", fee: "-0.65", net: "+34.75", price: "3085.0", tag: "t-v9.5-legacy", isWin: true }
             ] : [
-                { time: "2026-06-03 14:30:12", dir: "Long (平多)", pnl: "+82.40", fee: "-1.20", net: "+81.20", price: "18.450", tag: "t-v9.6-exec", isWin: true },
-                { time: "2026-06-03 11:00:45", dir: "Short (平空)", pnl: "-12.50", fee: "-0.85", net: "-13.35", price: "18.210", tag: "t-v9.6-exec", isWin: false },
-                { time: "2026-06-02 23:15:02", dir: "Long (平多)", pnl: "+125.40", fee: "-1.50", net: "+123.90", price: "17.950", tag: "t-v9.6-exec", isWin: true },
-                { time: "2026-06-02 08:30:19", dir: "Long (平多)", pnl: "-8.20", fee: "-0.60", net: "-8.80", price: "18.120", tag: "t-v9.6-exec", isWin: false },
-                { time: "2026-06-01 19:45:00", dir: "Short (平空)", pnl: "+65.80", fee: "-1.10", net: "+64.70", price: "18.330", tag: "t-v9.6-exec", isWin: true }
+                { time: "2026-06-03 14:30:12", dir: "Sell (平多)", pnl: "+82.40", fee: "-1.20", net: "+81.20", price: "18.450", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-03 11:00:45", dir: "Buy (平空)", pnl: "-12.50", fee: "-0.85", net: "-13.35", price: "18.210", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-06-02 23:15:02", dir: "Sell (平多)", pnl: "+125.40", fee: "-1.50", net: "+123.90", price: "17.950", tag: "t-v9.6-exec", isWin: true },
+                { time: "2026-06-02 08:30:19", dir: "Sell (平多)", pnl: "-8.20", fee: "-0.60", net: "-8.80", price: "18.120", tag: "t-v9.6-exec", isWin: false },
+                { time: "2026-06-01 19:45:00", dir: "Buy (平空)", pnl: "+65.80", fee: "-1.10", net: "+64.70", price: "18.330", tag: "t-v9.6-exec", isWin: true }
             ];
 
             tradeData.forEach(item => {
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-brand-bg/50";
                 
-                const dirColor = item.dir.includes('Long') ? 'text-brand-primary' : 'text-brand-danger';
+                const dirColor = item.dir.includes('Sell') ? 'text-brand-danger' : 'text-brand-primary';
                 const netColor = item.isWin ? 'text-brand-primary' : 'text-brand-danger';
                 
                 tr.innerHTML = `

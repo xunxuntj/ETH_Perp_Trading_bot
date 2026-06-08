@@ -461,8 +461,8 @@
                     tr.className = "hover:bg-brand-bg/50";
                     
                     const isWin = item.net_pnl > 0;
-                    const dirText = item.side === 'long' ? 'Long (平多)' : item.side === 'short' ? 'Short (平空)' : item.side;
-                    const dirColor = item.side === 'long' ? 'text-brand-primary' : item.side === 'short' ? 'text-brand-danger' : 'text-white';
+                    const dirText = item.side === 'long' ? 'Sell (平多)' : item.side === 'short' ? 'Buy (平空)' : item.side;
+                    const dirColor = item.side === 'long' ? 'text-brand-danger' : item.side === 'short' ? 'text-brand-primary' : 'text-white';
                     const netColor = isWin ? 'text-brand-primary' : 'text-brand-danger';
                     
                     const pnlSign = item.pnl > 0 ? "+" : "";

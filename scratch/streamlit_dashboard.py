@@ -107,6 +107,11 @@ def fetch_position_closes(client: GateClient, contract: str, start_dt: datetime.
             min_time_in_page = to_timestamp
             
             for item in data:
+                # 确保标的合约名称匹配 (防止 API 返回其他合约数据)
+                item_contract = item.get('contract', '')
+                if item_contract and item_contract != contract:
+                    continue
+                
                 t = int(item.get('time', 0))
                 if t < min_time_in_page:
                     min_time_in_page = t
@@ -115,10 +120,15 @@ def fetch_position_closes(client: GateClient, contract: str, start_dt: datetime.
                 if t < start_timestamp:
                     continue
                     
+                # 确定方向：优先读取 API 返回的官方 side 字段，否则使用 long_price 兜底判断
+                side = item.get('side', '')
+                if not side:
+                    side = 'long' if float(item.get('long_price', 0)) > 0 else 'short'
+                    
                 page_closes.append({
                     'time': t,
                     'datetime': datetime.datetime.fromtimestamp(t, tz=datetime.timezone.utc),
-                    'side': item.get('side', ''),  # long / short (平仓时的方向：平多即卖出，平空即买入)
+                    'side': side,  # long / short (平仓时的方向：平多即卖出，平空即买入)
                     'pnl': float(item.get('pnl', 0)),  # 净盈亏 (含手续费)
                     'pnl_pnl': float(item.get('pnl_pnl', 0)),  # 仓位净盈亏 (未扣手续费)
                     'pnl_fee': float(item.get('pnl_fee', 0)),  # 手续费 (负数)
@@ -555,6 +565,7 @@ if st.session_state.get('data_loaded'):
         
     # 重命名列使之更易读
     readable_df = display_df[['datetime', 'side', 'pnl_pnl', 'pnl_fee', 'pnl', 'entry_price', 'text']].copy()
+    readable_df['side'] = readable_df['side'].map({'long': 'Sell (平多)', 'short': 'Buy (平空)'}).fillna(readable_df['side'])
     readable_df.columns = ['平仓时间', '平仓方向', '合约盈亏(U)', '手续费(U)', '净盈亏(U)', '建仓均价', '订单备注/版本']
     
     # 对净盈亏列进行高亮
