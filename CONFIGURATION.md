@@ -2,7 +2,7 @@
 
 本文档详细说明所有配置参数的含义、用途、推荐值及调整建议。所有配置通过环境变量和 `config.py` 管理。
 
-## 🔐 API 凭证配置
+## 🔐 API Key & Secret 凭证配置
 
 ### GATE_API_KEY
 - **类型**: String
