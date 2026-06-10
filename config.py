@@ -99,6 +99,10 @@ MAX_CONSECUTIVE_LOSSES = int(os.environ.get("MAX_CONSECUTIVE_LOSSES", "3"))
 # 当止损锁定后，立即触发止损也能赚到这个金额
 LOCK_PROFIT_BUFFER = float(os.environ.get("LOCK_PROFIT_BUFFER", "0.5"))  # 0.5 USDT
 
+# ============ 报告统计初始时间 ============
+# 启用自动交易的初始时间，精确到小时 (东八区 UTC+8)
+REPORT_START_TIME = os.environ.get("REPORT_START_TIME", "2026-06-10 15:00")
+
 # ============ 状态文件 ============
 if CONTRACT == "ETH_USDT" and not os.environ.get("STATE_FILE"):
     STATE_FILE = "trading_state.json"

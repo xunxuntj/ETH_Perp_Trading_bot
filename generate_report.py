@@ -6,7 +6,7 @@ import time
 import requests
 import numpy as np
 import pandas as pd
-from typing import Optional
+from typing import Optional, Tuple
 
 # 载入项目库
 from gate_client import GateClient
@@ -108,43 +108,55 @@ def get_kline_close(client: GateClient, contract: str, timestamp: int) -> float:
     return 0.0
 
 
-def calculate_default_days() -> int:
+def get_report_time_window() -> Tuple[str, datetime.datetime, datetime.datetime, int]:
     """
-    计算从 2026年6月2日 到当前日期的实际天数
-    如果结果小于等于 0，则默认返回 1 天
+    获取报告的配置和时间窗口：(symbol, start_dt, end_dt, days)
     """
-    base_date = datetime.datetime(2026, 6, 2, tzinfo=datetime.timezone.utc)
-    current_date = datetime.datetime.now(datetime.timezone.utc)
+    tz_utc8 = datetime.timezone(datetime.timedelta(hours=8))
     
-    base_day = datetime.datetime(base_date.year, base_date.month, base_date.day, tzinfo=datetime.timezone.utc)
-    current_day = datetime.datetime(current_date.year, current_date.month, current_date.day, tzinfo=datetime.timezone.utc)
-    
-    diff_days = (current_day - base_day).days
-    return max(1, diff_days)
-
-
-def get_report_config():
-    """
-    从环境变量中提取报告配置参数，并处理默认值
-    """
+    # 获取 symbol
     symbol = os.environ.get("REPORT_SYMBOL")
     if not symbol or symbol.strip() == "":
         symbol = DEFAULT_SYMBOL
     symbol = symbol.strip().upper()
+    
+    try:
+        from config import REPORT_START_TIME
+    except ImportError:
+        REPORT_START_TIME = "2026-06-10 15:00"
         
+    end_dt = datetime.datetime.now(datetime.timezone.utc)
+    
+    # 优先从环境变量获取天数，若指定则按天数推算
     days_str = os.environ.get("REPORT_DAYS")
-    if not days_str or days_str.strip() == "":
-        days = calculate_default_days()
-    else:
+    if days_str and days_str.strip() != "":
         try:
             days = int(days_str)
-            if days <= 0:
-                days = calculate_default_days()
+            if days > 0:
+                start_dt = end_dt - datetime.timedelta(days=days)
+                return symbol, start_dt, end_dt, days
         except ValueError:
-            print(f"⚠️ 环境变量 REPORT_DAYS 的值 '{days_str}' 不是有效整数，已切换为默认值天数。")
-            days = calculate_default_days()
+            print(f"⚠️ 环境变量 REPORT_DAYS 的值 '{days_str}' 不是有效整数，已切换为默认时间配置。")
             
-    return symbol, days
+    # 否则，从配置中读取具体的启用自动交易时间
+    try:
+        clean_time_str = REPORT_START_TIME.strip()
+        if len(clean_time_str) == 13: # YYYY-MM-DD HH
+            dt_naive = datetime.datetime.strptime(clean_time_str, "%Y-%m-%d %H")
+        else:
+            dt_naive = datetime.datetime.strptime(clean_time_str, "%Y-%m-%d %H:%M")
+        
+        # 将 naive 时间视作东八区本地时间，然后计算对应的带有时区信息的 datetime
+        start_dt = dt_naive.replace(tzinfo=tz_utc8)
+    except Exception as e:
+        print(f"⚠️ 解析 REPORT_START_TIME '{REPORT_START_TIME}' 失败: {e}，使用默认值 2026-06-10 15:00")
+        dt_naive = datetime.datetime.strptime("2026-06-10 15:00", "%Y-%m-%d %H:%M")
+        start_dt = dt_naive.replace(tzinfo=tz_utc8)
+        
+    # 计算实际天数（至少 1 天，向下取整）
+    diff_seconds = (end_dt - start_dt).total_seconds()
+    days = max(1, int(diff_seconds // 86400))
+    return symbol, start_dt, end_dt, days
 
 
 def fetch_all_position_closes(client: GateClient, contract: str, start_dt: datetime.datetime, end_dt: datetime.datetime) -> pd.DataFrame:
@@ -642,17 +654,16 @@ def main():
         print("❌ 错误: 缺少 GATE_API_KEY 或 GATE_API_SECRET 环境变量！")
         sys.exit(1)
         
-    symbol, days = get_report_config()
+    symbol, start_dt, end_dt, days = get_report_time_window()
     print("=" * 60)
     print(f"🚀 开始生成策略评估报告...")
     print(f"📌 交易对合约: {symbol}")
     print(f"📅 评估天数范围: {days} 天")
+    print(f"⏱ 时间窗口: {start_dt.strftime('%Y-%m-%d %H:%M %z')} ~ {end_dt.strftime('%Y-%m-%d %H:%M %z')}")
     print("=" * 60)
     
     client = GateClient(api_key, api_secret)
-    
-    end_dt = datetime.datetime.now(datetime.timezone.utc)
-    start_dt = end_dt - datetime.timedelta(days=days)
+
     
     df = fetch_all_position_closes(client, symbol, start_dt, end_dt)
     
