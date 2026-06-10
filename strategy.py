@@ -648,6 +648,17 @@ class TradingStrategy:
                 ))
             
             else:
+                target_dir_str = "做多 🟢" if last_30m_dir == 1 else "做空 🔴"
+                h1_st_expect = "🟢 绿" if last_30m_dir == 1 else "🔴 红"
+                h1_st_check = "满足 ✅" if (last_30m_dir == 1 and last_1h_dir == 1) or (last_30m_dir == -1 and last_1h_dir == -1) else "阻断 ❌"
+                
+                dema_op = ">" if last_30m_dir == 1 else "<"
+                dema_ok = (last_30m_dir == 1 and last_1h_close > last_1h_dema) or (last_30m_dir == -1 and last_1h_close < last_1h_dema)
+                dema_check = "满足 ✅" if dema_ok else "阻断 ❌"
+                
+                adx_ok = (not USE_ADX) or (last_adx > ADX_THRESHOLD)
+                adx_check = "满足 ✅" if adx_ok else ("过滤中 ❌" if USE_ADX else "已关闭 ⚠️")
+                
                 return finalize(TradeResult(
                     action="none",
                     message=f"""📊 无开仓信号
@@ -655,19 +666,12 @@ class TradingStrategy:
 ━━━━━━━━━━ 当前价格 ━━━━━━━━━━
 • 价格: {current_price:.2f}
 
-━━━━━━━━━━ 技术指标 ━━━━━━━━━━
-【1小时线】
-• 1H ST: {last_1h_st:.2f} {'🟢 绿' if last_1h_dir == 1 else '🔴 红'}
-• 1H 收盘: {last_1h_close:.2f}
-• 1H DEMA200: {last_1h_dema:.2f}
-• 条件: {dema_long if last_1h_close > last_1h_dema else dema_short}
+🎯 目标方向: {target_dir_str} (基于 30m ST)
 
-【30分钟线】
-• 30m ST: {last_30m_st:.2f} {'🟢 绿' if last_30m_dir == 1 else '🔴 红'}
-
-━━━━━━━━━━ ADX 过滤 ━━━━━━━━━━
-• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f} (阈值: {ADX_THRESHOLD})
-• 状态: {'满足 ✅' if last_adx > ADX_THRESHOLD else '过滤中 ❌' if USE_ADX else '已关闭 ⚠️'}
+━━━━━━━━━━ 过滤条件检查 ━━━━━━━━━━
+• 1H ST 趋势过滤 (1H ST 应为 {h1_st_expect}, 实际为 {last_1h_st:.2f} {'🟢 绿' if last_1h_dir == 1 else '🔴 红'}): {h1_st_check}
+• 1H DEMA 均线过滤 (收盘 {last_1h_close:.2f} {dema_op} DEMA {last_1h_dema:.2f}): {dema_check}
+• ADX 动能过滤 (ADX {last_adx:.2f} > 阈值 {ADX_THRESHOLD}): {adx_check}
 
 ━━━━━━━━━━ 账户状态 ━━━━━━━━━━
 • 本金: {equity:.2f}U
