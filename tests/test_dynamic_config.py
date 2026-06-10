@@ -202,3 +202,45 @@ def test_custom_symbol_and_face_value_resolution(monkeypatch):
     assert cooldown.COOLDOWN_STATE_FILE == "cooldown_state.json"
     assert cooldown.COOLDOWN_NOTIFY_STATE_FILE == "cooldown_notify_state.json"
 
+
+def test_dynamic_tp_and_adx_thresholds(monkeypatch):
+    import config
+    import importlib
+
+    # 1. Test BTC_USDT
+    monkeypatch.setenv("SYMBOL", "BTC_USDT")
+    monkeypatch.delenv("TP_RATIO", raising=False)
+    monkeypatch.delenv("ADX_THRESHOLD", raising=False)
+    monkeypatch.delenv("DEMA_PERIOD", raising=False)
+    monkeypatch.delenv("ADX_TIMEFRAME", raising=False)
+    importlib.reload(config)
+    assert config.TP_RATIO == 22.0
+    assert config.ADX_THRESHOLD == 35.0
+    assert config.DEMA_PERIOD == 200
+    assert config.ADX_TIMEFRAME == "30m"
+
+    # 2. Test ETH_USDT
+    monkeypatch.setenv("SYMBOL", "ETH_USDT")
+    monkeypatch.delenv("TP_RATIO", raising=False)
+    monkeypatch.delenv("ADX_THRESHOLD", raising=False)
+    monkeypatch.delenv("DEMA_PERIOD", raising=False)
+    monkeypatch.delenv("ADX_TIMEFRAME", raising=False)
+    importlib.reload(config)
+    assert config.TP_RATIO == 5.0
+    assert config.ADX_THRESHOLD == 30.0
+    assert config.DEMA_PERIOD == 150
+    assert config.ADX_TIMEFRAME == "30m"
+
+    # 3. Test explicit env overrides
+    monkeypatch.setenv("SYMBOL", "BTC_USDT")
+    monkeypatch.setenv("TP_RATIO", "15.0")
+    monkeypatch.setenv("ADX_THRESHOLD", "20.0")
+    monkeypatch.setenv("DEMA_PERIOD", "180")
+    monkeypatch.setenv("ADX_TIMEFRAME", "1H")
+    importlib.reload(config)
+    assert config.TP_RATIO == 15.0
+    assert config.ADX_THRESHOLD == 20.0
+    assert config.DEMA_PERIOD == 180
+    assert config.ADX_TIMEFRAME == "1h"
+
+

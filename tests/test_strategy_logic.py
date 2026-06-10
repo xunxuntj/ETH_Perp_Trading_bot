@@ -8,6 +8,9 @@ import unittest
 from unittest.mock import patch
 
 import pandas as pd
+import strategy
+strategy.LOCK_PROFIT_BUFFER = 1.0
+
 from strategy import (
     is_1h_tighter, calculate_lock_threshold, calculate_position_size,
     Phase, Direction, Position, FACE_VALUE, TradingStrategy, tighten_stop_loss
@@ -432,8 +435,8 @@ class TestLiveStopFallback(unittest.TestCase):
         strategy = TradingStrategy(client)
 
         position = {"entry_price": 2062.17, "size": -49}
-        df_30m = pd.DataFrame({"close": [2000.0, 2000.0]})
-        df_1h = pd.DataFrame({"close": [2000.0, 2000.0]})
+        df_30m = pd.DataFrame({"close": [2060.0, 2060.0]})
+        df_1h = pd.DataFrame({"close": [2060.0, 2060.0]})
         st_30m = pd.DataFrame({"supertrend": [2063.0, 2059.0], "direction": [-1, -1]})
         st_1h = pd.DataFrame({"supertrend": [2063.0, 2052.0], "direction": [-1, -1]})
 
@@ -444,7 +447,7 @@ class TestLiveStopFallback(unittest.TestCase):
                 df_1h,
                 st_30m,
                 st_1h,
-                last_1h_close=2000.0,
+                last_1h_close=2060.0,
                 last_1h_dema=2100.0,
                 risk_amount=10.0,
                 risk_info="test",

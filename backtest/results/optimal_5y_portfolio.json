@@ -1,0 +1,1614 @@
+{
+    "single_asset_top_configs": {
+        "BTC_USDT": [
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 10.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 1036,
+                    "net_pnl": 309.2237954395943,
+                    "win_rate": 0.2876447876447876,
+                    "profit_factor": 1.0290400204530696,
+                    "cagr": 0.055120427378833714,
+                    "max_dd": -0.5248220051920175,
+                    "final_equity": 1309.2237954395962
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "dema",
+                "dema_period": 150,
+                "tp_ratio": 8.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 1151,
+                    "net_pnl": 294.0525091536679,
+                    "win_rate": 0.3014769765421373,
+                    "profit_factor": 1.0203505536692787,
+                    "cagr": 0.052674229865194766,
+                    "max_dd": -0.6059963273140764,
+                    "final_equity": 1294.0525091536695
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 150,
+                "tp_ratio": 8.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 1090,
+                    "net_pnl": 276.9266356594467,
+                    "win_rate": 0.3,
+                    "profit_factor": 1.02395979419823,
+                    "cagr": 0.04988512417095037,
+                    "max_dd": -0.5310402878268494,
+                    "final_equity": 1276.9266356594444
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 150,
+                "tp_ratio": 10.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 1061,
+                    "net_pnl": 199.764118527813,
+                    "win_rate": 0.29594721960414705,
+                    "profit_factor": 1.0207366959585042,
+                    "cagr": 0.03693390200100044,
+                    "max_dd": -0.5795525382872295,
+                    "final_equity": 1199.7641185278144
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "dema",
+                "dema_period": 200,
+                "tp_ratio": 8.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 1121,
+                    "net_pnl": 88.22138566691139,
+                    "win_rate": 0.2952720785013381,
+                    "profit_factor": 1.00681137391823,
+                    "cagr": 0.016978656429382344,
+                    "max_dd": -0.5904854201582065,
+                    "final_equity": 1088.22138566691
+                }
+            }
+        ],
+        "ETH_USDT": [
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 5.0,
+                "adx_threshold": 30.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 935,
+                    "net_pnl": 3100.211926019956,
+                    "win_rate": 0.31871657754010696,
+                    "profit_factor": 1.12769090930569,
+                    "cagr": 0.32444413856159815,
+                    "max_dd": -0.5031421095831792,
+                    "final_equity": 4100.211926019948
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 5.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 1202,
+                    "net_pnl": 2576.8149967692602,
+                    "win_rate": 0.3161397670549085,
+                    "profit_factor": 1.0869132800666739,
+                    "cagr": 0.28891045063044385,
+                    "max_dd": -0.6713388440113169,
+                    "final_equity": 3576.8149967692602
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "dema",
+                "dema_period": 200,
+                "tp_ratio": 5.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 1272,
+                    "net_pnl": 2575.8205401959244,
+                    "win_rate": 0.3089622641509434,
+                    "profit_factor": 1.0803507909906396,
+                    "cagr": 0.2888390804480001,
+                    "max_dd": -0.5339779485085283,
+                    "final_equity": 3575.82054019592
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 150,
+                "tp_ratio": 5.0,
+                "adx_threshold": 30.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 952,
+                    "net_pnl": 2238.9628770678796,
+                    "win_rate": 0.31407563025210083,
+                    "profit_factor": 1.1112478004836994,
+                    "cagr": 0.2636934769075241,
+                    "max_dd": -0.5609180774647716,
+                    "final_equity": 3238.962877067879
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 6.0,
+                "adx_threshold": 30.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 887,
+                    "net_pnl": 2002.474197450972,
+                    "win_rate": 0.32130777903043967,
+                    "profit_factor": 1.1094815044155208,
+                    "cagr": 0.24475751139845836,
+                    "max_dd": -0.5093469511344464,
+                    "final_equity": 3002.4741974509743
+                }
+            }
+        ],
+        "SOL_USDT": [
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 5.0,
+                "adx_threshold": 30.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 889,
+                    "net_pnl": -205.01640078857275,
+                    "win_rate": 0.3172103487064117,
+                    "profit_factor": 0.9809083513235505,
+                    "cagr": -0.04466118423029164,
+                    "max_dd": -0.7339123575057049,
+                    "final_equity": 794.983599211427
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 6.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 1115,
+                    "net_pnl": -210.8948081872364,
+                    "win_rate": 0.3040358744394619,
+                    "profit_factor": 0.9847227944573163,
+                    "cagr": -0.04607211282267898,
+                    "max_dd": -0.8180109102733124,
+                    "final_equity": 789.1051918127604
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 4.0,
+                "adx_threshold": 30.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 917,
+                    "net_pnl": -323.00867232190933,
+                    "win_rate": 0.3260632497273719,
+                    "profit_factor": 0.9700565964947636,
+                    "cagr": -0.07474277297183474,
+                    "max_dd": -0.7322883692725639,
+                    "final_equity": 676.991327678091
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 5.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 1162,
+                    "net_pnl": -337.9563908769107,
+                    "win_rate": 0.3098106712564544,
+                    "profit_factor": 0.9708306369347435,
+                    "cagr": -0.07884750460531953,
+                    "max_dd": -0.787489940036551,
+                    "final_equity": 662.0436091230894
+                }
+            },
+            {
+                "entry_signal": "rsi_pullback",
+                "trend_filter_1h": "ema",
+                "dema_period": 150,
+                "tp_ratio": 3.0,
+                "adx_threshold": 25.0,
+                "rsi_pullback_lower": 40.0,
+                "rsi_pullback_upper": 60.0,
+                "sl_type": "atr",
+                "sl_atr_mult": 3.0,
+                "metrics": {
+                    "total_trades": 961,
+                    "net_pnl": -348.91312403171946,
+                    "win_rate": 0.449531737773153,
+                    "profit_factor": 0.760517405173173,
+                    "cagr": -0.08190369019740817,
+                    "max_dd": -0.4353220213403242,
+                    "final_equity": 651.0868759682794
+                }
+            }
+        ],
+        "LINK_USDT": [
+            {
+                "entry_signal": "rsi_pullback",
+                "trend_filter_1h": "dema",
+                "dema_period": 150,
+                "tp_ratio": 6.0,
+                "adx_threshold": 25.0,
+                "rsi_pullback_lower": 40.0,
+                "rsi_pullback_upper": 60.0,
+                "sl_type": "atr",
+                "sl_atr_mult": 3.0,
+                "metrics": {
+                    "total_trades": 647,
+                    "net_pnl": -325.52674944715653,
+                    "win_rate": 0.3987635239567233,
+                    "profit_factor": 0.7762853066647883,
+                    "cagr": -0.07542913393478745,
+                    "max_dd": -0.4193575115753473,
+                    "final_equity": 674.4732505528453
+                }
+            },
+            {
+                "entry_signal": "rsi_pullback",
+                "trend_filter_1h": "ema",
+                "dema_period": 150,
+                "tp_ratio": 6.0,
+                "adx_threshold": 25.0,
+                "rsi_pullback_lower": 40.0,
+                "rsi_pullback_upper": 60.0,
+                "sl_type": "atr",
+                "sl_atr_mult": 3.0,
+                "metrics": {
+                    "total_trades": 909,
+                    "net_pnl": -326.7778009547353,
+                    "win_rate": 0.38943894389438943,
+                    "profit_factor": 0.8344804044733382,
+                    "cagr": -0.07577090070463388,
+                    "max_dd": -0.40935248781725425,
+                    "final_equity": 673.2221990452613
+                }
+            },
+            {
+                "entry_signal": "rsi_pullback",
+                "trend_filter_1h": "ema",
+                "dema_period": 150,
+                "tp_ratio": 5.0,
+                "adx_threshold": 25.0,
+                "rsi_pullback_lower": 40.0,
+                "rsi_pullback_upper": 60.0,
+                "sl_type": "atr",
+                "sl_atr_mult": 3.0,
+                "metrics": {
+                    "total_trades": 910,
+                    "net_pnl": -354.0058842804989,
+                    "win_rate": 0.389010989010989,
+                    "profit_factor": 0.8202942991824232,
+                    "cagr": -0.08333826580178949,
+                    "max_dd": -0.4418054898644383,
+                    "final_equity": 645.9941157195005
+                }
+            },
+            {
+                "entry_signal": "rsi_pullback",
+                "trend_filter_1h": "dema",
+                "dema_period": 150,
+                "tp_ratio": 5.0,
+                "adx_threshold": 25.0,
+                "rsi_pullback_lower": 40.0,
+                "rsi_pullback_upper": 60.0,
+                "sl_type": "atr",
+                "sl_atr_mult": 3.0,
+                "metrics": {
+                    "total_trades": 648,
+                    "net_pnl": -359.72197831357136,
+                    "win_rate": 0.39814814814814814,
+                    "profit_factor": 0.7478656582833347,
+                    "cagr": -0.08495925657099634,
+                    "max_dd": -0.43119612303090327,
+                    "final_equity": 640.2780216864279
+                }
+            },
+            {
+                "entry_signal": "rsi_pullback",
+                "trend_filter_1h": "dema",
+                "dema_period": 200,
+                "tp_ratio": 6.0,
+                "adx_threshold": 25.0,
+                "rsi_pullback_lower": 40.0,
+                "rsi_pullback_upper": 60.0,
+                "sl_type": "atr",
+                "sl_atr_mult": 3.0,
+                "metrics": {
+                    "total_trades": 816,
+                    "net_pnl": -365.13117121017893,
+                    "win_rate": 0.39705882352941174,
+                    "profit_factor": 0.7927849420215269,
+                    "cagr": -0.08650392346658042,
+                    "max_dd": -0.42246778266091484,
+                    "final_equity": 634.8688287898215
+                }
+            }
+        ],
+        "DOGE_USDT": [
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "dema",
+                "dema_period": 200,
+                "tp_ratio": 10.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 785,
+                    "net_pnl": 144.16405686287456,
+                    "win_rate": 0.28662420382165604,
+                    "profit_factor": 1.0164623705298252,
+                    "cagr": 0.027181769112048837,
+                    "max_dd": -0.8103951334897566,
+                    "final_equity": 1144.164056862875
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "dema",
+                "dema_period": 150,
+                "tp_ratio": 10.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 810,
+                    "net_pnl": -187.309315843855,
+                    "win_rate": 0.2839506172839506,
+                    "profit_factor": 0.9759572792079191,
+                    "cagr": -0.040461048843676184,
+                    "max_dd": -0.8105831630870621,
+                    "final_equity": 812.6906841561433
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 10.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 799,
+                    "net_pnl": -192.11654802719397,
+                    "win_rate": 0.2878598247809762,
+                    "profit_factor": 0.979603652498117,
+                    "cagr": -0.04159402276184443,
+                    "max_dd": -0.8304931107067072,
+                    "final_equity": 807.8834519728064
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "ema",
+                "dema_period": 200,
+                "tp_ratio": 8.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 806,
+                    "net_pnl": -210.86730451100365,
+                    "win_rate": 0.29652605459057074,
+                    "profit_factor": 0.9763775086819739,
+                    "cagr": -0.04606549185159459,
+                    "max_dd": -0.8389838965069782,
+                    "final_equity": 789.1326954889959
+                }
+            },
+            {
+                "entry_signal": "supertrend",
+                "trend_filter_1h": "none",
+                "dema_period": 150,
+                "tp_ratio": 6.0,
+                "adx_threshold": 25.0,
+                "sl_type": "supertrend",
+                "metrics": {
+                    "total_trades": 971,
+                    "net_pnl": -226.0401628810758,
+                    "win_rate": 0.30895983522142123,
+                    "profit_factor": 0.9743673506371685,
+                    "cagr": -0.04974645959522883,
+                    "max_dd": -0.8390186455074025,
+                    "final_equity": 773.9598371189254
+                }
+            }
+        ]
+    },
+    "portfolio_risk_sweep": [
+        {
+            "assets": "BTC+ETH",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": 2.2771804643052507,
+            "max_dd_pct": 24.537756964810647,
+            "profit_factor": 1.023016687896333,
+            "sharpe": 0.21283845621816053,
+            "final_equity": 1119.7088956012053,
+            "total_trades": 1974,
+            "win_rate_pct": 30.243161094224924
+        },
+        {
+            "assets": "BTC+ETH",
+            "risk_size_pct": 0.5,
+            "cagr_pct": 3.5301645012845384,
+            "max_dd_pct": 30.556507900773916,
+            "profit_factor": 1.027111473466963,
+            "sharpe": 0.26267885997688417,
+            "final_equity": 1190.3104074732757,
+            "total_trades": 1975,
+            "win_rate_pct": 30.278481012658226
+        },
+        {
+            "assets": "BTC+ETH",
+            "risk_size_pct": 0.75,
+            "cagr_pct": 8.665998872033764,
+            "max_dd_pct": 40.11696865025443,
+            "profit_factor": 1.0494335356021793,
+            "sharpe": 0.4067279385276732,
+            "final_equity": 1517.9191547168791,
+            "total_trades": 1973,
+            "win_rate_pct": 30.258489609731377
+        },
+        {
+            "assets": "BTC+ETH",
+            "risk_size_pct": 1.0,
+            "cagr_pct": 15.913530323643176,
+            "max_dd_pct": 47.707245600943295,
+            "profit_factor": 1.0712434167982887,
+            "sharpe": 0.5433440679008614,
+            "final_equity": 2099.2158294365427,
+            "total_trades": 1974,
+            "win_rate_pct": 30.243161094224924
+        },
+        {
+            "assets": "BTC+ETH",
+            "risk_size_pct": 1.25,
+            "cagr_pct": 22.550546922677306,
+            "max_dd_pct": 54.24193138369957,
+            "profit_factor": 1.0826710900910688,
+            "sharpe": 0.6333006508576644,
+            "final_equity": 2776.421724264313,
+            "total_trades": 1974,
+            "win_rate_pct": 30.243161094224924
+        },
+        {
+            "assets": "BTC+ETH",
+            "risk_size_pct": 1.5,
+            "cagr_pct": 27.44980367089309,
+            "max_dd_pct": 59.819094979335986,
+            "profit_factor": 1.0842528875860316,
+            "sharpe": 0.6858103095809962,
+            "final_equity": 3380.438470550773,
+            "total_trades": 1974,
+            "win_rate_pct": 30.243161094224924
+        },
+        {
+            "assets": "BTC+ETH",
+            "risk_size_pct": 2.0,
+            "cagr_pct": 31.262432589160817,
+            "max_dd_pct": 68.07241729156186,
+            "profit_factor": 1.0728933049589557,
+            "sharpe": 0.7224767131800895,
+            "final_equity": 3919.7300358029192,
+            "total_trades": 1974,
+            "win_rate_pct": 30.243161094224924
+        },
+        {
+            "assets": "BTC+SOL",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -2.9529241733933675,
+            "max_dd_pct": 36.58150147243981,
+            "profit_factor": 0.9722368820391721,
+            "sharpe": -0.008888712257821486,
+            "final_equity": 860.2622420733345,
+            "total_trades": 1914,
+            "win_rate_pct": 30.303030303030305
+        },
+        {
+            "assets": "BTC+SOL",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -3.658678229125978,
+            "max_dd_pct": 43.50098127493696,
+            "profit_factor": 0.9732983119569846,
+            "sharpe": 0.03286898497328983,
+            "final_equity": 829.3026803111948,
+            "total_trades": 1916,
+            "win_rate_pct": 30.167014613778704
+        },
+        {
+            "assets": "BTC+SOL",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -0.12485363170158248,
+            "max_dd_pct": 51.70396406943026,
+            "profit_factor": 0.9993346177702115,
+            "sharpe": 0.19925671992127444,
+            "final_equity": 993.7460486944152,
+            "total_trades": 1928,
+            "win_rate_pct": 30.29045643153527
+        },
+        {
+            "assets": "BTC+SOL",
+            "risk_size_pct": 1.0,
+            "cagr_pct": 0.7806733163583379,
+            "max_dd_pct": 58.090268624440256,
+            "profit_factor": 1.0032486306728983,
+            "sharpe": 0.25945821472586866,
+            "final_equity": 1039.822680473905,
+            "total_trades": 1932,
+            "win_rate_pct": 30.124223602484474
+        },
+        {
+            "assets": "BTC+SOL",
+            "risk_size_pct": 1.25,
+            "cagr_pct": 0.0728433520386984,
+            "max_dd_pct": 66.366071999308,
+            "profit_factor": 1.0002528288456503,
+            "sharpe": 0.28685995463753966,
+            "final_equity": 1003.6632764244797,
+            "total_trades": 1933,
+            "win_rate_pct": 30.212105535437146
+        },
+        {
+            "assets": "BTC+SOL",
+            "risk_size_pct": 1.5,
+            "cagr_pct": 0.26569909680089765,
+            "max_dd_pct": 69.42294291775718,
+            "profit_factor": 1.000816236637535,
+            "sharpe": 0.3269792139229621,
+            "final_equity": 1013.4138680793985,
+            "total_trades": 1932,
+            "win_rate_pct": 30.175983436853006
+        },
+        {
+            "assets": "BTC+SOL",
+            "risk_size_pct": 2.0,
+            "cagr_pct": -20.564214575108863,
+            "max_dd_pct": 85.68571295922655,
+            "profit_factor": 0.95037730704154,
+            "sharpe": 0.03046320685094837,
+            "final_equity": 314.7165333304859,
+            "total_trades": 1415,
+            "win_rate_pct": 29.681978798586574
+        },
+        {
+            "assets": "BTC+LINK",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -4.110072044219393,
+            "max_dd_pct": 37.2403239377281,
+            "profit_factor": 0.9297623110736447,
+            "sharpe": -0.21320966595311402,
+            "final_equity": 809.9737368789056,
+            "total_trades": 1683,
+            "win_rate_pct": 33.03624480095068
+        },
+        {
+            "assets": "BTC+LINK",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -5.089167058997868,
+            "max_dd_pct": 44.02352494452476,
+            "profit_factor": 0.9328165722704569,
+            "sharpe": -0.16712682833835654,
+            "final_equity": 769.2872691290381,
+            "total_trades": 1685,
+            "win_rate_pct": 33.05637982195846
+        },
+        {
+            "assets": "BTC+LINK",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -4.984724225551296,
+            "max_dd_pct": 50.61002963486397,
+            "profit_factor": 0.9507295159000031,
+            "sharpe": -0.05004539537005421,
+            "final_equity": 773.5477246395563,
+            "total_trades": 1685,
+            "win_rate_pct": 33.05637982195846
+        },
+        {
+            "assets": "BTC+LINK",
+            "risk_size_pct": 1.0,
+            "cagr_pct": -3.825144333499897,
+            "max_dd_pct": 53.459525654496964,
+            "profit_factor": 0.9696401652960711,
+            "sharpe": 0.055585326750012896,
+            "final_equity": 822.1319894127396,
+            "total_trades": 1685,
+            "win_rate_pct": 33.05637982195846
+        },
+        {
+            "assets": "BTC+LINK",
+            "risk_size_pct": 1.25,
+            "cagr_pct": -3.325056511121671,
+            "max_dd_pct": 54.776676655086696,
+            "profit_factor": 0.9776215428235153,
+            "sharpe": 0.1168935181683389,
+            "final_equity": 843.8245501354228,
+            "total_trades": 1685,
+            "win_rate_pct": 33.05637982195846
+        },
+        {
+            "assets": "BTC+LINK",
+            "risk_size_pct": 1.5,
+            "cagr_pct": -6.389903524321672,
+            "max_dd_pct": 62.08627372998037,
+            "profit_factor": 0.9625773767863961,
+            "sharpe": 0.08838541299158975,
+            "final_equity": 717.7835965557584,
+            "total_trades": 1687,
+            "win_rate_pct": 32.898636633076464
+        },
+        {
+            "assets": "BTC+LINK",
+            "risk_size_pct": 2.0,
+            "cagr_pct": -7.934541612384061,
+            "max_dd_pct": 64.13153739098647,
+            "profit_factor": 0.9635285257541701,
+            "sharpe": 0.13115589155366525,
+            "final_equity": 660.2485496557364,
+            "total_trades": 1687,
+            "win_rate_pct": 32.898636633076464
+        },
+        {
+            "assets": "BTC+DOGE",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -19.363487817739365,
+            "max_dd_pct": 69.77510272192323,
+            "profit_factor": 0.808063691919097,
+            "sharpe": -0.6719233709325494,
+            "final_equity": 339.34238881573697,
+            "total_trades": 1434,
+            "win_rate_pct": 26.499302649930268
+        },
+        {
+            "assets": "BTC+DOGE",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -19.232708235368978,
+            "max_dd_pct": 72.80234965456168,
+            "profit_factor": 0.8166880811733147,
+            "sharpe": -0.5523282869453918,
+            "final_equity": 342.1151105895849,
+            "total_trades": 1119,
+            "win_rate_pct": 27.70330652368186
+        },
+        {
+            "assets": "BTC+DOGE",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -18.627027086551596,
+            "max_dd_pct": 76.79339835619035,
+            "profit_factor": 0.8770942021189037,
+            "sharpe": -0.33764390785942666,
+            "final_equity": 355.1940728660124,
+            "total_trades": 1296,
+            "win_rate_pct": 27.85493827160494
+        },
+        {
+            "assets": "BTC+DOGE",
+            "risk_size_pct": 1.0,
+            "cagr_pct": -9.888438844170933,
+            "max_dd_pct": 80.33710739816857,
+            "profit_factor": 0.9361855457603819,
+            "sharpe": 0.008901156081859684,
+            "final_equity": 592.8229818540815,
+            "total_trades": 1303,
+            "win_rate_pct": 28.089025326170376
+        },
+        {
+            "assets": "BTC+DOGE",
+            "risk_size_pct": 1.25,
+            "cagr_pct": -21.683208208029157,
+            "max_dd_pct": 83.02552515333737,
+            "profit_factor": 0.8840476131500427,
+            "sharpe": -0.274810836658338,
+            "final_equity": 293.07571860518993,
+            "total_trades": 1069,
+            "win_rate_pct": 27.502338634237606
+        },
+        {
+            "assets": "BTC+DOGE",
+            "risk_size_pct": 1.5,
+            "cagr_pct": -22.228090664725187,
+            "max_dd_pct": 85.04186762396137,
+            "profit_factor": 0.8941467214054916,
+            "sharpe": -0.18255982589234762,
+            "final_equity": 282.9786397859539,
+            "total_trades": 1057,
+            "win_rate_pct": 27.625354777672655
+        },
+        {
+            "assets": "BTC+DOGE",
+            "risk_size_pct": 2.0,
+            "cagr_pct": -1.019389020213779,
+            "max_dd_pct": 87.91615714612198,
+            "profit_factor": 0.9958911716524825,
+            "sharpe": 0.35366787396147986,
+            "final_equity": 949.8487504751735,
+            "total_trades": 1399,
+            "win_rate_pct": 29.44960686204432
+        },
+        {
+            "assets": "BTC+ETH+SOL",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": 1.2314046207966278,
+            "max_dd_pct": 32.904958715108435,
+            "profit_factor": 1.0080804953024738,
+            "sharpe": 0.18106932412218274,
+            "final_equity": 1063.3866840396986,
+            "total_trades": 2847,
+            "win_rate_pct": 30.698981383912894
+        },
+        {
+            "assets": "BTC+ETH+SOL",
+            "risk_size_pct": 0.5,
+            "cagr_pct": 3.512803595093561,
+            "max_dd_pct": 39.09612418731872,
+            "profit_factor": 1.0174863807027363,
+            "sharpe": 0.27414725548211427,
+            "final_equity": 1189.3084185607313,
+            "total_trades": 2864,
+            "win_rate_pct": 30.726256983240223
+        },
+        {
+            "assets": "BTC+ETH+SOL",
+            "risk_size_pct": 0.75,
+            "cagr_pct": 9.745390054580994,
+            "max_dd_pct": 46.79586674015647,
+            "profit_factor": 1.0341534220390871,
+            "sharpe": 0.4286999685676718,
+            "final_equity": 1595.1608680475754,
+            "total_trades": 2868,
+            "win_rate_pct": 30.683403068340308
+        },
+        {
+            "assets": "BTC+ETH+SOL",
+            "risk_size_pct": 1.0,
+            "cagr_pct": 12.184495202258304,
+            "max_dd_pct": 54.54482857696542,
+            "profit_factor": 1.0331967791273242,
+            "sharpe": 0.48656038214519726,
+            "final_equity": 1781.3268710290688,
+            "total_trades": 2872,
+            "win_rate_pct": 30.675487465181057
+        },
+        {
+            "assets": "BTC+ETH+SOL",
+            "risk_size_pct": 1.25,
+            "cagr_pct": 17.20533935772559,
+            "max_dd_pct": 60.21455409536161,
+            "profit_factor": 1.0391046030826459,
+            "sharpe": 0.571497432433745,
+            "final_equity": 2219.3585034314037,
+            "total_trades": 2871,
+            "win_rate_pct": 30.68617206548241
+        },
+        {
+            "assets": "BTC+ETH+SOL",
+            "risk_size_pct": 1.5,
+            "cagr_pct": 20.04431290000288,
+            "max_dd_pct": 65.52864009192847,
+            "profit_factor": 1.0390313783173388,
+            "sharpe": 0.6223873028158061,
+            "final_equity": 2502.7825984372316,
+            "total_trades": 2868,
+            "win_rate_pct": 30.683403068340308
+        },
+        {
+            "assets": "BTC+ETH+SOL",
+            "risk_size_pct": 2.0,
+            "cagr_pct": 15.610341804349748,
+            "max_dd_pct": 77.67152676318108,
+            "profit_factor": 1.0248276685931756,
+            "sharpe": 0.6381999240330406,
+            "final_equity": 2071.7877646881702,
+            "total_trades": 2866,
+            "win_rate_pct": 30.669923237962315
+        },
+        {
+            "assets": "BTC+ETH+LINK",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": 0.7693534252702916,
+            "max_dd_pct": 28.714360405307037,
+            "profit_factor": 1.007334515833685,
+            "sharpe": 0.13722601651915145,
+            "final_equity": 1039.2363130579643,
+            "total_trades": 2623,
+            "win_rate_pct": 32.634388105223024
+        },
+        {
+            "assets": "BTC+ETH+LINK",
+            "risk_size_pct": 0.5,
+            "cagr_pct": 1.3669490902245007,
+            "max_dd_pct": 34.69358773370808,
+            "profit_factor": 1.0098927500105948,
+            "sharpe": 0.18395624288227297,
+            "final_equity": 1070.555883881013,
+            "total_trades": 2622,
+            "win_rate_pct": 32.646834477498096
+        },
+        {
+            "assets": "BTC+ETH+LINK",
+            "risk_size_pct": 0.75,
+            "cagr_pct": 4.915744916411757,
+            "max_dd_pct": 43.77204333310447,
+            "profit_factor": 1.0261221699975414,
+            "sharpe": 0.31398422774664464,
+            "final_equity": 1272.4885059586986,
+            "total_trades": 2621,
+            "win_rate_pct": 32.6211369706219
+        },
+        {
+            "assets": "BTC+ETH+LINK",
+            "risk_size_pct": 1.0,
+            "cagr_pct": 11.52370761041086,
+            "max_dd_pct": 49.456256059297594,
+            "profit_factor": 1.0478730689742894,
+            "sharpe": 0.46223030403638155,
+            "final_equity": 1729.258668741,
+            "total_trades": 2620,
+            "win_rate_pct": 32.63358778625955
+        },
+        {
+            "assets": "BTC+ETH+LINK",
+            "risk_size_pct": 1.25,
+            "cagr_pct": 16.443060556326206,
+            "max_dd_pct": 56.15977720903166,
+            "profit_factor": 1.0555010930388202,
+            "sharpe": 0.5441293541246707,
+            "final_equity": 2147.8170096570343,
+            "total_trades": 2621,
+            "win_rate_pct": 32.6211369706219
+        },
+        {
+            "assets": "BTC+ETH+LINK",
+            "risk_size_pct": 1.5,
+            "cagr_pct": 19.861030455211836,
+            "max_dd_pct": 61.83426220853118,
+            "profit_factor": 1.0558437607188456,
+            "sharpe": 0.5936106668029978,
+            "final_equity": 2483.6526971508893,
+            "total_trades": 2621,
+            "win_rate_pct": 32.6211369706219
+        },
+        {
+            "assets": "BTC+ETH+LINK",
+            "risk_size_pct": 2.0,
+            "cagr_pct": 13.543703583180267,
+            "max_dd_pct": 77.27997113593146,
+            "profit_factor": 1.0300418278267305,
+            "sharpe": 0.5511555328172295,
+            "final_equity": 1892.377490690245,
+            "total_trades": 2623,
+            "win_rate_pct": 32.52001524971407
+        },
+        {
+            "assets": "BTC+ETH+DOGE",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -18.527724943707714,
+            "max_dd_pct": 69.8886784412008,
+            "profit_factor": 0.8767903668317355,
+            "sharpe": -0.5105703953976863,
+            "final_equity": 357.3760665284291,
+            "total_trades": 2364,
+            "win_rate_pct": 28.17258883248731
+        },
+        {
+            "assets": "BTC+ETH+DOGE",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -19.76504109536078,
+            "max_dd_pct": 71.43239553419863,
+            "profit_factor": 0.8688667833997769,
+            "sharpe": -0.5356222684922483,
+            "final_equity": 330.94112778894606,
+            "total_trades": 1660,
+            "win_rate_pct": 28.253012048192772
+        },
+        {
+            "assets": "BTC+ETH+DOGE",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -19.679386890303753,
+            "max_dd_pct": 74.2229451775987,
+            "profit_factor": 0.9055981273036218,
+            "sharpe": -0.2674742991976754,
+            "final_equity": 332.71904569576515,
+            "total_trades": 1681,
+            "win_rate_pct": 28.078524687685903
+        },
+        {
+            "assets": "BTC+ETH+DOGE",
+            "risk_size_pct": 1.0,
+            "cagr_pct": -19.18730180621724,
+            "max_dd_pct": 80.34812377746222,
+            "profit_factor": 0.9218557600596983,
+            "sharpe": -0.18538144728265182,
+            "final_equity": 343.0820264286286,
+            "total_trades": 1546,
+            "win_rate_pct": 28.007761966364814
+        },
+        {
+            "assets": "BTC+ETH+DOGE",
+            "risk_size_pct": 1.25,
+            "cagr_pct": -17.456411169110332,
+            "max_dd_pct": 83.19304972460367,
+            "profit_factor": 0.9444279634267866,
+            "sharpe": 0.017280947951407645,
+            "final_equity": 381.60638165459534,
+            "total_trades": 1779,
+            "win_rate_pct": 28.499156829679595
+        },
+        {
+            "assets": "BTC+ETH+DOGE",
+            "risk_size_pct": 1.5,
+            "cagr_pct": 4.118519480538496,
+            "max_dd_pct": 85.95261275140139,
+            "profit_factor": 1.0121170924602916,
+            "sharpe": 0.4215125301290996,
+            "final_equity": 1224.6693059780864,
+            "total_trades": 1994,
+            "win_rate_pct": 29.58876629889669
+        },
+        {
+            "assets": "BTC+ETH+DOGE",
+            "risk_size_pct": 2.0,
+            "cagr_pct": -9.574817368939936,
+            "max_dd_pct": 89.28172791791846,
+            "profit_factor": 0.9765587292179645,
+            "sharpe": 0.33634840597136084,
+            "final_equity": 603.2565608956781,
+            "total_trades": 1910,
+            "win_rate_pct": 29.109947643979055
+        },
+        {
+            "assets": "BTC+SOL+LINK",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -3.933393192213286,
+            "max_dd_pct": 36.004719047882396,
+            "profit_factor": 0.9647347384317156,
+            "sharpe": -0.04845546748308602,
+            "final_equity": 817.4957692202312,
+            "total_trades": 2557,
+            "win_rate_pct": 32.69456394211967
+        },
+        {
+            "assets": "BTC+SOL+LINK",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -5.454175269159167,
+            "max_dd_pct": 46.15892589386083,
+            "profit_factor": 0.9624719304256101,
+            "sharpe": -0.022349793856452888,
+            "final_equity": 754.5451271060809,
+            "total_trades": 2562,
+            "win_rate_pct": 32.66978922716628
+        },
+        {
+            "assets": "BTC+SOL+LINK",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -3.3417869561231717,
+            "max_dd_pct": 51.88261092768855,
+            "profit_factor": 0.9836459948022924,
+            "sharpe": 0.1262367629654006,
+            "final_equity": 843.0914923137806,
+            "total_trades": 2575,
+            "win_rate_pct": 32.69902912621359
+        },
+        {
+            "assets": "BTC+SOL+LINK",
+            "risk_size_pct": 1.0,
+            "cagr_pct": -3.320603627656149,
+            "max_dd_pct": 59.41599802228769,
+            "profit_factor": 0.9873724391414007,
+            "sharpe": 0.1835436924166526,
+            "final_equity": 844.0197427681977,
+            "total_trades": 2580,
+            "win_rate_pct": 32.5968992248062
+        },
+        {
+            "assets": "BTC+SOL+LINK",
+            "risk_size_pct": 1.25,
+            "cagr_pct": -5.403358144925763,
+            "max_dd_pct": 70.4991206205797,
+            "profit_factor": 0.9822244465620499,
+            "sharpe": 0.20310623509774384,
+            "final_equity": 756.5838864576466,
+            "total_trades": 2581,
+            "win_rate_pct": 32.468035645098794
+        },
+        {
+            "assets": "BTC+SOL+LINK",
+            "risk_size_pct": 1.5,
+            "cagr_pct": -21.680359030879938,
+            "max_dd_pct": 83.71982572463386,
+            "profit_factor": 0.941298210430068,
+            "sharpe": -0.10922409446761695,
+            "final_equity": 293.12926371477613,
+            "total_trades": 1830,
+            "win_rate_pct": 31.74863387978142
+        },
+        {
+            "assets": "BTC+SOL+LINK",
+            "risk_size_pct": 2.0,
+            "cagr_pct": -22.240832800319264,
+            "max_dd_pct": 86.51542126088069,
+            "profit_factor": 0.947366093684479,
+            "sharpe": 0.02325988513490725,
+            "final_equity": 282.7458983678358,
+            "total_trades": 1801,
+            "win_rate_pct": 31.593559133814548
+        },
+        {
+            "assets": "BTC+SOL+DOGE",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -9.339854979774042,
+            "max_dd_pct": 72.92828609102949,
+            "profit_factor": 0.9370329030235525,
+            "sharpe": -0.11051799233251028,
+            "final_equity": 611.1692446795477,
+            "total_trades": 2600,
+            "win_rate_pct": 28.34615384615385
+        },
+        {
+            "assets": "BTC+SOL+DOGE",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -19.931173020798308,
+            "max_dd_pct": 76.72046520716172,
+            "profit_factor": 0.8743152707136782,
+            "sharpe": -0.40902505732159805,
+            "final_equity": 327.5144311270811,
+            "total_trades": 1618,
+            "win_rate_pct": 28.244746600741657
+        },
+        {
+            "assets": "BTC+SOL+DOGE",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -20.986799697968948,
+            "max_dd_pct": 81.23400555548014,
+            "profit_factor": 0.9062613968963277,
+            "sharpe": -0.28264436420951944,
+            "final_equity": 306.3985977357775,
+            "total_trades": 1617,
+            "win_rate_pct": 28.200371057513912
+        },
+        {
+            "assets": "BTC+SOL+DOGE",
+            "risk_size_pct": 1.0,
+            "cagr_pct": -4.871670983242216,
+            "max_dd_pct": 82.44871604003342,
+            "profit_factor": 0.9823054384309348,
+            "sharpe": 0.23707563212596497,
+            "final_equity": 778.1806938354401,
+            "total_trades": 2166,
+            "win_rate_pct": 29.593721144967684
+        },
+        {
+            "assets": "BTC+SOL+DOGE",
+            "risk_size_pct": 1.25,
+            "cagr_pct": -1.092360020248262,
+            "max_dd_pct": 84.98401000867547,
+            "profit_factor": 0.99649729244435,
+            "sharpe": 0.33276590409661294,
+            "final_equity": 946.3375594553006,
+            "total_trades": 2146,
+            "win_rate_pct": 29.77632805219012
+        },
+        {
+            "assets": "BTC+SOL+DOGE",
+            "risk_size_pct": 1.5,
+            "cagr_pct": -17.19675648141169,
+            "max_dd_pct": 89.90763290291439,
+            "profit_factor": 0.9546858042224194,
+            "sharpe": 0.1222055531454718,
+            "final_equity": 387.6726156382541,
+            "total_trades": 1816,
+            "win_rate_pct": 28.799559471365637
+        },
+        {
+            "assets": "BTC+SOL+DOGE",
+            "risk_size_pct": 2.0,
+            "cagr_pct": -15.099277545887546,
+            "max_dd_pct": 90.65991019592612,
+            "profit_factor": 0.9581202581981,
+            "sharpe": 0.18336314293757472,
+            "final_equity": 439.56202255851804,
+            "total_trades": 1441,
+            "win_rate_pct": 29.354614850798054
+        },
+        {
+            "assets": "BTC+LINK+DOGE",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -5.240408500257699,
+            "max_dd_pct": 68.13027974884324,
+            "profit_factor": 0.9530468520444385,
+            "sharpe": -0.010047644689008409,
+            "final_equity": 763.151123964788,
+            "total_trades": 2783,
+            "win_rate_pct": 30.506647502694932
+        },
+        {
+            "assets": "BTC+LINK+DOGE",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -10.415540800554513,
+            "max_dd_pct": 72.55909652664143,
+            "profit_factor": 0.9029253632712315,
+            "sharpe": -0.12377675974021073,
+            "final_equity": 575.6132282385854,
+            "total_trades": 1734,
+            "win_rate_pct": 30.91118800461361
+        },
+        {
+            "assets": "BTC+LINK+DOGE",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -1.5964518024490615,
+            "max_dd_pct": 76.3828391967925,
+            "profit_factor": 0.9885822639721066,
+            "sharpe": 0.16447402026448438,
+            "final_equity": 922.3647580451675,
+            "total_trades": 1925,
+            "win_rate_pct": 30.909090909090907
+        },
+        {
+            "assets": "BTC+LINK+DOGE",
+            "risk_size_pct": 1.0,
+            "cagr_pct": -10.06402479565951,
+            "max_dd_pct": 79.04300704958744,
+            "profit_factor": 0.9393056738722707,
+            "sharpe": 0.027659220928080073,
+            "final_equity": 587.044998288969,
+            "total_trades": 1684,
+            "win_rate_pct": 30.93824228028503
+        },
+        {
+            "assets": "BTC+LINK+DOGE",
+            "risk_size_pct": 1.25,
+            "cagr_pct": 1.160267438280127,
+            "max_dd_pct": 81.35074726146122,
+            "profit_factor": 1.0057252791395581,
+            "sharpe": 0.3036790191096315,
+            "final_equity": 1059.6395210606333,
+            "total_trades": 1946,
+            "win_rate_pct": 31.19218910585817
+        },
+        {
+            "assets": "BTC+LINK+DOGE",
+            "risk_size_pct": 1.5,
+            "cagr_pct": 1.7986229246734764,
+            "max_dd_pct": 84.92551935906873,
+            "profit_factor": 1.007963139307476,
+            "sharpe": 0.34743535789190105,
+            "final_equity": 1093.6462728023696,
+            "total_trades": 1894,
+            "win_rate_pct": 31.520591341077086
+        },
+        {
+            "assets": "BTC+LINK+DOGE",
+            "risk_size_pct": 2.0,
+            "cagr_pct": 0.7984160560438935,
+            "max_dd_pct": 89.37975981363634,
+            "profit_factor": 1.0029205296949606,
+            "sharpe": 0.3791244164907374,
+            "final_equity": 1040.7422828703147,
+            "total_trades": 1803,
+            "win_rate_pct": 31.669439822518026
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": 0.42581483466270775,
+            "max_dd_pct": 31.999141714338386,
+            "profit_factor": 1.0027177617796,
+            "sharpe": 0.15338891999873702,
+            "final_equity": 1021.5666660172129,
+            "total_trades": 3500,
+            "win_rate_pct": 32.48571428571429
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK",
+            "risk_size_pct": 0.5,
+            "cagr_pct": 1.6066561800083257,
+            "max_dd_pct": 39.49822487816581,
+            "profit_factor": 1.0076471171801011,
+            "sharpe": 0.22555892565752148,
+            "final_equity": 1083.329168379829,
+            "total_trades": 3509,
+            "win_rate_pct": 32.43089199202052
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK",
+            "risk_size_pct": 0.75,
+            "cagr_pct": 6.373023061293237,
+            "max_dd_pct": 47.76839049983191,
+            "profit_factor": 1.0213339675094881,
+            "sharpe": 0.36906023185519915,
+            "final_equity": 1363.7587250722272,
+            "total_trades": 3513,
+            "win_rate_pct": 32.39396527184743
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK",
+            "risk_size_pct": 1.0,
+            "cagr_pct": 8.937045465113869,
+            "max_dd_pct": 55.48437440306368,
+            "profit_factor": 1.0230148049891672,
+            "sharpe": 0.4420644317861762,
+            "final_equity": 1537.0273997754487,
+            "total_trades": 3519,
+            "win_rate_pct": 32.395566922421146
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK",
+            "risk_size_pct": 1.25,
+            "cagr_pct": 9.922338217488846,
+            "max_dd_pct": 62.06725589157258,
+            "profit_factor": 1.0208780552914063,
+            "sharpe": 0.4884418663675405,
+            "final_equity": 1608.118210615133,
+            "total_trades": 3519,
+            "win_rate_pct": 32.395566922421146
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK",
+            "risk_size_pct": 1.5,
+            "cagr_pct": 6.927719302008062,
+            "max_dd_pct": 73.86039797669983,
+            "profit_factor": 1.012867674420932,
+            "sharpe": 0.4915978746483789,
+            "final_equity": 1399.8463894244555,
+            "total_trades": 3520,
+            "win_rate_pct": 32.30113636363636
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK",
+            "risk_size_pct": 2.0,
+            "cagr_pct": -25.95789282537565,
+            "max_dd_pct": 92.50094999042349,
+            "profit_factor": 0.96654059421429,
+            "sharpe": 0.08103667108008217,
+            "final_equity": 221.0916251495427,
+            "total_trades": 2339,
+            "win_rate_pct": 31.85121846943138
+        },
+        {
+            "assets": "BTC+ETH+SOL+DOGE",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -18.97595167448326,
+            "max_dd_pct": 70.8662533628092,
+            "profit_factor": 0.9095676106608113,
+            "sharpe": -0.3299035085425438,
+            "final_equity": 347.6115073430596,
+            "total_trades": 2987,
+            "win_rate_pct": 29.293605624372283
+        },
+        {
+            "assets": "BTC+ETH+SOL+DOGE",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -2.1282086659768717,
+            "max_dd_pct": 72.3354599453556,
+            "profit_factor": 0.9913448725534141,
+            "sharpe": 0.19748731052826585,
+            "final_equity": 897.6059533539277,
+            "total_trades": 3585,
+            "win_rate_pct": 29.483960948396092
+        },
+        {
+            "assets": "BTC+ETH+SOL+DOGE",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -4.604492790072323,
+            "max_dd_pct": 77.97150242576548,
+            "profit_factor": 0.9846576522697953,
+            "sharpe": 0.2149170516262975,
+            "final_equity": 789.218123540336,
+            "total_trades": 2816,
+            "win_rate_pct": 30.00710227272727
+        },
+        {
+            "assets": "BTC+ETH+SOL+DOGE",
+            "risk_size_pct": 1.0,
+            "cagr_pct": 16.604248609484507,
+            "max_dd_pct": 81.4361189990708,
+            "profit_factor": 1.0388660574534139,
+            "sharpe": 0.5719936955046357,
+            "final_equity": 2162.7886371323407,
+            "total_trades": 3415,
+            "win_rate_pct": 30.366032210834554
+        },
+        {
+            "assets": "BTC+ETH+SOL+DOGE",
+            "risk_size_pct": 1.25,
+            "cagr_pct": 1.0478436212546072,
+            "max_dd_pct": 84.85689972036606,
+            "profit_factor": 1.0022636402669158,
+            "sharpe": 0.42361975805669366,
+            "final_equity": 1053.739145864005,
+            "total_trades": 2782,
+            "win_rate_pct": 30.1941049604601
+        },
+        {
+            "assets": "BTC+ETH+SOL+DOGE",
+            "risk_size_pct": 1.5,
+            "cagr_pct": -19.75291584133102,
+            "max_dd_pct": 87.5647861200393,
+            "profit_factor": 0.9611499705247217,
+            "sharpe": 0.11431985154523085,
+            "final_equity": 331.19234741524156,
+            "total_trades": 2011,
+            "win_rate_pct": 29.636996519144702
+        },
+        {
+            "assets": "BTC+ETH+SOL+DOGE",
+            "risk_size_pct": 2.0,
+            "cagr_pct": 36.041133969467865,
+            "max_dd_pct": 90.27638209601004,
+            "profit_factor": 1.0422732931546337,
+            "sharpe": 0.8358035518812977,
+            "final_equity": 4690.734458494807,
+            "total_trades": 3230,
+            "win_rate_pct": 30.681114551083592
+        },
+        {
+            "assets": "BTC+ETH+LINK+DOGE",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -7.898839883407993,
+            "max_dd_pct": 69.48357304418231,
+            "profit_factor": 0.9455646487280188,
+            "sharpe": -0.08548091031398758,
+            "final_equity": 661.5352643817066,
+            "total_trades": 3199,
+            "win_rate_pct": 30.134417005314162
+        },
+        {
+            "assets": "BTC+ETH+LINK+DOGE",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -0.9645299241358263,
+            "max_dd_pct": 71.53372867172389,
+            "profit_factor": 0.9942759250870099,
+            "sharpe": 0.17949758481448447,
+            "final_equity": 952.4953036327227,
+            "total_trades": 2941,
+            "win_rate_pct": 31.51989119347161
+        },
+        {
+            "assets": "BTC+ETH+LINK+DOGE",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -19.977542109063094,
+            "max_dd_pct": 75.50609493993899,
+            "profit_factor": 0.9047458218548593,
+            "sharpe": -0.2873270431773514,
+            "final_equity": 326.5630962052078,
+            "total_trades": 1870,
+            "win_rate_pct": 30.32085561497326
+        },
+        {
+            "assets": "BTC+ETH+LINK+DOGE",
+            "risk_size_pct": 1.0,
+            "cagr_pct": 11.94245127719229,
+            "max_dd_pct": 79.490465266022,
+            "profit_factor": 1.04160938487598,
+            "sharpe": 0.48178708665098574,
+            "final_equity": 1762.1108059147443,
+            "total_trades": 2721,
+            "win_rate_pct": 31.34876883498714
+        },
+        {
+            "assets": "BTC+ETH+LINK+DOGE",
+            "risk_size_pct": 1.25,
+            "cagr_pct": 14.453699586651858,
+            "max_dd_pct": 83.33140975378403,
+            "profit_factor": 1.041349825882377,
+            "sharpe": 0.5291409522602897,
+            "final_equity": 1969.774966140045,
+            "total_trades": 2741,
+            "win_rate_pct": 31.667274717256475
+        },
+        {
+            "assets": "BTC+ETH+LINK+DOGE",
+            "risk_size_pct": 1.5,
+            "cagr_pct": 16.20906341630972,
+            "max_dd_pct": 85.38816686616354,
+            "profit_factor": 1.0389213566531605,
+            "sharpe": 0.5750644597588549,
+            "final_equity": 2126.2304733384253,
+            "total_trades": 2740,
+            "win_rate_pct": 31.678832116788318
+        },
+        {
+            "assets": "BTC+ETH+LINK+DOGE",
+            "risk_size_pct": 2.0,
+            "cagr_pct": 17.531432299434723,
+            "max_dd_pct": 89.08889171318933,
+            "profit_factor": 1.0321392041417454,
+            "sharpe": 0.6415750370683013,
+            "final_equity": 2250.5398446290606,
+            "total_trades": 2723,
+            "win_rate_pct": 31.766434080058758
+        },
+        {
+            "assets": "BTC+SOL+LINK+DOGE",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -20.070103500126336,
+            "max_dd_pct": 72.33671916397424,
+            "profit_factor": 0.8664615442560457,
+            "sharpe": -0.5766704371460247,
+            "final_equity": 324.6706714859916,
+            "total_trades": 2379,
+            "win_rate_pct": 29.760403530895335
+        },
+        {
+            "assets": "BTC+SOL+LINK+DOGE",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -20.523262006894928,
+            "max_dd_pct": 74.73873432661685,
+            "profit_factor": 0.8926144407966655,
+            "sharpe": -0.42043243596869867,
+            "final_equity": 315.532135479771,
+            "total_trades": 2361,
+            "win_rate_pct": 29.648454044896233
+        },
+        {
+            "assets": "BTC+SOL+LINK+DOGE",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -6.889616752442318,
+            "max_dd_pct": 78.58495013751137,
+            "profit_factor": 0.9690961338125768,
+            "sharpe": 0.10375505061363263,
+            "final_equity": 698.7476887468574,
+            "total_trades": 2556,
+            "win_rate_pct": 30.946791862284822
+        },
+        {
+            "assets": "BTC+SOL+LINK+DOGE",
+            "risk_size_pct": 1.0,
+            "cagr_pct": -7.782397669367747,
+            "max_dd_pct": 85.69120150157433,
+            "profit_factor": 0.9688520221436484,
+            "sharpe": 0.17961644451561107,
+            "final_equity": 665.7458846323569,
+            "total_trades": 2187,
+            "win_rate_pct": 30.269775948788297
+        },
+        {
+            "assets": "BTC+SOL+LINK+DOGE",
+            "risk_size_pct": 1.25,
+            "cagr_pct": 7.88944060844019,
+            "max_dd_pct": 84.52279495038795,
+            "profit_factor": 1.0218927734952006,
+            "sharpe": 0.46358001280986905,
+            "final_equity": 1464.2243765189648,
+            "total_trades": 2996,
+            "win_rate_pct": 31.74232309746328
+        },
+        {
+            "assets": "BTC+SOL+LINK+DOGE",
+            "risk_size_pct": 1.5,
+            "cagr_pct": -17.780397958290408,
+            "max_dd_pct": 89.91231686727181,
+            "profit_factor": 0.954655887248287,
+            "sharpe": 0.1209814617780911,
+            "final_equity": 374.144032156759,
+            "total_trades": 2122,
+            "win_rate_pct": 30.207351555136665
+        },
+        {
+            "assets": "BTC+SOL+LINK+DOGE",
+            "risk_size_pct": 2.0,
+            "cagr_pct": -18.853644491246214,
+            "max_dd_pct": 93.43479924855338,
+            "profit_factor": 0.9504635549483834,
+            "sharpe": 0.13142994488735393,
+            "final_equity": 350.2544883881559,
+            "total_trades": 1620,
+            "win_rate_pct": 31.234567901234566
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK+DOGE",
+            "risk_size_pct": 0.35000000000000003,
+            "cagr_pct": -18.72693140641418,
+            "max_dd_pct": 71.20658295703407,
+            "profit_factor": 0.9106115947251067,
+            "sharpe": -0.36293100297411035,
+            "final_equity": 353.00962704732143,
+            "total_trades": 3365,
+            "win_rate_pct": 30.104011887072808
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK+DOGE",
+            "risk_size_pct": 0.5,
+            "cagr_pct": -20.59095609886471,
+            "max_dd_pct": 75.92030744268881,
+            "profit_factor": 0.8998287914335296,
+            "sharpe": -0.42600620677794526,
+            "final_equity": 314.1848669865062,
+            "total_trades": 2447,
+            "win_rate_pct": 30.322844299141806
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK+DOGE",
+            "risk_size_pct": 0.75,
+            "cagr_pct": -20.75510981235239,
+            "max_dd_pct": 79.23579900383635,
+            "profit_factor": 0.9328111010106863,
+            "sharpe": -0.1919712658165731,
+            "final_equity": 310.9369538108802,
+            "total_trades": 2392,
+            "win_rate_pct": 30.351170568561876
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK+DOGE",
+            "risk_size_pct": 1.0,
+            "cagr_pct": -1.8903285401418946,
+            "max_dd_pct": 84.53810247819433,
+            "profit_factor": 0.9954003289217279,
+            "sharpe": 0.33575186047283995,
+            "final_equity": 908.6150714888232,
+            "total_trades": 3387,
+            "win_rate_pct": 30.94183643342191
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK+DOGE",
+            "risk_size_pct": 1.25,
+            "cagr_pct": -20.588336755631797,
+            "max_dd_pct": 85.55716093970841,
+            "profit_factor": 0.956985064452407,
+            "sharpe": 0.05433041141891771,
+            "final_equity": 314.2369121229762,
+            "total_trades": 2346,
+            "win_rate_pct": 30.69053708439898
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK+DOGE",
+            "risk_size_pct": 1.5,
+            "cagr_pct": -3.2789566682240867,
+            "max_dd_pct": 86.84577492641884,
+            "profit_factor": 0.9940439842383211,
+            "sharpe": 0.41464111550879434,
+            "final_equity": 845.8470930392215,
+            "total_trades": 2972,
+            "win_rate_pct": 31.157469717362048
+        },
+        {
+            "assets": "BTC+ETH+SOL+LINK+DOGE",
+            "risk_size_pct": 2.0,
+            "cagr_pct": 30.094895957800283,
+            "max_dd_pct": 90.01401738155243,
+            "profit_factor": 1.0330714468128832,
+            "sharpe": 0.8062430027927755,
+            "final_equity": 3747.756143187773,
+            "total_trades": 3708,
+            "win_rate_pct": 32.038834951456316
+        }
+    ]
+}

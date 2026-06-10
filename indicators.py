@@ -235,3 +235,78 @@ def calculate_adx(df: pd.DataFrame, period: int = 16) -> pd.Series:
     # 6. 计算 ADX
     adx = calculate_rma(dx, period)
     return adx
+
+
+def calculate_ema(series: pd.Series, period: int) -> pd.Series:
+    """
+    计算 EMA (Exponential Moving Average)
+    """
+    return series.ewm(span=period, adjust=False).mean()
+
+
+def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """
+    计算 ATR (Average True Range)
+    """
+    high = df['high']
+    low = df['low']
+    close = df['close']
+    prev_close = close.shift(1)
+    
+    tr1 = high - low
+    tr2 = (high - prev_close).abs()
+    tr3 = (low - prev_close).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    tr.iloc[0] = high.iloc[0] - low.iloc[0]
+    
+    atr = calculate_rma(tr, period)
+    return atr
+
+
+def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+    """
+    计算 RSI (Relative Strength Index)
+    """
+    delta = series.diff()
+    gain = np.where(delta > 0, delta, 0.0)
+    loss = np.where(delta < 0, -delta, 0.0)
+    
+    gain_series = pd.Series(gain, index=series.index)
+    loss_series = pd.Series(loss, index=series.index)
+    
+    avg_gain = calculate_rma(gain_series, period)
+    avg_loss = calculate_rma(loss_series, period)
+    
+    rs = avg_gain / np.where(avg_loss == 0, 1e-9, avg_loss)
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+    return rsi
+
+
+def calculate_chop(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """
+    计算 Choppiness Index (混乱指数，完全对齐 TradingView ta.chop)
+    CHOP = 100 * log10(sum(TR, period) / (highest(high, period) - lowest(low, period))) / log10(period)
+    """
+    high = df['high']
+    low = df['low']
+    close = df['close']
+    prev_close = close.shift(1)
+    
+    # 计算 True Range
+    tr1 = high - low
+    tr2 = (high - prev_close).abs()
+    tr3 = (low - prev_close).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    tr.iloc[0] = high.iloc[0] - low.iloc[0]
+    
+    sum_tr = tr.rolling(window=period).sum()
+    highest_high = high.rolling(window=period).max()
+    lowest_low = low.rolling(window=period).min()
+    
+    # 避免分母为 0
+    denom = highest_high - lowest_low
+    denom = np.where(denom == 0, 1e-9, denom)
+    
+    chop = 100.0 * np.log10(sum_tr / denom) / np.log10(period)
+    return pd.Series(chop, index=df.index)
+

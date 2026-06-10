@@ -14,6 +14,10 @@ jobs:
   check-signal:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        symbol: [BTC_USDT, ETH_USDT]
     
     steps:
       - name: Checkpoint
@@ -33,9 +37,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 从 artifact 下载上次的状态
-          gh run download --name trading-state --dir . 2>/dev/null || echo '{"direction":"none","entry_price":0}' > trading_state.json
-          echo "📂 State file:"
+          # 从 artifact 下载上次的状态，使用与 symbol 关联的名称
+          gh run download --name trading-state-${{ matrix.symbol }} --dir . 2>/dev/null || echo '{"direction":"none","entry_price":0}' > trading_state_${{ matrix.symbol }}.json
+          # 复制为当前运行脚本读取的默认状态文件名
+          cp trading_state_${{ matrix.symbol }}.json trading_state.json 2>/dev/null || true
+          echo "📂 State file for ${{ matrix.symbol }}:"
           cat trading_state.json
       
       - name: Run trading check
@@ -45,16 +51,19 @@ jobs:
           GATE_API_SECRET: ${{ secrets.GATE_API_SECRET }}
           ENABLE_AUTO_TRADING: ${{ secrets.ENABLE_AUTO_TRADING || vars.ENABLE_AUTO_TRADING }}
           
+          # 交易对配置
+          SYMBOL: ${{ matrix.symbol }}
+          
           # Telegram 通知 (可选)
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           
           # 风险管理配置 (优先从 GitHub secrets/vars 获取，其次使用默认值)
           RISK_MODE: ${{ secrets.RISK_MODE || vars.RISK_MODE || 'fixed' }}
-          RISK_FIXED_AMOUNT: ${{ secrets.RISK_FIXED_AMOUNT || vars.RISK_FIXED_AMOUNT || '10' }}
+          RISK_FIXED_AMOUNT: ${{ secrets.RISK_FIXED_AMOUNT || vars.RISK_FIXED_AMOUNT || '5' }}
           RISK_PERCENT: ${{ secrets.RISK_PERCENT || vars.RISK_PERCENT || '0.02' }}
-          CIRCUIT_BREAKER_EQUITY: ${{ secrets.CIRCUIT_BREAKER_EQUITY || vars.CIRCUIT_BREAKER_EQUITY || '350' }}
-          LOCK_PROFIT_BUFFER: ${{ secrets.LOCK_PROFIT_BUFFER || vars.LOCK_PROFIT_BUFFER || '1' }}
+          CIRCUIT_BREAKER_EQUITY: ${{ secrets.CIRCUIT_BREAKER_EQUITY || vars.CIRCUIT_BREAKER_EQUITY || '450' }}
+          LOCK_PROFIT_BUFFER: ${{ secrets.LOCK_PROFIT_BUFFER || vars.LOCK_PROFIT_BUFFER || '0.5' }}
           MAX_CONSECUTIVE_LOSSES: ${{ secrets.MAX_CONSECUTIVE_LOSSES || vars.MAX_CONSECUTIVE_LOSSES || '3' }}
           
           # 交易执行配置
@@ -64,7 +73,7 @@ jobs:
           NOTIFY_DETAILS: ${{ secrets.NOTIFY_DETAILS || vars.NOTIFY_DETAILS || 'true' }}
           
           # 状态文件配置
-          STATE_FILE: ${{ secrets.STATE_FILE || vars.STATE_FILE || 'trading_state.json' }}
+          STATE_FILE: trading_state_${{ matrix.symbol }}.json
           
           # 调试配置
           GATE_DEBUG: ${{ secrets.GATE_DEBUG || vars.GATE_DEBUG || '0' }}
@@ -75,7 +84,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-state
-          path: trading_state.json
+          name: trading-state-${{ matrix.symbol }}
+          path: trading_state_${{ matrix.symbol }}.json
           retention-days: 30
           overwrite: true

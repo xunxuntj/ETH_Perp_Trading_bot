@@ -18,7 +18,7 @@ from config import (
     MAX_CONSECUTIVE_LOSSES, STATE_FILE,
     LEVERAGE, CIRCUIT_BREAKER_EQUITY, get_risk_amount,
     LOCK_PROFIT_BUFFER, FACE_VALUE,
-    USE_ADX, ADX_LENGTH, ADX_THRESHOLD, ADX_TIMEFRAME
+    USE_ADX, ADX_LENGTH, ADX_THRESHOLD, ADX_TIMEFRAME, TP_RATIO
 )
 from position_state import update_position_state, clear_position_state, load_position_state
 from indicators import calculate_supertrend, calculate_dema, calculate_adx
@@ -774,10 +774,19 @@ class TradingStrategy:
                                                       locked_stop_loss=locked_stop_loss,
                                                       prev_stop_loss=baseline_stop_loss)
 
+        # 计算动态止盈价 (TP)
+        tp_price = None
+        if initial_30m_st > 0:
+            sl_dist = abs(entry_price - initial_30m_st)
+            tp_price = entry_price + TP_RATIO * sl_dist
+
         # 判断离场信号
         exit_signal = False
         exit_reason = ""
-        if phase == Phase.HOURLY.value and last_1h_dir == -1:
+        if tp_price is not None and current_price >= tp_price:
+            exit_signal = True
+            exit_reason = f"止盈触发 @ {current_price:.2f} (目标: {tp_price:.2f})"
+        elif phase == Phase.HOURLY.value and last_1h_dir == -1:
             exit_signal = True
             exit_reason = "1H ST 变红"
         elif phase in [Phase.SURVIVAL.value, Phase.LOCKED.value] and last_30m_dir == -1:
@@ -868,12 +877,13 @@ class TradingStrategy:
             )
         else:
             # 正常持仓，无状态变化
+            tp_msg = f" | 止盈: {tp_price:.2f}" if tp_price else ""
             return TradeResult(
                 action="hold",
                 message=f"""✅ 持仓中
 • 方向: 多 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
-• 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
+• 止损: {recommended_stop:.2f}{tp_msg} | 浮盈: {pnl:+.2f}U
 
 ━━━━━━━━━━ 技术指标 ━━━━━━━━━━
 【1小时线】
@@ -940,10 +950,19 @@ class TradingStrategy:
                                                       locked_stop_loss=locked_stop_loss,
                                                       prev_stop_loss=baseline_stop_loss)
 
+        # 计算动态止盈价 (TP)
+        tp_price = None
+        if initial_30m_st > 0:
+            sl_dist = abs(entry_price - initial_30m_st)
+            tp_price = entry_price - TP_RATIO * sl_dist
+
         # 判断离场信号
         exit_signal = False
         exit_reason = ""
-        if phase == Phase.HOURLY.value and last_1h_dir == 1:
+        if tp_price is not None and current_price <= tp_price:
+            exit_signal = True
+            exit_reason = f"止盈触发 @ {current_price:.2f} (目标: {tp_price:.2f})"
+        elif phase == Phase.HOURLY.value and last_1h_dir == 1:
             exit_signal = True
             exit_reason = "1H ST 变绿"
         elif phase in [Phase.SURVIVAL.value, Phase.LOCKED.value] and last_30m_dir == 1:
@@ -1035,12 +1054,13 @@ class TradingStrategy:
             )
         else:
             # 正常持仓，无状态变化
+            tp_msg = f" | 止盈: {tp_price:.2f}" if tp_price else ""
             return TradeResult(
                 action="hold",
                 message=f"""✅ 持仓中
 • 方向: 空 | 阶段: {phase_names.get(phase)}
 • 入场: {entry_price:.2f} | 当前: {current_price:.2f}
-• 止损: {recommended_stop:.2f} | 浮盈: {pnl:+.2f}U
+• 止损: {recommended_stop:.2f}{tp_msg} | 浮盈: {pnl:+.2f}U
 
 ━━━━━━━━━━ 技术指标 ━━━━━━━━━━
 【1小时线】

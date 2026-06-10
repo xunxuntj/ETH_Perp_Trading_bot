@@ -35,14 +35,40 @@ FACE_VALUE = float(os.environ.get("FACE_VALUE", str(_default_fv)))
 # ============ 指标参数 ============
 SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 3.0
-DEMA_PERIOD = 200
+
+def _get_default_dema_period(contract: str) -> int:
+    c_upper = contract.upper()
+    if "ETH" in c_upper:
+        return 150
+    return 200  # BTC and others default to 200
+
+DEMA_PERIOD = int(os.environ.get("DEMA_PERIOD", str(_get_default_dema_period(CONTRACT))))
+
+def _get_default_tp_ratio(contract: str) -> float:
+    c_upper = contract.upper()
+    if "BTC" in c_upper:
+        return 22.0
+    elif "ETH" in c_upper:
+        return 5.0
+    return 5.0  # 默认回退值
+
+TP_RATIO = float(os.environ.get("TP_RATIO", str(_get_default_tp_ratio(CONTRACT))))
 
 # ============ ADX 信号过滤配置 ============
 USE_ADX = os.environ.get("USE_ADX", "true").lower() == "true"
 ADX_LENGTH = int(os.environ.get("ADX_LENGTH", "16"))
-ADX_THRESHOLD = float(os.environ.get("ADX_THRESHOLD", "30"))
-# ADX Timeframe: 选项 30min / 1H, 默认 1H -> 映射为 "30m" / "1h"
-_adx_tf_raw = os.environ.get("ADX_TIMEFRAME", "1H").upper()
+
+def _get_default_adx_threshold(contract: str) -> float:
+    c_upper = contract.upper()
+    if "BTC" in c_upper:
+        return 35.0
+    elif "ETH" in c_upper:
+        return 30.0
+    return 30.0
+
+ADX_THRESHOLD = float(os.environ.get("ADX_THRESHOLD", str(_get_default_adx_threshold(CONTRACT))))
+# ADX Timeframe: 选项 30min / 1H, 默认 30M -> 映射为 "30m" / "1h"
+_adx_tf_raw = os.environ.get("ADX_TIMEFRAME", "30M").upper()
 if _adx_tf_raw in ("30MIN", "30M"):
     ADX_TIMEFRAME = "30m"
 else:
@@ -56,14 +82,14 @@ LEVERAGE = 10
 RISK_MODE = os.environ.get("RISK_MODE", "fixed")
 
 # 固定模式: 单笔风险固定金额 (USDT)
-RISK_FIXED_AMOUNT = float(os.environ.get("RISK_FIXED_AMOUNT", "10"))
+RISK_FIXED_AMOUNT = float(os.environ.get("RISK_FIXED_AMOUNT", "5"))
 
 # 百分比模式: 单笔风险占账户资产的百分比
 RISK_PERCENT = float(os.environ.get("RISK_PERCENT", "0.02"))  # 2%
 
 # ============ 熔断规则 ============
 # 本金低于此值停止交易
-CIRCUIT_BREAKER_EQUITY = float(os.environ.get("CIRCUIT_BREAKER_EQUITY", "350"))
+CIRCUIT_BREAKER_EQUITY = float(os.environ.get("CIRCUIT_BREAKER_EQUITY", "450"))
 
 # 连续亏损次数熔断
 MAX_CONSECUTIVE_LOSSES = int(os.environ.get("MAX_CONSECUTIVE_LOSSES", "3"))
@@ -71,7 +97,7 @@ MAX_CONSECUTIVE_LOSSES = int(os.environ.get("MAX_CONSECUTIVE_LOSSES", "3"))
 # ============ Buffer ============
 # 锁利期的保底盈利 (USDT)
 # 当止损锁定后，立即触发止损也能赚到这个金额
-LOCK_PROFIT_BUFFER = float(os.environ.get("LOCK_PROFIT_BUFFER", "1"))  # 1 USDT
+LOCK_PROFIT_BUFFER = float(os.environ.get("LOCK_PROFIT_BUFFER", "0.5"))  # 0.5 USDT
 
 # ============ 状态文件 ============
 if CONTRACT == "ETH_USDT" and not os.environ.get("STATE_FILE"):

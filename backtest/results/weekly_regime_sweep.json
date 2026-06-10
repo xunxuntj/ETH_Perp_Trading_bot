@@ -1,0 +1,233 @@
+[
+    {
+        "type": "BENCHMARK",
+        "weekly_ema_period": 0,
+        "bull_risk_pct": 1.0,
+        "bear_risk_pct": 0.0,
+        "cagr_pct": -1.8903285401418946,
+        "max_dd_pct": 84.53810247819433,
+        "sharpe": 0.33575186047283995,
+        "final_equity": 908.6150714888232,
+        "total_trades": 3387
+    },
+    {
+        "type": "BENCHMARK",
+        "weekly_ema_period": 0,
+        "bull_risk_pct": 1.5,
+        "bear_risk_pct": 0.0,
+        "cagr_pct": -3.2789566682240867,
+        "max_dd_pct": 86.84577492641884,
+        "sharpe": 0.41464111550879434,
+        "final_equity": 845.8470930392215,
+        "total_trades": 2972
+    },
+    {
+        "type": "BENCHMARK",
+        "weekly_ema_period": 0,
+        "bull_risk_pct": 2.0,
+        "bear_risk_pct": 0.0,
+        "cagr_pct": 30.094895957800283,
+        "max_dd_pct": 90.01401738155243,
+        "sharpe": 0.8062430027927755,
+        "final_equity": 3747.756143187773,
+        "total_trades": 3708
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 10,
+        "bull_risk_pct": 1.0,
+        "bear_risk_pct": 0.25,
+        "cagr_pct": -15.573281899231816,
+        "max_dd_pct": 76.49784318825752,
+        "sharpe": -0.14600401749086855,
+        "final_equity": 427.3760767059415,
+        "total_trades": 2255
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 10,
+        "bull_risk_pct": 1.0,
+        "bear_risk_pct": 0.5,
+        "cagr_pct": -14.963343668603745,
+        "max_dd_pct": 78.15726530867659,
+        "sharpe": -0.11160029305569746,
+        "final_equity": 443.10752942631655,
+        "total_trades": 2257
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 10,
+        "bull_risk_pct": 1.5,
+        "bear_risk_pct": 0.25,
+        "cagr_pct": -18.582577237191956,
+        "max_dd_pct": 79.85326429663576,
+        "sharpe": -0.07060620825585057,
+        "final_equity": 356.16945880245447,
+        "total_trades": 2192
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 10,
+        "bull_risk_pct": 1.5,
+        "bear_risk_pct": 0.5,
+        "cagr_pct": -15.016344203686616,
+        "max_dd_pct": 79.93451781143592,
+        "sharpe": 0.036793101502297386,
+        "final_equity": 441.72242486400205,
+        "total_trades": 2199
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 10,
+        "bull_risk_pct": 2.0,
+        "bear_risk_pct": 0.25,
+        "cagr_pct": -15.08623618424122,
+        "max_dd_pct": 85.3154119893559,
+        "sharpe": -0.05742310082814294,
+        "final_equity": 439.9011863621603,
+        "total_trades": 1456
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 10,
+        "bull_risk_pct": 2.0,
+        "bear_risk_pct": 0.5,
+        "cagr_pct": -3.1801069399720605,
+        "max_dd_pct": 83.37314751448088,
+        "sharpe": 0.307532429750394,
+        "final_equity": 850.1970254751494,
+        "total_trades": 2256
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 20,
+        "bull_risk_pct": 1.0,
+        "bear_risk_pct": 0.25,
+        "cagr_pct": -18.615899959349335,
+        "max_dd_pct": 77.95943984077931,
+        "sharpe": -0.2347915951398865,
+        "final_equity": 355.4380401737548,
+        "total_trades": 2048
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 20,
+        "bull_risk_pct": 1.0,
+        "bear_risk_pct": 0.5,
+        "cagr_pct": -18.84568976390052,
+        "max_dd_pct": 77.90040183317815,
+        "sharpe": -0.2405389715544974,
+        "final_equity": 350.4269407850091,
+        "total_trades": 2036
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 20,
+        "bull_risk_pct": 1.5,
+        "bear_risk_pct": 0.25,
+        "cagr_pct": -18.613935995181553,
+        "max_dd_pct": 81.87364665316183,
+        "sharpe": -0.06768119173543258,
+        "final_equity": 355.48111490864613,
+        "total_trades": 2025
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 20,
+        "bull_risk_pct": 1.5,
+        "bear_risk_pct": 0.5,
+        "cagr_pct": -19.59364230507901,
+        "max_dd_pct": 83.041820185307,
+        "sharpe": -0.10467503187204641,
+        "final_equity": 334.5064929964585,
+        "total_trades": 1810
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 20,
+        "bull_risk_pct": 2.0,
+        "bear_risk_pct": 0.25,
+        "cagr_pct": -18.93449721839887,
+        "max_dd_pct": 83.38690357571235,
+        "sharpe": -0.09866080050638287,
+        "final_equity": 348.50551629181905,
+        "total_trades": 1528
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 20,
+        "bull_risk_pct": 2.0,
+        "bear_risk_pct": 0.5,
+        "cagr_pct": -18.80938387576898,
+        "max_dd_pct": 83.07243698120874,
+        "sharpe": -0.08219569131203724,
+        "final_equity": 351.21488828199944,
+        "total_trades": 1508
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 30,
+        "bull_risk_pct": 1.0,
+        "bear_risk_pct": 0.25,
+        "cagr_pct": -19.194271318345024,
+        "max_dd_pct": 77.86199623627343,
+        "sharpe": -0.34575903476785,
+        "final_equity": 342.9334708169155,
+        "total_trades": 1805
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 30,
+        "bull_risk_pct": 1.0,
+        "bear_risk_pct": 0.5,
+        "cagr_pct": -2.182157969028997,
+        "max_dd_pct": 70.7096904751746,
+        "sharpe": 0.1992940204768066,
+        "final_equity": 895.1240990072259,
+        "total_trades": 2486
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 30,
+        "bull_risk_pct": 1.5,
+        "bear_risk_pct": 0.25,
+        "cagr_pct": -19.775042379546925,
+        "max_dd_pct": 84.13738137301148,
+        "sharpe": -0.21756651347165043,
+        "final_equity": 330.7340289518548,
+        "total_trades": 1727
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 30,
+        "bull_risk_pct": 1.5,
+        "bear_risk_pct": 0.5,
+        "cagr_pct": -19.36319980211635,
+        "max_dd_pct": 82.60177007766714,
+        "sharpe": -0.15663648484048912,
+        "final_equity": 339.3484753375427,
+        "total_trades": 1735
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 30,
+        "bull_risk_pct": 2.0,
+        "bear_risk_pct": 0.25,
+        "cagr_pct": -23.844529211462095,
+        "max_dd_pct": 89.83856269045842,
+        "sharpe": -0.2334398821805387,
+        "final_equity": 254.65264798569766,
+        "total_trades": 1535
+    },
+    {
+        "type": "FILTERED",
+        "weekly_ema_period": 30,
+        "bull_risk_pct": 2.0,
+        "bear_risk_pct": 0.5,
+        "cagr_pct": -23.13928314665098,
+        "max_dd_pct": 89.15327815013558,
+        "sharpe": -0.19671536471236634,
+        "final_equity": 266.7174042539477,
+        "total_trades": 1512
+    }
+]
