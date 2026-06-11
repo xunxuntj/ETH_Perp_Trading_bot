@@ -1,0 +1,396 @@
+//@version=5
+strategy("ST Breakout V10.0 Multi-Asset Strategy", shorttitle="ST_V10.0", overlay=true, initial_capital=10000, default_qty_type=strategy.cash, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.04, margin_long=10, margin_short=10, max_boxes_count=500, max_labels_count=500, max_lines_count=500, calc_on_every_tick=true)
+
+// ==========================================
+// 1. AUTO-ADAPTATION & PARAMETER RESOLUTION
+// ==========================================
+
+// Auto-detect asset type from symbol name
+is_btc = str.contains(syminfo.tickerid, "BTC")
+is_eth = str.contains(syminfo.tickerid, "ETH")
+
+// Dynamic default parameters resolved from Python strategy parameters
+default_dema_period = is_eth ? 150 : 200
+default_adx_threshold = is_btc ? 35.0 : 30.0
+default_tp_ratio = is_btc ? 22.0 : 5.0
+
+gp_auto = "=== Auto-Adaptation Settings ==="
+enable_auto_adapt = input.bool(true, "Enable Auto-Parameter Adaptation", group=gp_auto, tooltip="Automatically configure DEMA period, ADX threshold, and TP ratio based on the active symbol (BTC vs ETH).")
+
+gp_ind = "=== Technical Indicators ==="
+st_period = input.int(10, "SuperTrend Period", group=gp_ind, tooltip="Lookback period for ATR in SuperTrend")
+st_mult = input.float(3.0, "SuperTrend Multiplier", step=0.1, group=gp_ind, tooltip="ATR multiplier for SuperTrend bands")
+
+dema_input = input.int(200, "Manual DEMA Period", group=gp_ind, tooltip="DEMA length on the higher timeframe. Used if Auto-Adapt is disabled.")
+adx_threshold_input = input.float(30.0, "Manual ADX Threshold", group=gp_ind, tooltip="ADX threshold for trend filter. Used if Auto-Adapt is disabled.")
+tp_ratio_input = input.float(5.0, "Manual TP Ratio (R-multiple)", step=0.5, group=gp_ind, tooltip="Take profit distance as a multiple of stop loss distance. Used if Auto-Adapt is disabled.")
+
+dema_period = enable_auto_adapt ? default_dema_period : dema_input
+adx_threshold = enable_auto_adapt ? default_adx_threshold : adx_threshold_input
+tp_ratio = enable_auto_adapt ? default_tp_ratio : tp_ratio_input
+
+gp_risk = "=== Sizing & Risk ==="
+risk_mode = input.string("percent", "Risk Mode", options=["fixed", "percent"], group=gp_risk, tooltip="fixed: Fixed risk amount in USDT; percent: Risk is % of total equity")
+risk_fixed_amount = input.float(5.0, "Fixed Risk Amount (USDT)", group=gp_risk, tooltip="Amount of USDT risked per trade based on stop loss distance")
+risk_percent = input.float(1.5, "Percent Risk of Equity (%)", minval=0.1, maxval=100.0, group=gp_risk, tooltip="Risk percentage of total equity per trade") / 100.0
+leverage = input.float(10.0, "Leverage Limit", group=gp_risk, tooltip="Leverage used to calculate margin requirement")
+lock_profit_buffer = input.float(0.5, "Lock Profit Buffer (R Ratio)", group=gp_risk, tooltip="Minimum guaranteed profit once stop loss enters lock phase (e.g. 0.5 means profit = 0.5 * Risk)")
+
+gp_asset = "=== Asset Details ==="
+auto_face_value = input.bool(true, "Auto-detect Contract Face Value", group=gp_asset, tooltip="Detect face value based on symbol base currency (e.g. BTC=0.0001, ETH=0.01, SOL=1.0)")
+manual_face_value = input.float(0.01, "Manual Face Value multiplier", group=gp_asset, tooltip="Used if auto-detect is disabled")
+
+gp_ctrl = "=== Cooldown & Circuit Breaker ==="
+enable_cooldown = input.bool(true, "Enable Cooldown (3 Losses)", group=gp_ctrl, tooltip="Enable 48 hours pause after 3 consecutive losses")
+cooldown_hours = input.int(48, "Cooldown Duration (Hours)", group=gp_ctrl)
+enable_cb = input.bool(true, "Enable Circuit Breaker", group=gp_ctrl, tooltip="Enable circuit breaker if equity falls below threshold")
+cb_equity = input.float(450.0, "Circuit Breaker Equity Threshold", group=gp_ctrl, tooltip="Stop trading if equity is below this amount")
+
+// Timeframe Auto-adaptation
+is_1h = (timeframe.period == "60" or timeframe.period == "1H")
+is_30m = (timeframe.period == "30")
+
+if not (is_30m or is_1h)
+    runtime.error("This strategy is designed for 30m or 1H charts only. Please switch resolution.")
+
+htf_period = is_1h ? "240" : "60"  // 4H for 1H chart, 1H for 30m chart
+adx_tf = is_1h ? "60" : "30"       // 1H ADX for 1H chart, 30m ADX for 30m chart
+
+// Dynamic Face Value Detection
+get_auto_face_value() =>
+    is_btc ? 0.0001 : is_eth ? 0.01 : syminfo.pointvalue
+
+face_value = auto_face_value ? get_auto_face_value() : manual_face_value
+
+// ==========================================
+// 2. INDICATOR CALCULATIONS
+// ==========================================
+
+// Signal Timeframe SuperTrend (current chart resolution)
+[st_val_sig, st_dir_sig_raw] = ta.supertrend(st_mult, st_period)
+last_sig_dir = st_dir_sig_raw == -1 ? 1 : -1
+last_sig_st = st_val_sig
+
+// Custom DEMA function
+dema(src, length) =>
+    ema1 = ta.ema(src, length)
+    ema2 = ta.ema(ema1, length)
+    2 * ema1 - ema2
+
+// Helper function to calculate ADX
+f_adx(len) =>
+    [diplus, diminus, adx_val] = ta.dmi(len, len)
+    adx_val
+
+// Request ADX on its specific timeframe
+adx_val = request.security(syminfo.tickerid, adx_tf, f_adx(16), barmerge.gaps_off, barmerge.lookahead_off)
+adx_is_trending = adx_val > adx_threshold
+
+// HTF Timeframe indicators function (DEMA and SuperTrend)
+f_htf_indicators() =>
+    [st_val, st_dir_raw] = ta.supertrend(st_mult, st_period)
+    dema_val = dema(close, dema_period)
+    st_dir = st_dir_raw == -1 ? 1 : -1
+    [st_val, st_dir, dema_val, close]
+
+// Request HTF indicators safely
+[htf_st, htf_st_dir, htf_dema, htf_close] = request.security(syminfo.tickerid, htf_period, f_htf_indicators(), barmerge.gaps_off, barmerge.lookahead_off)
+
+// ==========================================
+// 3. COOLDOWN & CIRCUIT BREAKER STATE
+// ==========================================
+
+var int consecutive_losses = 0
+var int cooldown_end_time = 0
+var int cb_end_time = 0
+var int last_closed_trades_count = 0
+var int last_loss_time = 0
+
+// Reset consecutive losses and cooldown end time after cooldown period ends
+if cooldown_end_time > 0 and time >= cooldown_end_time
+    consecutive_losses := 0
+    cooldown_end_time := 0
+    last_loss_time := 0
+
+// Scan closed trades to count consecutive losses and trigger cooldown
+if strategy.closedtrades > last_closed_trades_count
+    for i = last_closed_trades_count to strategy.closedtrades - 1
+        trade_pnl = strategy.closedtrades.profit(i)
+        
+        // If more than 48 hours have passed since the last loss, reset the counter
+        if consecutive_losses > 0 and last_loss_time > 0 and (time - last_loss_time) > 48 * 60 * 60 * 1000
+            consecutive_losses := 0
+            
+        if trade_pnl < 0
+            consecutive_losses := consecutive_losses + 1
+            last_loss_time := time
+        else
+            consecutive_losses := 0
+            last_loss_time := 0
+        
+        if enable_cooldown and consecutive_losses >= 3
+            cooldown_end_time := time + cooldown_hours * 60 * 60 * 1000
+            
+    last_closed_trades_count := strategy.closedtrades
+
+equity_val = nz(strategy.equity, 10000.0)
+
+// Circuit Breaker triggers if equity drops below cb_equity (7 days stop)
+if enable_cb and equity_val <= cb_equity and nz(strategy.equity[1], 10000.0) > cb_equity
+    cb_end_time := time + 7 * 24 * 60 * 60 * 1000
+
+in_cooldown = enable_cooldown and (time < cooldown_end_time)
+in_cb = enable_cb and (equity_val <= cb_equity or time < cb_end_time)
+can_trade = not (na(in_cooldown) ? false : in_cooldown) and not (na(in_cb) ? false : in_cb)
+
+// ==========================================
+// 4. POSITION SIZING & PHASE STATE MACHINE
+// ==========================================
+
+var float pos_entry_price = na
+var float pos_stop_loss = na
+var float pos_initial_30m_st = na
+var int pos_phase = 0 // 0: None, 1: Survival, 2: Locked, 3: HTF Track
+var float pos_qty = na
+var float pos_tp_price = na
+
+calculate_qty(stop_val) =>
+    eq_val = nz(strategy.equity, 10000.0)
+    sl_dist = math.abs(close - stop_val)
+    risk_amt = (risk_mode == "fixed") ? risk_fixed_amount : (eq_val * risk_percent)
+    calc_qty = sl_dist > 0 and not na(sl_dist) ? math.floor(risk_amt / (sl_dist * face_value)) : 0.0
+    
+    // Leverage safety cap: position value cannot exceed (eq_val * leverage)
+    max_qty_leverage = math.floor((eq_val * leverage) / (close * face_value))
+    final_qty = na(max_qty_leverage) ? calc_qty : na(calc_qty) ? max_qty_leverage : math.min(calc_qty, max_qty_leverage)
+    
+    math.max(1.0, na(final_qty) ? 1.0 : final_qty)
+
+calculate_lock_threshold(entry_val, qty_val, is_long_pos) =>
+    eq_val = nz(strategy.equity, 10000.0)
+    risk_amt = (risk_mode == "fixed") ? risk_fixed_amount : (eq_val * risk_percent)
+    buffer_usdt = risk_amt * lock_profit_buffer
+    position_size_coins = qty_val * face_value
+    if position_size_coins == 0
+        entry_val
+    else
+        if is_long_pos
+            entry_val + buffer_usdt / position_size_coins
+        else
+            entry_val - buffer_usdt / position_size_coins
+
+tighten_sl(candidate, current, is_long_pos) =>
+    if na(current) or current <= 0
+        candidate
+    else
+        if is_long_pos
+            math.max(candidate, current)
+        else
+            math.min(candidate, current)
+
+// Track position average price and quantity changes
+pos_size = strategy.position_size
+prev_pos_size = strategy.position_size[1]
+
+is_new_long = (pos_size > 0 and prev_pos_size <= 0)
+is_new_short = (pos_size < 0 and prev_pos_size >= 0)
+is_active_pos = (pos_size != 0)
+
+if is_new_long or is_new_short
+    pos_entry_price := strategy.position_avg_price
+    pos_initial_30m_st := last_sig_st
+    pos_stop_loss := last_sig_st
+    pos_phase := 1 // Survival
+    pos_qty := math.abs(pos_size)
+    
+    // Calculate dynamic Take Profit price
+    sl_dist = math.abs(pos_entry_price - pos_initial_30m_st)
+    pos_tp_price := is_new_long ? (pos_entry_price + tp_ratio * sl_dist) : (pos_entry_price - tp_ratio * sl_dist)
+    
+else if not is_active_pos
+    pos_entry_price := na
+    pos_initial_30m_st := na
+    pos_stop_loss := na
+    pos_phase := 0
+    pos_qty := na
+    pos_tp_price := na
+
+// Update stop loss trailing and stage transitions
+if is_active_pos
+    is_long_pos = pos_size > 0
+    qty_val = pos_qty
+    
+    survival_to_locked_price = pos_entry_price
+    locked_to_hourly_price = calculate_lock_threshold(pos_entry_price, qty_val, is_long_pos)
+    
+    // Stage 1 Check: Survival Phase
+    is_survival = is_long_pos ? (last_sig_st < survival_to_locked_price) : (last_sig_st > survival_to_locked_price)
+    
+    if is_survival
+        pos_phase := 1
+        pos_stop_loss := tighten_sl(last_sig_st, pos_stop_loss, is_long_pos)
+    else
+        // Stage 3 Check: Switch Track (HTF) Phase
+        is_htf = is_long_pos ? (htf_st > locked_to_hourly_price) : (htf_st < locked_to_hourly_price)
+        if is_htf
+            pos_phase := 3
+            pos_stop_loss := tighten_sl(htf_st, pos_stop_loss, is_long_pos)
+        else
+            // Stage 2 Check: Lock Profit Phase
+            pos_phase := 2
+            candidate_stop = last_sig_st
+            if is_long_pos
+                if last_sig_st > locked_to_hourly_price
+                    candidate_stop := locked_to_hourly_price
+            else
+                if last_sig_st < locked_to_hourly_price
+                    candidate_stop := locked_to_hourly_price
+            pos_stop_loss := tighten_sl(candidate_stop, pos_stop_loss, is_long_pos)
+
+// ==========================================
+// 5. ENTRY & EXIT TRIGGER LOGIC
+// ==========================================
+
+// Entry triggers
+can_long = nz(can_trade, false) and (htf_st_dir == 1) and (htf_close > htf_dema) and (last_sig_dir == 1) and adx_is_trending
+can_short = nz(can_trade, false) and (htf_st_dir == -1) and (htf_close < htf_dema) and (last_sig_dir == -1) and adx_is_trending
+
+// Reversal and Re-entry
+is_flat = strategy.position_size == 0
+is_long = strategy.position_size > 0
+is_short = strategy.position_size < 0
+
+// Exit signals
+exit_signal = false
+exit_reason = ""
+
+if is_active_pos
+    is_long_pos = pos_size > 0
+    if is_long_pos
+        if pos_phase == 3 and htf_st_dir == -1
+            exit_signal := true
+            exit_reason := (is_30m ? "1H ST Red" : "4H ST Red")
+        else if (pos_phase == 1 or pos_phase == 2) and last_sig_dir == -1
+            exit_signal := true
+            exit_reason := (is_30m ? "30m ST Red" : "1H ST Red")
+    else // Short position
+        if pos_phase == 3 and htf_st_dir == 1
+            exit_signal := true
+            exit_reason := (is_30m ? "1H ST Green" : "4H ST Green")
+        else if (pos_phase == 1 or pos_phase == 2) and last_sig_dir == 1
+            exit_signal := true
+            exit_reason := (is_30m ? "30m ST Green" : "1H ST Green")
+
+// Re-entry / Order Placement
+if is_flat
+    if can_long
+        entry_qty = calculate_qty(last_sig_st)
+        strategy.entry("Long", strategy.long, qty=entry_qty)
+    else if can_short
+        entry_qty = calculate_qty(last_sig_st)
+        strategy.entry("Short", strategy.short, qty=entry_qty)
+
+else if is_long
+    if exit_signal
+        if can_short
+            reverse_qty = calculate_qty(last_sig_st)
+            strategy.entry("Short", strategy.short, qty=reverse_qty, comment="Reverse Short")
+        else
+            strategy.close("Long", comment=exit_reason)
+    else if can_short
+        reverse_qty = calculate_qty(last_sig_st)
+        strategy.entry("Short", strategy.short, qty=reverse_qty, comment="Reverse Short")
+
+else if is_short
+    if exit_signal
+        if can_long
+            reverse_qty = calculate_qty(last_sig_st)
+            strategy.entry("Long", strategy.long, qty=reverse_qty, comment="Reverse Long")
+        else
+            strategy.close("Short", comment=exit_reason)
+    else if can_long
+        reverse_qty = calculate_qty(last_sig_st)
+        strategy.entry("Long", strategy.long, qty=reverse_qty, comment="Reverse Long")
+
+// Exit execution with Stop Loss and Take Profit
+if is_active_pos
+    if pos_size > 0
+        strategy.exit("Exit Long", "Long", stop=pos_stop_loss, limit=pos_tp_price)
+    else
+        strategy.exit("Exit Short", "Short", stop=pos_stop_loss, limit=pos_tp_price)
+
+// ==========================================
+// 6. CHART VISUALIZATION & HUD PANEL
+// ==========================================
+
+// Plot Entry, Stop Loss and Take Profit
+plot_entry = plot(pos_entry_price, title="Entry Price", color=color.blue, style=plot.style_linebr, linewidth=1)
+plot_sl = plot(pos_stop_loss, title="Stop Loss", color=color.red, style=plot.style_linebr, linewidth=2)
+plot_tp = plot(pos_tp_price, title="Take Profit", color=color.green, style=plot.style_linebr, linewidth=2)
+
+qty_val_plot = is_active_pos ? pos_qty : 0.0
+locked_to_hourly_price_plot = is_active_pos ? calculate_lock_threshold(pos_entry_price, qty_val_plot, pos_size > 0) : na
+plot_lock = plot(pos_phase >= 2 ? locked_to_hourly_price_plot : na, title="Lock Profit Threshold", color=color.orange, style=plot.style_linebr, linewidth=1)
+
+fill(plot_entry, plot_sl, color=color.new(color.red, 95), title="Risk Band")
+fill(plot_entry, plot_tp, color=color.new(color.green, 95), title="Profit Band")
+
+// Plot underlying indicator values
+plot(st_val_sig, title="Signal SuperTrend", color=st_dir_sig_raw == -1 ? color.green : color.red, linewidth=1, style=plot.style_line)
+plot(htf_dema, title="HTF DEMA", color=color.new(color.blue, 30), linewidth=2)
+plot(htf_st, title="HTF SuperTrend", color=htf_st_dir == 1 ? color.new(color.green, 30) : color.new(color.red, 30), linewidth=2)
+
+// Shape buy/sell signals
+plotshape(can_long and is_flat, title="Buy Signal Shape", style=shape.triangleup, location=location.belowbar, color=color.green, size=size.normal)
+plotshape(can_short and is_flat, title="Sell Signal Shape", style=shape.triangledown, location=location.abovebar, color=color.red, size=size.normal)
+
+// Paint restriction backgrounds
+bgcolor(in_cb ? color.new(color.red, 95) : in_cooldown ? color.new(color.orange, 95) : na, title="Trading Restriction Background")
+
+// HUD Table overlay
+var table hud = table.new(position.top_right, 2, 9, bgcolor=color.new(color.black, 35), border_color=color.gray, border_width=1)
+
+if barstate.islast
+    table.cell(hud, 0, 0, "ST V10.0 Metric", text_color=color.white, bgcolor=color.blue, text_size=size.small)
+    table.cell(hud, 1, 0, "Current Value", text_color=color.white, bgcolor=color.blue, text_size=size.small)
+    
+    // Trading status
+    status_text = in_cb ? "Circuit Breaker" : in_cooldown ? "Cooldown (48h)" : "Normal"
+    status_color = in_cb or in_cooldown ? color.red : color.green
+    table.cell(hud, 0, 1, "Trading Status", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 1, status_text, text_color=status_color, text_size=size.small)
+    
+    // Timeframe and Ticker Auto-detect check
+    table.cell(hud, 0, 2, "Asset Type", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 2, is_btc ? "BTC Core (Auto)" : is_eth ? "ETH Core (Auto)" : "Other (Manual)", text_color=color.yellow, text_size=size.small)
+    
+    // Phase
+    phase_text = pos_phase == 1 ? "1. Survival" : pos_phase == 2 ? "2. Locked" : pos_phase == 3 ? (is_30m ? "3. Hourly" : "3. 4H Track") : "None"
+    phase_color = pos_phase == 1 ? color.aqua : pos_phase == 2 ? color.yellow : pos_phase == 3 ? color.purple : color.gray
+    table.cell(hud, 0, 3, "Position Phase", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 3, phase_text, text_color=phase_color, text_size=size.small)
+    
+    // Size
+    pos_coins = is_active_pos ? (pos_qty * face_value) : 0.0
+    table.cell(hud, 0, 4, "Position Size (" + syminfo.basecurrency + ")", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 4, str.tostring(pos_coins) + (pos_size > 0 ? " LONG" : pos_size < 0 ? " SHORT" : ""), text_color=color.white, text_size=size.small)
+    
+    // Stop loss
+    sl_text = is_active_pos ? str.tostring(pos_stop_loss, "#.##") : "N/A"
+    table.cell(hud, 0, 5, "Active Stop Loss", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 5, sl_text, text_color=color.white, text_size=size.small)
+    
+    // Take Profit
+    tp_text = is_active_pos ? str.tostring(pos_tp_price, "#.##") : "N/A"
+    table.cell(hud, 0, 6, "Active Take Profit", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 6, tp_text, text_color=color.white, text_size=size.small)
+    
+    // ADX filter status
+    adx_text = str.tostring(adx_val, "#.##") + " / " + str.tostring(adx_threshold, "#.##")
+    adx_color = adx_is_trending ? color.green : color.red
+    table.cell(hud, 0, 7, "ADX (Trend Strength)", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 7, adx_text + (adx_is_trending ? " (OK)" : " (Filter)"), text_color=adx_color, text_size=size.small)
+    
+    // Cooldown status
+    table.cell(hud, 0, 8, "Consecutive Losses", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 8, str.tostring(consecutive_losses) + " / 3", text_color=consecutive_losses >= 3 ? color.red : color.white, text_size=size.small)
