@@ -21,7 +21,7 @@ import sys
 import json
 from datetime import datetime, timezone
 
-from config import GATE_API_KEY, GATE_API_SECRET, CONTRACT, ENABLE_AUTO_TRADING
+from config import GATE_API_KEY, GATE_API_SECRET, CONTRACT, ENABLE_AUTO_TRADING, SIGNAL_NOTIFY_MODE
 from gate_client import GateClient
 from execution_flow import ExecutionFlow
 from telegram_notifier import send_telegram_message
@@ -124,14 +124,24 @@ def main():
             notify_message = message + "\n" + "\n".join(debug_lines)
 
         # 发送 Telegram 通知
-        if strategy_action in notify_actions or stop_loss_fallback:
+        should_notify = False
+        if SIGNAL_NOTIFY_MODE == "all":
+            should_notify = True
+        elif SIGNAL_NOTIFY_MODE == "operation":
+            should_notify = (strategy_action in notify_actions or stop_loss_fallback)
+        elif SIGNAL_NOTIFY_MODE == "report":
+            should_notify = False
+        else:
+            should_notify = (strategy_action in notify_actions or stop_loss_fallback)
+
+        if should_notify:
             success = send_telegram_message(notify_message)
             if success:
                 print("\n📱 Telegram 通知已发送")
             else:
                 print("\n⚠️ Telegram 通知发送失败")
         else:
-            print(f"\n📴 动作 '{strategy_action}' 不需要通知")
+            print(f"\n📴 动作 '{strategy_action}' (模式: {SIGNAL_NOTIFY_MODE}) 不需要通知")
         
         # GitHub Actions summary
         if os.environ.get("GITHUB_STEP_SUMMARY"):

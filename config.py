@@ -145,6 +145,9 @@ CLOSE_MODE = os.environ.get("CLOSE_MODE", "market")
 # Telegram 通知中是否包含详细日志（模拟模式下）
 NOTIFY_DETAILS = os.environ.get("NOTIFY_DETAILS", "true").lower() == "true"
 
+# 交易信号通知模式："all" = 所有信号都发送, "operation" = 仅当有操作时发送, "report" = 只发送每日报告 (不发信号)
+SIGNAL_NOTIFY_MODE = os.environ.get("SIGNAL_NOTIFY_MODE", "operation").lower()
+
 
 def get_risk_amount(equity: float) -> dict:
     """

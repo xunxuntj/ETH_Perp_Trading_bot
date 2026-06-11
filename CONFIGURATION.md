@@ -352,6 +352,23 @@
   export NOTIFY_DETAILS="true"
   ```
 
+### SIGNAL_NOTIFY_MODE
+- **类型**: String
+- **默认值**: `"operation"`
+- **环境变量**: `SIGNAL_NOTIFY_MODE`
+- **含义**: 交易信号通知发送模式
+- **说明**:
+  - `"all"` - 所有信号的消息都发送，包括未满足交易条件，止损没有变化的情况（每次扫描都会发送诊断通知）
+  - `"operation"` - 仅当有操作时发送信号（例如：开仓、平仓、止损收紧、风控熔断等），这是系统默认运行逻辑
+  - `"report"` - 只发送每日的报告，不发送任何交易信号通知
+- **建议**: 
+  - 日常运行: `"operation"`（避免消息轰炸）
+  - 仅需每日汇总: `"report"`
+- **示例**:
+  ```bash
+  export SIGNAL_NOTIFY_MODE="operation"
+  ```
+
 ---
 
 ## 💾 状态文件配置

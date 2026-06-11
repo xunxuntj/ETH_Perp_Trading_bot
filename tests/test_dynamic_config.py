@@ -244,3 +244,29 @@ def test_dynamic_tp_and_adx_thresholds(monkeypatch):
     assert config.ADX_TIMEFRAME == "1h"
 
 
+def test_signal_notify_mode_resolution(monkeypatch):
+    import config
+    import importlib
+
+    # 1. Test default value
+    monkeypatch.delenv("SIGNAL_NOTIFY_MODE", raising=False)
+    importlib.reload(config)
+    assert config.SIGNAL_NOTIFY_MODE == "operation"
+
+    # 2. Test custom value "all"
+    monkeypatch.setenv("SIGNAL_NOTIFY_MODE", "all")
+    importlib.reload(config)
+    assert config.SIGNAL_NOTIFY_MODE == "all"
+
+    # 3. Test custom value "report"
+    monkeypatch.setenv("SIGNAL_NOTIFY_MODE", "report")
+    importlib.reload(config)
+    assert config.SIGNAL_NOTIFY_MODE == "report"
+
+    # 4. Test case insensitivity
+    monkeypatch.setenv("SIGNAL_NOTIFY_MODE", "OPERATION")
+    importlib.reload(config)
+    assert config.SIGNAL_NOTIFY_MODE == "operation"
+
+
+
