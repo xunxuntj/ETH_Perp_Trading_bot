@@ -87,6 +87,7 @@ jobs:
           STOP_LOSS_MODE: ${{ secrets.STOP_LOSS_MODE || vars.STOP_LOSS_MODE || 'tight_only' }}
           CLOSE_MODE: ${{ secrets.CLOSE_MODE || vars.CLOSE_MODE || 'market' }}
           NOTIFY_DETAILS: ${{ secrets.NOTIFY_DETAILS || vars.NOTIFY_DETAILS || 'true' }}
+          SIGNAL_NOTIFY_MODE: ${{ secrets.SIGNAL_NOTIFY_MODE || vars.SIGNAL_NOTIFY_MODE || 'operation' }}
           
           # 状态文件配置
           STATE_FILE: trading_state_${{ matrix.symbol }}.json
