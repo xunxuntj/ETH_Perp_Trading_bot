@@ -669,7 +669,7 @@ class TradingStrategy:
 🎯 目标方向: {target_dir_str} (基于 30m ST)
 
 ━━━━━━━━━━ 过滤条件检查 ━━━━━━━━━━
-• 1H ST 趋势过滤 (1H ST 应为 {h1_st_expect}, 实际为 {last_1h_st:.2f} {'🟢 绿' if last_1h_dir == 1 else '🔴 红'}): {h1_st_check}
+• 1H ST 趋势过滤 (1H ST 应为 {h1_st_expect}, 实际为 {'🟢 绿' if last_1h_dir == 1 else '🔴 红'}): {h1_st_check}
 • 1H DEMA 均线过滤 (收盘 {last_1h_close:.2f} {dema_op} DEMA {last_1h_dema:.2f}): {dema_check}
 • {ADX_TIMEFRAME} ADX 动能过滤 (ADX {last_adx:.2f} > 阈值 {ADX_THRESHOLD}): {adx_check}
 
