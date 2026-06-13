@@ -135,7 +135,9 @@ def main():
             should_notify = (strategy_action in notify_actions or stop_loss_fallback)
 
         if should_notify:
-            success = send_telegram_message(notify_message)
+            # 在消息最开头加上交易对标识，方便明确是 ETH 还是 BTC
+            formatted_message = f"[{CONTRACT}] {notify_message}"
+            success = send_telegram_message(formatted_message)
             if success:
                 print("\n📱 Telegram 通知已发送")
             else:
