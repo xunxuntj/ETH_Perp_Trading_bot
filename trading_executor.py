@@ -31,6 +31,28 @@ class TradeExecutor:
         
         # 交易日志
         self.trade_log = []
+
+    def _get_tick_size(self) -> float:
+        """获取当前合约的价格单位 (order_price_round)"""
+        try:
+            contract_info = self.client.get_futures_contract(settle="usdt", contract=self.contract)
+            return float(contract_info.get("order_price_round", "0.01"))
+        except Exception as e:
+            # 发生异常时根据合约名称给出安全的默认值
+            print(f"⚠️ 获取合约 {self.contract} 配置失败, 使用默认精度: {e}")
+            if "BTC" in self.contract.upper():
+                return 0.1
+            return 0.01
+
+    def _round_price(self, price: float) -> float:
+        """根据合约价格单位对价格进行舍入，避免交易所 API 报错"""
+        if price is None:
+            return None
+        tick_size = self._get_tick_size()
+        rounded = round(price / tick_size) * tick_size
+        tick_str = f"{tick_size:.10f}".rstrip('0')
+        decimals = len(tick_str.split('.')[1]) if '.' in tick_str else 0
+        return round(rounded, decimals)
     
     def _log(self, action: str, message: str, details: Dict[str, Any] = None):
         """记录交易日志"""
@@ -131,6 +153,10 @@ class TradeExecutor:
                 "details": dict
             }
         """
+        # 根据合约精度舍入价格
+        entry_price = self._round_price(entry_price)
+        stop_loss = self._round_price(stop_loss)
+
         if qty <= 0:
             return {
                 "success": False,
@@ -232,6 +258,10 @@ class TradeExecutor:
                 "details": dict
             }
         """
+        # 根据合约精度舍入价格
+        entry_price = self._round_price(entry_price)
+        stop_loss = self._round_price(stop_loss)
+
         if qty <= 0:
             return {
                 "success": False,
@@ -342,6 +372,11 @@ class TradeExecutor:
             }
         
         try:
+            # 根据合约精度舍入价格
+            new_stop = self._round_price(new_stop)
+            if old_stop is not None:
+                old_stop = self._round_price(old_stop)
+                
             old_stop_str = f"{old_stop:.2f}" if old_stop is not None else "N/A"
 
             # 验证止损方向

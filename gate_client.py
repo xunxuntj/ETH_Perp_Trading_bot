@@ -23,6 +23,7 @@ class GateClient:
         # Enable debug if parameter True or environment variable GATE_DEBUG is set
         gate_debug = os.getenv('GATE_DEBUG', '').lower()
         self.debug = bool(debug or (gate_debug not in ('', '0', 'false', 'no', 'off')))
+        self._contract_cache = {}
     
     def _clean_text(self, text: str) -> str:
         """
@@ -416,7 +417,7 @@ class GateClient:
             order["text"] = cleaned_text
         
         if price is not None:
-            order["price"] = f"{price:.2f}"
+            order["price"] = self._format_price(contract, price)
             order["tif"] = "gtc"  # Good-till-cancel
         else:
             order["price"] = "0"
@@ -493,7 +494,7 @@ class GateClient:
             "trigger": {
                 "strategy_type": 0,
                 "price_type": 0,
-                "price": f"{stop_price:.2f}",
+                "price": self._format_price(contract, stop_price),
                 "rule": rule,
                 "expiration": 0,
             },
@@ -579,7 +580,7 @@ class GateClient:
                 "trigger": {
                     "strategy_type": 0,
                     "price_type": 0,
-                    "price": f"{new_trigger_price:.2f}",
+                    "price": self._format_price(contract, new_trigger_price),
                     "rule": rule,
                     "expiration": 0,
                 },
@@ -779,3 +780,43 @@ class GateClient:
         resp.raise_for_status()
         
         return resp.json()
+
+    def get_futures_contract(self, settle: str = "usdt", contract: str = "ETH_USDT") -> dict:
+        """
+        获取合约的详细配置信息 (包括 tick_size / order_price_round 等)
+        
+        Args:
+            settle: 结算币种 (如 "usdt")
+            contract: 永续合约名称 (如 "BTC_USDT")
+        """
+        cache_key = f"{settle}_{contract}"
+        if cache_key in self._contract_cache:
+            return self._contract_cache[cache_key]
+            
+        full_url = f"{BASE_URL}/futures/{settle}/contracts/{contract}"
+        resp = self.session.get(full_url)
+        resp.raise_for_status()
+        data = resp.json()
+        self._contract_cache[cache_key] = data
+        return data
+
+    def _format_price(self, contract: str, price: float) -> str:
+        """
+        根据合约的价格单位 (order_price_round) 对价格进行舍入并格式化为正确精度的字符串。
+        """
+        if price is None:
+            return None
+        try:
+            contract_info = self.get_futures_contract(settle="usdt", contract=contract)
+            tick_size = float(contract_info.get("order_price_round", "0.01"))
+        except Exception as e:
+            # 异常时进行安全兜底
+            if "BTC" in contract.upper():
+                tick_size = 0.1
+            else:
+                tick_size = 0.01
+                
+        rounded = round(price / tick_size) * tick_size
+        tick_str = f"{tick_size:.10f}".rstrip('0')
+        decimals = len(tick_str.split('.')[1]) if '.' in tick_str else 0
+        return f"{rounded:.{decimals}f}"
