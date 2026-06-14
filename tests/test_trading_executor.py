@@ -43,24 +43,32 @@ class TestTradeExecutor:
         result = executor_dry_run.open_long(
             entry_price=2813.0,
             stop_loss=2800.0,
-            qty=27
+            qty=27,
+            tp_price=2900.0
         )
         assert result["success"] is True
         assert "开多" in result["message"]
+        assert "限价止盈" in result["message"]
         assert result["details"]["qty"] == 27
         assert result["details"]["stop_loss"] == 2800.0
+        assert result["details"]["tp_price"] == 2900.0
+        assert result["details"]["tp_order_id"] is not None
 
     def test_open_short_success(self, executor_dry_run):
         """测试成功开空仓"""
         result = executor_dry_run.open_short(
             entry_price=2813.0,
             stop_loss=2826.0,
-            qty=27
+            qty=27,
+            tp_price=2750.0
         )
         assert result["success"] is True
         assert "开空" in result["message"]
+        assert "限价止盈" in result["message"]
         assert result["details"]["qty"] == 27
         assert result["details"]["stop_loss"] == 2826.0
+        assert result["details"]["tp_price"] == 2750.0
+        assert result["details"]["tp_order_id"] is not None
 
     def test_open_long_invalid_qty(self, executor_dry_run):
         """测试张数 <= 0 的错误"""
@@ -254,15 +262,24 @@ class TestTradeExecutor:
 
     def test_live_run_methods_called(self, executor_live_run, mock_client):
         """测试实盘模式下 client 方法被正确调用"""
-        # Test open long
-        res_long = executor_live_run.open_long(2813.0, 2800.0, 27)
+        # Test open long with limit TP
+        mock_client.create_order.reset_mock()
+        res_long = executor_live_run.open_long(2813.0, 2800.0, 27, 2900.0)
         assert res_long["success"] is True
-        mock_client.create_order.assert_called_with(
+        # Verify both entry buy order and limit TP sell order are created
+        mock_client.create_order.assert_any_call(
             contract="ETH_USDT",
             size=27,
             price=None,
             reduce_only=False,
-            text=mock_client.create_order.call_args[1]["text"]
+            text=mock_client.create_order.call_args_list[0][1]["text"]
+        )
+        mock_client.create_order.assert_any_call(
+            contract="ETH_USDT",
+            size=-27,
+            price=2900.0,
+            reduce_only=True,
+            text=mock_client.create_order.call_args_list[1][1]["text"]
         )
 
         # Test adjust stop loss (update existing)
@@ -275,6 +292,26 @@ class TestTradeExecutor:
         assert res_adjust["success"] is True
         mock_client.update_price_order.assert_called_with("mock_existing_stop_id", 2810.0, "ETH_USDT")
 
+        # Test open short with limit TP
+        mock_client.create_order.reset_mock()
+        res_short = executor_live_run.open_short(2813.0, 2826.0, 27, 2750.0)
+        assert res_short["success"] is True
+        # Verify both entry short order and limit TP buy order are created
+        mock_client.create_order.assert_any_call(
+            contract="ETH_USDT",
+            size=-27,
+            price=None,
+            reduce_only=False,
+            text=mock_client.create_order.call_args_list[0][1]["text"]
+        )
+        mock_client.create_order.assert_any_call(
+            contract="ETH_USDT",
+            size=27,
+            price=2750.0,
+            reduce_only=True,
+            text=mock_client.create_order.call_args_list[1][1]["text"]
+        )
+
         # Test close position
         res_close = executor_live_run.close_position(direction="long", qty=27, pnl=5.0)
         assert res_close["success"] is True
@@ -285,6 +322,50 @@ class TestTradeExecutor:
             reduce_only=True,
             text=mock_client.create_order.call_args[1]["text"]
         )
+
+    def test_open_long_sequence(self, executor_live_run, mock_client):
+        """测试开仓时止损设置采用先创后撤的顺序"""
+        mock_client.create_price_stop_order.reset_mock()
+        mock_client.cancel_price_orders.reset_mock()
+        
+        call_sequence = []
+        mock_client.create_price_stop_order.side_effect = lambda *args, **kwargs: (call_sequence.append("create"), {"id": "new_stop_id"})[1]
+        mock_client.cancel_price_orders.side_effect = lambda *args, **kwargs: call_sequence.append("cancel")
+        
+        result = executor_live_run.open_long(
+            entry_price=2813.0,
+            stop_loss=2800.0,
+            qty=27
+        )
+        assert result["success"] is True
+        assert call_sequence == ["create", "cancel"]
+
+    def test_adjust_stop_loss_sequence(self):
+        """测试调整止损采用先创后撤的顺序"""
+        # 直接测试 GateClient 中的 update_price_order 方法实现先创后撤
+        client = GateClient(api_key="mock", api_secret="mock")
+        client.get_price_orders = MagicMock(return_value=[{
+            "id": "old_order_id",
+            "initial": {
+                "contract": "ETH_USDT",
+                "text": "stop_loss_long_123",
+                "reduce_only": True
+            },
+            "trigger": {
+                "rule": 2
+            }
+        }])
+        
+        call_sequence = []
+        client.session.post = MagicMock(side_effect=lambda *args, **kwargs: (
+            call_sequence.append("create"), 
+            MagicMock(status_code=200, json=lambda: {"id": "new_order_id"})
+        )[1])
+        client.cancel_price_order = MagicMock(side_effect=lambda *args, **kwargs: call_sequence.append("cancel"))
+        
+        res = client.update_price_order("old_order_id", 2800.0, "ETH_USDT")
+        assert res["success"] is True
+        assert call_sequence == ["create", "cancel"]
 
 
 class TestTradeExecutorIntegration:

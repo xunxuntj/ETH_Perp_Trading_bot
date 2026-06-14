@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from gate_client import GateClient
 from config import (
     ENABLE_AUTO_TRADING, AUTO_SET_STOP_LOSS, 
-    STOP_LOSS_MODE, CLOSE_MODE, LEVERAGE
+    STOP_LOSS_MODE, CLOSE_MODE, LEVERAGE, TP_RATIO
 )
 
 
@@ -166,7 +166,7 @@ class TradeExecutor:
             self._log("SYNC_LEVERAGE_ERROR", f"❌ 同步杠杆异常: {str(e)}")
             return False
     
-    def open_long(self, entry_price: float, stop_loss: float, qty: int) -> Dict[str, Any]:
+    def open_long(self, entry_price: float, stop_loss: float, qty: int, tp_price: Optional[float] = None) -> Dict[str, Any]:
         """
         开多仓
         
@@ -174,6 +174,7 @@ class TradeExecutor:
             entry_price: 入场价格
             stop_loss: 止损价格
             qty: 张数
+            tp_price: 止盈价格
         
         Returns:
             {
@@ -186,6 +187,11 @@ class TradeExecutor:
         # 根据合约精度舍入价格
         entry_price = self._round_price(entry_price)
         stop_loss = self._round_price(stop_loss)
+        if tp_price is not None:
+            tp_price = self._round_price(tp_price)
+        else:
+            sl_dist = abs(entry_price - stop_loss)
+            tp_price = self._round_price(entry_price + TP_RATIO * sl_dist)
 
         if qty <= 0:
             return {
@@ -242,21 +248,54 @@ class TradeExecutor:
                     }
                     self._log("SET_STOP", f"✅ [模拟] 设置止损单 {qty}张 @ {stop_loss:.2f}")
                 else:
-                    # 实际交易：先清理旧触发单，再设置新的触发止损
-                    self.client.cancel_price_orders(contract=self.contract)
+                    # 实际交易：先创建新止损，再清理旧触发单（先创后撤）
                     stop_order = self._set_stop_loss_order("long", stop_loss)
                     self._log("SET_STOP", f"✅ 设置止损单 {qty}张 @ {stop_loss:.2f}")
+                    
+                    new_order_id = stop_order.get("id")
+                    try:
+                        self.client.cancel_price_orders(contract=self.contract, except_order_id=new_order_id)
+                    except Exception as cancel_err:
+                        self._log("SET_STOP_WARNING", f"⚠️ 新止损单已设置，但清理旧触发单失败: {str(cancel_err)}")
             
+            # 第4步：设置限价止盈单
+            tp_order = None
+            if AUTO_SET_STOP_LOSS:
+                if self._is_dry_run():
+                    tp_order = {
+                        "id": f"sim_tp_{int(time.time())}",
+                        "contract": self.contract,
+                        "size": -qty,  # 卖出平多
+                        "price": str(tp_price),
+                        "status": "open"
+                    }
+                    self._log("SET_TP_LIMIT", f"✅ [模拟] 设置限价止盈单 {qty}张 @ {tp_price:.2f}")
+                else:
+                    try:
+                        # 实际挂限价止盈单（卖出平多）
+                        tp_order = self.client.create_order(
+                            contract=self.contract,
+                            size=-qty,  # 负数卖出平多
+                            price=tp_price,
+                            reduce_only=True,
+                            text=f"tp_long_{int(time.time())}"
+                        )
+                        self._log("SET_TP_LIMIT", f"✅ 设置限价止盈单 {qty}张 @ {tp_price:.2f}")
+                    except Exception as tp_ex:
+                        self._log("SET_TP_LIMIT_ERROR", f"❌ 设置限价止盈单异常: {str(tp_ex)}")
+
             return {
                 "success": True,
                 "order_id": main_order.get("id"),
-                "message": f"🟢 成功开多 {qty}张 @ {entry_price:.2f}，止损 @ {stop_loss:.2f}",
+                "message": f"🟢 成功开多 {qty}张 @ {entry_price:.2f}，止损 @ {stop_loss:.2f}，限价止盈 @ {tp_price:.2f}",
                 "details": {
                     "order_id": main_order.get("id"),
                     "qty": qty,
                     "entry_price": entry_price,
                     "stop_loss": stop_loss,
+                    "tp_price": tp_price,
                     "stop_order_id": stop_order.get("id") if stop_order else None,
+                    "tp_order_id": tp_order.get("id") if tp_order else None,
                     "dry_run": self._is_dry_run()
                 }
             }
@@ -271,7 +310,7 @@ class TradeExecutor:
                 "details": {"exception": str(e)}
             }
     
-    def open_short(self, entry_price: float, stop_loss: float, qty: int) -> Dict[str, Any]:
+    def open_short(self, entry_price: float, stop_loss: float, qty: int, tp_price: Optional[float] = None) -> Dict[str, Any]:
         """
         开空仓
         
@@ -279,6 +318,7 @@ class TradeExecutor:
             entry_price: 入场价格
             stop_loss: 止损价格
             qty: 张数
+            tp_price: 止盈价格
         
         Returns:
             {
@@ -291,6 +331,11 @@ class TradeExecutor:
         # 根据合约精度舍入价格
         entry_price = self._round_price(entry_price)
         stop_loss = self._round_price(stop_loss)
+        if tp_price is not None:
+            tp_price = self._round_price(tp_price)
+        else:
+            sl_dist = abs(entry_price - stop_loss)
+            tp_price = self._round_price(entry_price - TP_RATIO * sl_dist)
 
         if qty <= 0:
             return {
@@ -347,21 +392,54 @@ class TradeExecutor:
                     }
                     self._log("SET_STOP", f"✅ [模拟] 设置止损单 {qty}张 @ {stop_loss:.2f}")
                 else:
-                    # 实际交易：先清理旧触发单，再设置新的触发止损
-                    self.client.cancel_price_orders(contract=self.contract)
+                    # 实际交易：先创建新止损，再清理旧触发单（先创后撤）
                     stop_order = self._set_stop_loss_order("short", stop_loss)
                     self._log("SET_STOP", f"✅ 设置止损单 {qty}张 @ {stop_loss:.2f}")
+                    
+                    new_order_id = stop_order.get("id")
+                    try:
+                        self.client.cancel_price_orders(contract=self.contract, except_order_id=new_order_id)
+                    except Exception as cancel_err:
+                        self._log("SET_STOP_WARNING", f"⚠️ 新止损单已设置，但清理旧触发单失败: {str(cancel_err)}")
             
+            # 第4步：设置限价止盈单
+            tp_order = None
+            if AUTO_SET_STOP_LOSS:
+                if self._is_dry_run():
+                    tp_order = {
+                        "id": f"sim_tp_{int(time.time())}",
+                        "contract": self.contract,
+                        "size": qty,  # 买入平空
+                        "price": str(tp_price),
+                        "status": "open"
+                    }
+                    self._log("SET_TP_LIMIT", f"✅ [模拟] 设置限价止盈单 {qty}张 @ {tp_price:.2f}")
+                else:
+                    try:
+                        # 实际挂限价止盈单（买入平空）
+                        tp_order = self.client.create_order(
+                            contract=self.contract,
+                            size=qty,  # 正数买入平空
+                            price=tp_price,
+                            reduce_only=True,
+                            text=f"tp_short_{int(time.time())}"
+                        )
+                        self._log("SET_TP_LIMIT", f"✅ 设置限价止盈单 {qty}张 @ {tp_price:.2f}")
+                    except Exception as tp_ex:
+                        self._log("SET_TP_LIMIT_ERROR", f"❌ 设置限价止盈单异常: {str(tp_ex)}")
+
             return {
                 "success": True,
                 "order_id": main_order.get("id"),
-                "message": f"🔴 成功开空 {qty}张 @ {entry_price:.2f}，止损 @ {stop_loss:.2f}",
+                "message": f"🔴 成功开空 {qty}张 @ {entry_price:.2f}，止损 @ {stop_loss:.2f}，限价止盈 @ {tp_price:.2f}",
                 "details": {
                     "order_id": main_order.get("id"),
                     "qty": qty,
                     "entry_price": entry_price,
                     "stop_loss": stop_loss,
+                    "tp_price": tp_price,
                     "stop_order_id": stop_order.get("id") if stop_order else None,
+                    "tp_order_id": tp_order.get("id") if tp_order else None,
                     "dry_run": self._is_dry_run()
                 }
             }
@@ -523,12 +601,12 @@ class TradeExecutor:
             }
         
         try:
-            # 第1步：取消所有现有的 stop_loss 单（避免平仓后止损自动触发）
+            # 第1步：取消所有现有的止盈限价单与止损条件单（避免平仓后自动触发）
             if not self._is_dry_run():
                 try:
-                    self.client.cancel_orders(contract=self.contract, text="stop_loss")
+                    self.client.cancel_orders(contract=self.contract)
                 except:
-                    pass  # 可能没有现有止损单
+                    pass  # 可能没有现有挂单
                 try:
                     self.client.cancel_price_orders(contract=self.contract)
                 except:

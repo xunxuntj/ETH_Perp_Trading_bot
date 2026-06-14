@@ -566,16 +566,13 @@ class GateClient:
             if not target_order:
                 return {"success": False, "message": f"Order {order_id} not found"}
             
-            # 第2步：取消现有订单
-            self.cancel_price_order(order_id)
-            
-            # 第3步：提取原订单参数
+            # 第2步：提取原订单参数
             contract = target_order.get("initial", {}).get("contract", "ETH_USDT")
             rule = target_order.get("trigger", {}).get("rule", 1)
             original_text = target_order.get("initial", {}).get("text", "")
             cleaned_text = self._clean_text(original_text)
             
-            # 第4步：创建新订单（保留所有原始参数）
+            # 第3步：创建新订单（保留所有原始参数，仅更新价格）
             new_body = {
                 "trigger": {
                     "strategy_type": 0,
@@ -616,6 +613,14 @@ class GateClient:
                 raise e
             
             new_order = resp.json()
+            
+            # 第4步：创建新单成功后，取消旧订单
+            try:
+                self.cancel_price_order(order_id)
+            except Exception as cancel_err:
+                import sys
+                print(f"[GATE WARNING] 新止损单已创建成功 ({new_order.get('id')})，但取消旧止损单 {order_id} 失败: {cancel_err}", file=sys.stderr)
+            
             return {
                 "success": True,
                 "message": f"Order updated (API constraint: ID changed from {order_id})",
@@ -625,12 +630,14 @@ class GateClient:
         except Exception as e:
             return {"success": False, "message": str(e)}
 
-    def cancel_price_orders(self, contract: str) -> list:
-        """取消某个合约的所有 open 触发单。"""
+    def cancel_price_orders(self, contract: str, except_order_id: Optional[str] = None) -> list:
+        """取消某个合约的所有 open 触发单，可指定排除某个订单 ID。"""
         cancelled = []
         for order in self.get_price_orders(contract=contract, status="open", limit=100):
             order_id = order.get("id") or order.get("id_string")
             if not order_id:
+                continue
+            if except_order_id and str(order_id) == str(except_order_id):
                 continue
             try:
                 result = self.cancel_price_order(str(order_id))

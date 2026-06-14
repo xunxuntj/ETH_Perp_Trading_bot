@@ -427,6 +427,14 @@ class TradingStrategy:
                         # 清除本地持仓状态
                         clear_position_state(dir_key)
                         print(f"[RECONCILE] 已清除本地 {dir_key} 仓位状态。")
+                        
+                        # 清除交易所上所有未成交的止盈限价单和止损条件单
+                        try:
+                            self.client.cancel_orders(contract=self.contract)
+                            self.client.cancel_price_orders(contract=self.contract)
+                            print(f"[RECONCILE] 已成功清理交易所残留挂单（如限价止盈单及触发单）")
+                        except Exception as cancel_err:
+                            print(f"[RECONCILE WARNING] 清理交易所挂单失败: {cancel_err}")
         except Exception as state_err:
             print(f"[RECONCILE ERROR] 读取或处理本地持仓状态失败: {state_err}")
 
@@ -562,6 +570,10 @@ class TradingStrategy:
                 lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=True, risk_amount=risk_amount)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
                 
+                # 计算止盈价格
+                sl_dist = abs(current_price - last_30m_st)
+                tp_price = current_price + TP_RATIO * sl_dist
+                
                 return finalize(TradeResult(
                     action="open_long",
                     message=f"""🟢 开多信号！{timing}
@@ -583,12 +595,14 @@ class TradingStrategy:
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开多 {pos_info['qty']}张 @ {current_price:.2f}
 📌 设止损 @ {last_30m_st:.2f}
+📌 设限价止盈 @ {tp_price:.2f}
 
 ━━━━━━━━━━ 仓位计算 ━━━━━━━━━━
 • 止损距离: {pos_info['sl_distance']:.2f}点
 • 保证金: {pos_info['margin_required']:.2f}U ({LEVERAGE}x)
 • 风险: {risk_info}
-• 锁利阈值: {lock_threshold:.2f}""",
+• 锁利阈值: {lock_threshold:.2f}
+• 限价止盈: {tp_price:.2f}""",
                     details={
                         "entry": current_price,
                         "stop_loss": last_30m_st,
@@ -598,7 +612,8 @@ class TradingStrategy:
                         "1h_close": last_1h_close,
                         "1h_dema": last_1h_dema,
                         "30m_st": last_30m_st,
-                        "adx": last_adx
+                        "adx": last_adx,
+                        "tp_price": tp_price
                     }
                 ))
             
@@ -606,6 +621,10 @@ class TradingStrategy:
                 pos_info = calculate_position_size(risk_amount, current_price, last_30m_st)
                 lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=False, risk_amount=risk_amount)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
+                
+                # 计算止盈价格
+                sl_dist = abs(current_price - last_30m_st)
+                tp_price = current_price - TP_RATIO * sl_dist
                 
                 return finalize(TradeResult(
                     action="open_short",
@@ -628,12 +647,14 @@ class TradingStrategy:
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开空 {pos_info['qty']}张 @ {current_price:.2f}
 📌 设止损 @ {last_30m_st:.2f}
+📌 设限价止盈 @ {tp_price:.2f}
 
 ━━━━━━━━━━ 仓位计算 ━━━━━━━━━━
 • 止损距离: {pos_info['sl_distance']:.2f}点
 • 保证金: {pos_info['margin_required']:.2f}U ({LEVERAGE}x)
 • 风险: {risk_info}
-• 锁利阈值: {lock_threshold:.2f}""",
+• 锁利阈值: {lock_threshold:.2f}
+• 限价止盈: {tp_price:.2f}""",
                     details={
                         "entry": current_price,
                         "stop_loss": last_30m_st,
@@ -643,7 +664,8 @@ class TradingStrategy:
                         "1h_close": last_1h_close,
                         "1h_dema": last_1h_dema,
                         "30m_st": last_30m_st,
-                        "adx": last_adx
+                        "adx": last_adx,
+                        "tp_price": tp_price
                     }
                 ))
             
