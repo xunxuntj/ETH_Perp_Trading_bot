@@ -205,6 +205,27 @@ class TradingStrategy:
         except Exception:
             return 0.0
 
+    def _get_tick_size(self) -> float:
+        """获取当前合约的价格单位 (order_price_round)"""
+        try:
+            contract_info = self.client.get_futures_contract(settle="usdt", contract=self.contract)
+            return float(contract_info.get("order_price_round", "0.01"))
+        except Exception:
+            # 发生异常时根据合约名称给出安全的默认值
+            if "BTC" in self.contract.upper():
+                return 0.1
+            return 0.01
+
+    def _round_price(self, price: float) -> float:
+        """根据合约价格单位对价格进行舍入"""
+        if price is None:
+            return None
+        tick_size = self._get_tick_size()
+        rounded = round(price / tick_size) * tick_size
+        tick_str = f"{tick_size:.10f}".rstrip('0')
+        decimals = len(tick_str.split('.')[1]) if '.' in tick_str else 0
+        return round(rounded, decimals)
+
     def _infer_phase(self, entry_price: float, current_price: float, qty: int, 
                      last_30m_st: float, last_1h_st: float, is_long: bool,
                      initial_30m_st: float = 0, locked_stop_loss: float = 0,
@@ -566,13 +587,14 @@ class TradingStrategy:
         # ============ 无持仓: 检查开仓条件 ============
         if not has_position:
             if can_long:
-                pos_info = calculate_position_size(risk_amount, current_price, last_30m_st)
+                rounded_st = self._round_price(last_30m_st)
+                pos_info = calculate_position_size(risk_amount, current_price, rounded_st)
                 lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=True, risk_amount=risk_amount)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
                 
-                # 计算止盈价格
-                sl_dist = abs(current_price - last_30m_st)
-                tp_price = current_price + TP_RATIO * sl_dist
+                # 计算止盈价格并舍入
+                sl_dist = abs(current_price - rounded_st)
+                tp_price = self._round_price(current_price + TP_RATIO * sl_dist)
                 
                 return finalize(TradeResult(
                     action="open_long",
@@ -586,7 +608,7 @@ class TradingStrategy:
 • 条件: {dema_long} ✅
 
 【30分钟线】
-• 30m ST: {last_30m_st:.2f} 🟢 绿 ✅
+• 30m ST: {rounded_st:.2f} 🟢 绿 ✅
 
 【ADX 过滤器】
 • ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f}
@@ -594,7 +616,7 @@ class TradingStrategy:
 
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开多 {pos_info['qty']}张 @ {current_price:.2f}
-📌 设止损 @ {last_30m_st:.2f}
+📌 设止损 @ {rounded_st:.2f}
 📌 设限价止盈 @ {tp_price:.2f}
 
 ━━━━━━━━━━ 仓位计算 ━━━━━━━━━━
@@ -605,26 +627,27 @@ class TradingStrategy:
 • 限价止盈: {tp_price:.2f}""",
                     details={
                         "entry": current_price,
-                        "stop_loss": last_30m_st,
+                        "stop_loss": rounded_st,
                         "qty": pos_info['qty'],
                         "actual_risk": pos_info['actual_risk'],
                         "1h_st": last_1h_st,
                         "1h_close": last_1h_close,
                         "1h_dema": last_1h_dema,
-                        "30m_st": last_30m_st,
+                        "30m_st": rounded_st,
                         "adx": last_adx,
                         "tp_price": tp_price
                     }
                 ))
             
             elif can_short:
-                pos_info = calculate_position_size(risk_amount, current_price, last_30m_st)
+                rounded_st = self._round_price(last_30m_st)
+                pos_info = calculate_position_size(risk_amount, current_price, rounded_st)
                 lock_threshold = calculate_lock_threshold(current_price, pos_info['qty'], is_long=False, risk_amount=risk_amount)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
                 
-                # 计算止盈价格
-                sl_dist = abs(current_price - last_30m_st)
-                tp_price = current_price - TP_RATIO * sl_dist
+                # 计算止盈价格并舍入
+                sl_dist = abs(current_price - rounded_st)
+                tp_price = self._round_price(current_price - TP_RATIO * sl_dist)
                 
                 return finalize(TradeResult(
                     action="open_short",
@@ -638,7 +661,7 @@ class TradingStrategy:
 • 条件: {dema_short} ✅
 
 【30分钟线】
-• 30m ST: {last_30m_st:.2f} 🔴 红 ✅
+• 30m ST: {rounded_st:.2f} 🔴 红 ✅
 
 【ADX 过滤器】
 • ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f}
@@ -646,7 +669,7 @@ class TradingStrategy:
 
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开空 {pos_info['qty']}张 @ {current_price:.2f}
-📌 设止损 @ {last_30m_st:.2f}
+📌 设止损 @ {rounded_st:.2f}
 📌 设限价止盈 @ {tp_price:.2f}
 
 ━━━━━━━━━━ 仓位计算 ━━━━━━━━━━
@@ -657,13 +680,13 @@ class TradingStrategy:
 • 限价止盈: {tp_price:.2f}""",
                     details={
                         "entry": current_price,
-                        "stop_loss": last_30m_st,
+                        "stop_loss": rounded_st,
                         "qty": pos_info['qty'],
                         "actual_risk": pos_info['actual_risk'],
                         "1h_st": last_1h_st,
                         "1h_close": last_1h_close,
                         "1h_dema": last_1h_dema,
-                        "30m_st": last_30m_st,
+                        "30m_st": rounded_st,
                         "adx": last_adx,
                         "tp_price": tp_price
                     }
@@ -780,18 +803,18 @@ class TradingStrategy:
         last_1h_st = st_1h['supertrend'].iloc[-2]
         last_1h_dir = int(st_1h['direction'].iloc[-2])
 
-        # 读取历史状态
+        # 读取历史状态并进行舍入以对齐交易所精度，防止浮点微小差异导致频繁调整止损
         prev_state = load_position_state().get("long", {})
         prev_phase = prev_state.get("phase", "")
-        prev_stop_loss = prev_state.get("stop_loss", 0)  # ← 记录旧止损，用于调整时验证
-        live_stop_loss = self._get_live_stop_price()
+        prev_stop_loss = self._round_price(prev_state.get("stop_loss", 0))  # ← 记录旧止损，用于调整时验证
+        live_stop_loss = self._round_price(self._get_live_stop_price())
         baseline_stop_loss = prev_stop_loss if prev_stop_loss > 0 else live_stop_loss
-        initial_30m_st = prev_state.get("initial_30m_st", 0)
-        locked_stop_loss = prev_state.get("locked_stop_loss", 0)
+        initial_30m_st = self._round_price(prev_state.get("initial_30m_st", 0))
+        locked_stop_loss = self._round_price(prev_state.get("locked_stop_loss", 0))
         
-        # 首次开仓时记录 initial_30m_st
+        # 首次开仓时记录 initial_30m_st，并对齐精度
         if initial_30m_st <= 0:
-            initial_30m_st = last_30m_st
+            initial_30m_st = self._round_price(last_30m_st)
 
         # 推导当前阶段和建议的止损，传入历史信息
         phase, recommended_stop = self._infer_phase(entry_price, current_price, qty, 
@@ -799,12 +822,13 @@ class TradingStrategy:
                                                       initial_30m_st=initial_30m_st,
                                                       locked_stop_loss=locked_stop_loss,
                                                       prev_stop_loss=baseline_stop_loss)
+        recommended_stop = self._round_price(recommended_stop)
 
-        # 计算动态止盈价 (TP)
+        # 计算动态止盈价 (TP)并舍入
         tp_price = None
         if initial_30m_st > 0:
             sl_dist = abs(entry_price - initial_30m_st)
-            tp_price = entry_price + TP_RATIO * sl_dist
+            tp_price = self._round_price(entry_price + TP_RATIO * sl_dist)
 
         # 判断离场信号
         exit_signal = False
@@ -956,18 +980,18 @@ class TradingStrategy:
         last_1h_st = st_1h['supertrend'].iloc[-2]
         last_1h_dir = int(st_1h['direction'].iloc[-2])
 
-        # 读取历史状态
+        # 读取历史状态并进行舍入以对齐交易所精度，防止浮点微小差异导致频繁调整止损
         prev_state = load_position_state().get("short", {})
         prev_phase = prev_state.get("phase", "")
-        prev_stop_loss = prev_state.get("stop_loss", 0)  # ← 记录旧止损，用于调整时验证
-        live_stop_loss = self._get_live_stop_price()
+        prev_stop_loss = self._round_price(prev_state.get("stop_loss", 0))  # ← 记录旧止损，用于调整时验证
+        live_stop_loss = self._round_price(self._get_live_stop_price())
         baseline_stop_loss = prev_stop_loss if prev_stop_loss > 0 else live_stop_loss
-        initial_30m_st = prev_state.get("initial_30m_st", 0)
-        locked_stop_loss = prev_state.get("locked_stop_loss", 0)
+        initial_30m_st = self._round_price(prev_state.get("initial_30m_st", 0))
+        locked_stop_loss = self._round_price(prev_state.get("locked_stop_loss", 0))
         
-        # 首次开仓时记录 initial_30m_st
+        # 首次开仓时记录 initial_30m_st，并对齐精度
         if initial_30m_st <= 0:
-            initial_30m_st = last_30m_st
+            initial_30m_st = self._round_price(last_30m_st)
 
         # 推导当前阶段和建议的止损，传入历史信息
         phase, recommended_stop = self._infer_phase(entry_price, current_price, qty, 
@@ -975,12 +999,13 @@ class TradingStrategy:
                                                       initial_30m_st=initial_30m_st,
                                                       locked_stop_loss=locked_stop_loss,
                                                       prev_stop_loss=baseline_stop_loss)
+        recommended_stop = self._round_price(recommended_stop)
 
-        # 计算动态止盈价 (TP)
+        # 计算动态止盈价 (TP)并舍入
         tp_price = None
         if initial_30m_st > 0:
             sl_dist = abs(entry_price - initial_30m_st)
-            tp_price = entry_price - TP_RATIO * sl_dist
+            tp_price = self._round_price(entry_price - TP_RATIO * sl_dist)
 
         # 判断离场信号
         exit_signal = False

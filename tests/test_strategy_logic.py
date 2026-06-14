@@ -490,6 +490,29 @@ class TestLiveStopFallback(unittest.TestCase):
         self.assertEqual(stop_loss, 2008.0)
 
 
+class TestStrategyRounding(unittest.TestCase):
+    def test_round_price_default(self):
+        # Default fallback is 0.01
+        strategy = TradingStrategy(DummyStrategyClient(), contract="ETH_USDT")
+        self.assertEqual(strategy._round_price(2000.1234), 2000.12)
+        self.assertEqual(strategy._round_price(2000.126), 2000.13)
+
+    def test_round_price_btc(self):
+        # BTC fallback is 0.1
+        strategy = TradingStrategy(DummyStrategyClient(), contract="BTC_USDT")
+        self.assertEqual(strategy._round_price(64085.62), 64085.6)
+        self.assertEqual(strategy._round_price(64085.67), 64085.7)
+
+    def test_round_price_from_contract_info(self):
+        class MockClientWithContract:
+            def get_futures_contract(self, settle, contract):
+                return {"order_price_round": "0.5"}
+        
+        strategy = TradingStrategy(MockClientWithContract(), contract="ADA_USDT")
+        self.assertEqual(strategy._round_price(1.23), 1.0)
+        self.assertEqual(strategy._round_price(1.26), 1.5)
+
+
 if __name__ == '__main__':
     # 运行所有测试
     unittest.main(verbosity=2)
