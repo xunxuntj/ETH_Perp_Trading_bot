@@ -89,18 +89,48 @@ class TradeExecutor:
         根据交易所当前的仓位保证金模式（cross/isolated）自动决定设置方式：
         - 全仓模式 (cross)：设置 leverage 为 "0"，并将 cross_leverage_limit 设为 LEVERAGE。
         - 逐仓模式 (isolated)：设置 leverage 为 LEVERAGE。
+        如果获取持仓详情异常或返回空（可能由于合约未初始化），将进入强制更新的 fallback 逻辑：
+        1. 优先尝试全仓（leverage="0", cross_leverage_limit=LEVERAGE）
+        2. 若失败，尝试逐仓（leverage=LEVERAGE, cross_leverage_limit=""）
         """
         if self._is_dry_run():
             self._log("SYNC_LEVERAGE", f"✅ [模拟] 同步杠杆为 {LEVERAGE}x")
             return True
             
+        pos_detail = None
         try:
             # 获取当前合约的仓位配置详情
             pos_detail = self.client.get_position_detail(self.contract)
-            if not pos_detail:
-                self._log("SYNC_LEVERAGE_WARNING", f"⚠️ 未能获取到合约 {self.contract} 的持仓详情，跳过同步杠杆")
-                return False
-                
+        except Exception as ex:
+            self._log("SYNC_LEVERAGE_WARNING", f"⚠️ 获取持仓详情异常（可能由于合约未初始化）: {str(ex)}。将尝试直接强制同步杠杆。")
+            
+        if not pos_detail:
+            # Fallback 强制更新
+            fallback_leverage = LEVERAGE if LEVERAGE is not None else 10
+            try:
+                self._log("SYNC_LEVERAGE_FORCE_CROSS", f"🔄 [全仓] 尝试强制同步杠杆为 {fallback_leverage}x (全仓模式)")
+                result = self.client.update_position_leverage(
+                    contract=self.contract,
+                    leverage="0",
+                    cross_leverage_limit=str(fallback_leverage)
+                )
+                self._log("SYNC_LEVERAGE_FORCE_SUCCESS", f"✅ 强制同步全仓杠杆成功: {json.dumps(result)}")
+                return True
+            except Exception as force_ex:
+                try:
+                    self._log("SYNC_LEVERAGE_FORCE_ISOLATED", f"🔄 [逐仓] 尝试强制同步杠杆为 {fallback_leverage}x (逐仓模式)")
+                    result = self.client.update_position_leverage(
+                        contract=self.contract,
+                        leverage=str(fallback_leverage),
+                        cross_leverage_limit=""
+                    )
+                    self._log("SYNC_LEVERAGE_FORCE_ISOLATED_SUCCESS", f"✅ 强制同步逐仓杠杆成功: {json.dumps(result)}")
+                    return True
+                except Exception as iso_ex:
+                    self._log("SYNC_LEVERAGE_ERROR", f"❌ 强制同步杠杆均失败 (全仓: {str(force_ex)}, 逐仓: {str(iso_ex)})")
+                    return False
+                    
+        try:
             pos_margin_mode = pos_detail.get("pos_margin_mode", "cross")
             current_leverage = int(pos_detail.get("leverage", 0))
             current_cross_limit = int(pos_detail.get("cross_leverage_limit", 0))

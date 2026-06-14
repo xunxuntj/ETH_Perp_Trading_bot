@@ -126,6 +126,55 @@ class TestTradeExecutor:
             cross_leverage_limit=""
         )
 
+    def test_sync_leverage_uninitialized_force_cross_success(self, executor_live_run, mock_client):
+        """测试未初始化合约时直接强制更新全仓杠杆成功"""
+        # get_position_detail 模拟抛出异常
+        mock_client.get_position_detail = MagicMock(side_effect=Exception("Position not found"))
+        mock_client.update_position_leverage = MagicMock(return_value={"status": "success"})
+        
+        result = executor_live_run.sync_leverage()
+        assert result is True
+        # 验证第一次尝试了全仓杠杆设置
+        mock_client.update_position_leverage.assert_called_once_with(
+            contract="ETH_USDT",
+            leverage="0",
+            cross_leverage_limit="10"
+        )
+
+    def test_sync_leverage_uninitialized_force_isolated_success(self, executor_live_run, mock_client):
+        """测试未初始化合约时强制全仓设置失败，但逐仓设置成功"""
+        mock_client.get_position_detail = MagicMock(side_effect=Exception("Position not found"))
+        
+        # 第一次调用全仓抛异常，第二次调用逐仓成功
+        mock_client.update_position_leverage = MagicMock(side_effect=[
+            Exception("Cross mode not supported"),
+            {"status": "success"}
+        ])
+        
+        result = executor_live_run.sync_leverage()
+        assert result is True
+        # 验证调用了两次，分别以不同参数
+        assert mock_client.update_position_leverage.call_count == 2
+        mock_client.update_position_leverage.assert_any_call(
+            contract="ETH_USDT",
+            leverage="0",
+            cross_leverage_limit="10"
+        )
+        mock_client.update_position_leverage.assert_any_call(
+            contract="ETH_USDT",
+            leverage="10",
+            cross_leverage_limit=""
+        )
+
+    def test_sync_leverage_uninitialized_force_fail(self, executor_live_run, mock_client):
+        """测试未初始化合约时强制全仓和逐仓更新全部失败"""
+        mock_client.get_position_detail = MagicMock(side_effect=Exception("Position not found"))
+        mock_client.update_position_leverage = MagicMock(side_effect=Exception("API Error"))
+        
+        result = executor_live_run.sync_leverage()
+        assert result is False
+        assert mock_client.update_position_leverage.call_count == 2
+
     def test_adjust_stop_loss_long_up_success(self, executor_dry_run):
         """测试多仓止损上移"""
         result = executor_dry_run.adjust_stop_loss(
