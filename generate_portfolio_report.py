@@ -659,20 +659,24 @@ def main():
         avg_win_hold = win_durations.mean() if len(win_durations) > 0 else 0
         avg_loss_hold = loss_durations.mean() if len(loss_durations) > 0 else 0
         
-        # R multiples
+        # R multiples - 精准计算：根据每个仓位入场时的账户权益动态计算 R 值，支持重叠仓位
         r_multiples = []
-        current_cap = initial_capital
         for _, row in df_comb.iterrows():
             pnl = row['pnl']
+            duration = row.get('duration_sec', 0)
+            entry_time = row['time'] - duration if duration > 0 else row['time']
+            # 找到在该仓位入场之前已经平仓的所有交易的累计盈亏
+            prior_pnl_sum = df_comb[df_comb['time'] < entry_time]['pnl'].sum()
+            equity_at_entry = initial_capital + prior_pnl_sum
+            
             if DEFAULT_RISK_MODE == "percent":
-                one_r = current_cap * DEFAULT_RISK_PERCENT
+                one_r = equity_at_entry * DEFAULT_RISK_PERCENT
             else:
                 one_r = DEFAULT_RISK_FIXED_AMOUNT
                 
             if one_r <= 0:
                 one_r = 5.0
             r_multiples.append(pnl / one_r)
-            current_cap += pnl
             
         # Chart construction (multi-line)
         chart_labels = ["开始"]

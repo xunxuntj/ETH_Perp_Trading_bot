@@ -44,6 +44,11 @@ jobs:
           # 报告参数传递
           REPORT_DAYS: ${{ github.event.inputs.days }}
           
+          # 风险管理配置 (同步实盘风控水位)
+          RISK_MODE: ${{ secrets.RISK_MODE || vars.RISK_MODE || 'fixed' }}
+          RISK_FIXED_AMOUNT: ${{ secrets.RISK_FIXED_AMOUNT || vars.RISK_FIXED_AMOUNT || '5' }}
+          RISK_PERCENT: ${{ secrets.RISK_PERCENT || vars.RISK_PERCENT || '0.02' }}
+          
           # AI 诊断配置 (可选，GitHub Secrets 选填)
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_API_URL: ${{ secrets.AI_API_URL }}
