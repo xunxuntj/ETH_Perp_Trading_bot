@@ -464,7 +464,7 @@ class TestLiveStopFallback(unittest.TestCase):
             entry_price=2000.0,
             current_price=2020.0,
             qty=100,
-            last_30m_st=2000.5,
+            last_30m_st=2001.0,
             last_1h_st=1995.0,
             is_long=True,
             prev_stop_loss=2001.0,

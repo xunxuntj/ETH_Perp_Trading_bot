@@ -247,8 +247,9 @@ class TradingStrategy:
             均应用“只紧不松”原则。
         """
         # 三阶段切换价只依赖当前持仓：成本价 + 仓位大小
-        survival_to_locked_price = entry_price
+        # 锁利切换价/换轨切换价：按当前 30m ST 止损平仓的期望盈利 >= LOCK_PROFIT_BUFFER (0.5R)
         locked_to_hourly_price = calculate_lock_threshold(entry_price, qty, is_long, risk_amount)
+        survival_to_locked_price = locked_to_hourly_price
 
         if (os.getenv('GATE_DEBUG') or os.getenv('DEBUG')):
             print(
