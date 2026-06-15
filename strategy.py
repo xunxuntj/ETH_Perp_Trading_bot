@@ -822,7 +822,8 @@ class TradingStrategy:
                                                       last_30m_st, last_1h_st, is_long=True,
                                                       initial_30m_st=initial_30m_st,
                                                       locked_stop_loss=locked_stop_loss,
-                                                      prev_stop_loss=baseline_stop_loss)
+                                                      prev_stop_loss=baseline_stop_loss,
+                                                      risk_amount=risk_amount)
         recommended_stop = self._round_price(recommended_stop)
 
         # 计算动态止盈价 (TP)并舍入
@@ -999,7 +1000,8 @@ class TradingStrategy:
                                                       last_30m_st, last_1h_st, is_long=False,
                                                       initial_30m_st=initial_30m_st,
                                                       locked_stop_loss=locked_stop_loss,
-                                                      prev_stop_loss=baseline_stop_loss)
+                                                      prev_stop_loss=baseline_stop_loss,
+                                                      risk_amount=risk_amount)
         recommended_stop = self._round_price(recommended_stop)
 
         # 计算动态止盈价 (TP)并舍入
