@@ -224,6 +224,7 @@ class ExecutionFlow:
         entry = details.get("entry")
         stop_loss = details.get("stop_loss")
         qty = details.get("qty")
+        tp_price = details.get("tp_price")
         
         if not all([entry, stop_loss, qty]):
             return {
@@ -234,7 +235,7 @@ class ExecutionFlow:
             }
         
         # 执行开仓
-        trade_exec = self.executor.open_short(entry, stop_loss, qty)
+        trade_exec = self.executor.open_short(entry, stop_loss, qty, tp_price)
         
         return {
             "strategy_action": "open_short",

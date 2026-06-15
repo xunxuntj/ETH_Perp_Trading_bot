@@ -87,6 +87,15 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: trading-state-${{ matrix.symbol }}
-          path: trading_state_${{ matrix.symbol }}.json
+          path: |
+            trading_state_${{ matrix.symbol }}.json
+            trading_state.json
+            position_state.json
+            position_state_*.json
+            cooldown_state.json
+            cooldown_state_*.json
+            cooldown_notify_state.json
+            cooldown_notify_state_*.json
+          if-no-files-found: ignore
           retention-days: 30
           overwrite: true
