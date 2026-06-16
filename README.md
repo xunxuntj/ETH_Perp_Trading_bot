@@ -6,6 +6,12 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-green)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
+💬 **想要接收实盘交易信号？**
+
+<img src="images/telegram_qr.jpg" width="220" alt="Telegram QR Code" />
+
+欢迎加入 Telegram 交流/信号频道：[https://t.me/+I5GaTf2OrChjMzg0](https://t.me/+I5GaTf2OrChjMzg0)
+
 ---
 
 ## ✨ V10.0 核心功能与亮点
@@ -92,7 +98,6 @@ $$\text{sl\_dist} = |\text{entry\_price} - \text{initial\_30m\_st}|$$
 ```
 eth-trading-bot/
 ├── .github/workflows/
-│   ├── trading.yml              # 双资产（BTC+ETH）并行交易核查工作流
 │   ├── trading-external-trigger.yml  # 外部 API 触发专用工作流
 │   └── report.yml               # 统一每日投资组合大盘报告工作流
 ├── templates/
