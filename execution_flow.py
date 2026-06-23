@@ -6,11 +6,13 @@
 from typing import Dict, Any, Optional
 import os
 import json
+import time
 
 from strategy import TradingStrategy
 from trading_executor import TradeExecutor
 from gate_client import GateClient
 from config import ENABLE_AUTO_TRADING
+from position_state import update_position_state
 
 
 class ExecutionFlow:
@@ -206,6 +208,16 @@ class ExecutionFlow:
         # 执行开仓
         trade_exec = self.executor.open_long(entry, stop_loss, qty, tp_price)
         
+        if trade_exec["success"]:
+            update_position_state(
+                direction="long",
+                phase="SURVIVAL",
+                stop_loss=stop_loss,
+                entry_price=entry,
+                current_time=time.time(),
+                initial_30m_st=stop_loss
+            )
+        
         return {
             "strategy_action": "open_long",
             "trade_executed": trade_exec["success"],
@@ -236,6 +248,16 @@ class ExecutionFlow:
         
         # 执行开仓
         trade_exec = self.executor.open_short(entry, stop_loss, qty, tp_price)
+        
+        if trade_exec["success"]:
+            update_position_state(
+                direction="short",
+                phase="SURVIVAL",
+                stop_loss=stop_loss,
+                entry_price=entry,
+                current_time=time.time(),
+                initial_30m_st=stop_loss
+            )
         
         return {
             "strategy_action": "open_short",
@@ -324,6 +346,16 @@ class ExecutionFlow:
             reverse_exec = self.executor.open_long(current_price, reverse_stop, reverse_qty)
         else:
             reverse_exec = self.executor.open_short(current_price, reverse_stop, reverse_qty)
+            
+        if reverse_exec["success"]:
+            update_position_state(
+                direction=reverse_direction,
+                phase="SURVIVAL",
+                stop_loss=reverse_stop,
+                entry_price=current_price,
+                current_time=time.time(),
+                initial_30m_st=reverse_stop
+            )
         
         combined_msg = close_exec["message"] + "\n\n" + reverse_exec["message"]
         
