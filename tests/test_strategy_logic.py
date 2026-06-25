@@ -513,6 +513,55 @@ class TestStrategyRounding(unittest.TestCase):
         self.assertEqual(strategy._round_price(1.26), 1.5)
 
 
+class TestStateReconstruction(unittest.TestCase):
+    def test_reconstruct_initial_30m_st_success(self):
+        class MockClient:
+            def get_my_trades(self, contract, limit=20):
+                # Trade occurred at timestamp 1781071200 (2026-06-10 06:00:00)
+                return [{
+                    'id': '12345',
+                    'time': 1781071200,
+                    'size': 100,  # long
+                    'price': 2000.0,
+                    'order_id': '67890'
+                }]
+                
+            def get_candlesticks(self, contract, interval, limit):
+                import pandas as pd
+                # Create timezone-naive DatetimeIndex matching 30m intervals
+                timestamps = pd.date_range(start='2026-06-10 03:00:00', periods=20, freq='30min')
+                # index[6] is 2026-06-10 06:00:00.
+                # index[5] + 30m = 06:00:00, which satisfies <= trade_dt (06:00:00).
+                # We'll calculate ST for the mock dataframe.
+                data = {
+                    'open': [2000.0] * 20,
+                    'high': [2010.0] * 20,
+                    'low': [1990.0] * 20,
+                    'close': [2000.0] * 20,
+                    'volume': [1000.0] * 20
+                }
+                # Let's set index[5] close to a distinct value
+                data['close'][5] = 1950.0
+                df = pd.DataFrame(data, index=timestamps)
+                df.index.name = 'timestamp'
+                return df
+
+        from unittest.mock import patch
+        
+        # Mock calculate_supertrend output
+        fake_st = {
+            'supertrend': [2000.0] * 20,
+            'direction': [1] * 20
+        }
+        fake_st['supertrend'][5] = 1980.5
+        
+        import pandas as pd
+        with patch('strategy.calculate_supertrend', return_value=pd.DataFrame(fake_st, index=pd.date_range(start='2026-06-10 03:00:00', periods=20, freq='30min'))):
+            strategy = TradingStrategy(MockClient(), contract="ETH_USDT")
+            reconstructed = strategy._reconstruct_initial_30m_st(is_long=True, entry_price=2000.0, last_30m_st=2050.0)
+            self.assertEqual(reconstructed, 1980.5)
+
+
 if __name__ == '__main__':
     # 运行所有测试
     unittest.main(verbosity=2)

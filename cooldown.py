@@ -176,6 +176,49 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
     consecutive_losses = int(state.get("consecutive_losses", 0) or 0)
     last_loss_time = _parse_datetime(state.get("last_loss_time"))
 
+    # ==== 自动对账逻辑：如果本地记录连续亏损为0且没有冷静期，通过平仓历史重建状态以防状态文件丢失 ====
+    if consecutive_losses == 0 and not cooldown_until:
+        try:
+            closes = client.get_position_closes(contract, limit=10)
+            if closes:
+                reconstructed_losses = 0
+                reconstructed_last_loss_time = None
+                for close in closes:
+                    pnl = close.get('pnl', 0.0)
+                    close_time = datetime.fromtimestamp(close.get('time', 0), tz=timezone.utc)
+                    
+                    if reconstructed_last_loss_time and (reconstructed_last_loss_time - close_time) > timedelta(hours=48):
+                        break
+                        
+                    if pnl < 0:
+                        reconstructed_losses += 1
+                        if reconstructed_last_loss_time is None:
+                            reconstructed_last_loss_time = close_time
+                    else:
+                        break
+                
+                if reconstructed_losses > 0 and reconstructed_last_loss_time:
+                    if (now - reconstructed_last_loss_time) <= timedelta(hours=48):
+                        state["consecutive_losses"] = reconstructed_losses
+                        state["last_loss_time"] = _serialize_datetime(reconstructed_last_loss_time)
+                        
+                        if reconstructed_losses >= MAX_CONSECUTIVE_LOSSES:
+                            cooldown_until = reconstructed_last_loss_time + timedelta(hours=48)
+                            if now < cooldown_until:
+                                state["cooldown_until"] = _serialize_datetime(cooldown_until)
+                            else:
+                                cooldown_until = None
+                                state["consecutive_losses"] = 0
+                                state["last_loss_time"] = None
+                                state["cooldown_until"] = None
+                        
+                        save_cooldown_state(state)
+                        consecutive_losses = state["consecutive_losses"]
+                        cooldown_until = _parse_datetime(state.get("cooldown_until"))
+                        last_loss_time = _parse_datetime(state.get("last_loss_time"))
+        except Exception as e:
+            print(f"[COOLDOWN RECONCILE ERROR] 从平仓历史中恢复冷静期状态失败: {e}")
+
     if cooldown_until and now < cooldown_until:
         remaining_hours = (cooldown_until - now).total_seconds() / 3600
         should_notify = not notify_state["notified"]

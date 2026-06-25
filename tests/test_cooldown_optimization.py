@@ -466,6 +466,44 @@ def test_record_trade_result_idle_48h_reset():
     assert abs((parsed_last_loss - now).total_seconds()) < 1.0, "❌ last_loss_time未正确更新"
 
 
+def test_cooldown_reconcile_from_history(monkeypatch=None):
+    """测试当本地记录为0且空仓时，check_cooldown能够从历史平仓记录中重建冷静期状态。"""
+    import cooldown
+    if monkeypatch:
+        monkeypatch.setattr(cooldown, "ENABLE_AUTO_TRADING", True)
+    else:
+        # Fallback if run without pytest
+        cooldown.ENABLE_AUTO_TRADING = True
+        
+    reset_cooldown_state()
+    reset_cooldown_notify_state()
+    
+    now = datetime.now(timezone.utc)
+    
+    # 模拟最近3个平仓交易都是亏损的
+    closes = [
+        {"time": int((now - timedelta(minutes=10)).timestamp()), "pnl": -5.0, "side": "long"},
+        {"time": int((now - timedelta(minutes=20)).timestamp()), "pnl": -3.0, "side": "long"},
+        {"time": int((now - timedelta(minutes=30)).timestamp()), "pnl": -4.0, "side": "long"}
+    ]
+    
+    class MockClient:
+        def get_account(self):
+            return {"total": 1000.0}
+        def get_positions(self, contract):
+            return None
+        def get_position_closes(self, contract, limit=10):
+            return closes[:limit]
+            
+    client = MockClient()
+    status = check_cooldown(client)
+    state = load_cooldown_state()
+    
+    assert status.triggered is True, "❌ 应成功触发重建冷静期"
+    assert state["consecutive_losses"] == 3, "❌ 连续亏损计数应重建为3"
+    assert state["cooldown_until"] is not None, "❌ cooldown_until应被重建并保存"
+
+
 def main():
     print("\n" + "█"*70)
     print("冷静期推送优化测试")
@@ -481,6 +519,7 @@ def main():
         test_signal_mode_ignores_losses_before_reset_anchor(lambda *args, **kwargs: None)
         test_cooldown_reset_if_empty_and_idle_48h(lambda *args, **kwargs: None)
         test_record_trade_result_idle_48h_reset()
+        test_cooldown_reconcile_from_history()
         test_real_world_scenario()
         
         print("\n" + "="*70)

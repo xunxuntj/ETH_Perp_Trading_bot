@@ -315,6 +315,60 @@ class TradingStrategy:
             )
         return phase, recommended_stop
 
+    def _reconstruct_initial_30m_st(self, is_long: bool, entry_price: float, last_30m_st: float) -> float:
+        """
+        当本地状态丢失时，从 Gate.io 成交历史中重建仓位开仓时的初始 30m ST。
+        """
+        try:
+            print(f"[RECONSTRUCT] 尝试从 Gate.io API 成交历史中恢复 {self.contract} {'多' if is_long else '空'}仓的初始 30m ST...")
+            trades = self.client.get_my_trades(self.contract, limit=20)
+            if not trades:
+                print(f"[RECONSTRUCT WARNING] 未获取到成交记录。回退使用当前 30m ST: {last_30m_st:.2f}")
+                return last_30m_st
+
+            # 寻找与当前持仓方向相符且最近的开仓/加仓成交
+            matched_trade = None
+            for t in trades:
+                trade_is_long = t['size'] > 0
+                if trade_is_long == is_long:
+                    # 取最近的一笔匹配交易作为近似入场点
+                    matched_trade = t
+                    break
+
+            if not matched_trade:
+                print(f"[RECONSTRUCT WARNING] 未找到匹配的成交记录。回退使用当前 30m ST: {last_30m_st:.2f}")
+                return last_30m_st
+
+            entry_time = matched_trade['time']
+            trade_dt = datetime.fromtimestamp(entry_time, tz=timezone.utc).replace(tzinfo=None)
+            print(f"[RECONSTRUCT] 找到匹配成交：价格={matched_trade['price']:.2f}, 数量={matched_trade['size']}, 时间={datetime.fromtimestamp(entry_time, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+
+            # 获取当时 30m 蜡烛线（300根大概覆盖最近 6 天）
+            df_30m = self.client.get_candlesticks(self.contract, "30m", 300)
+            if df_30m.empty:
+                print(f"[RECONSTRUCT WARNING] 获取蜡烛线失败。回退使用当前 30m ST: {last_30m_st:.2f}")
+                return last_30m_st
+
+            # 计算 SuperTrend
+            st_df = calculate_supertrend(df_30m, SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER)
+            
+            # index 代表 K 线开始时间。所以信号收盘完成时间是 index + 30m
+            # 因此要找：index + 30m <= entry_time 的最后一个
+            signal_close_times = st_df.index + pd.Timedelta(minutes=30)
+            valid_candles = st_df[signal_close_times <= trade_dt]
+
+            if not valid_candles.empty:
+                reconstructed_st = valid_candles['supertrend'].iloc[-1]
+                print(f"[RECONSTRUCT SUCCESS] 成功恢复初始 30m ST = {reconstructed_st:.2f} (原当前值={last_30m_st:.2f})")
+                return reconstructed_st
+            else:
+                print(f"[RECONSTRUCT WARNING] 成交时间超出 K 线缓存范围。回退使用当前 30m ST: {last_30m_st:.2f}")
+                return last_30m_st
+
+        except Exception as e:
+            print(f"[RECONSTRUCT ERROR] 恢复初始 30m ST 异常: {e}。回退使用当前 30m ST: {last_30m_st:.2f}")
+            return last_30m_st
+
     def __init__(self, client: GateClient, contract: str = "SOL_USDT"):
         self.client = client
         self.contract = contract
@@ -815,7 +869,7 @@ class TradingStrategy:
         
         # 首次开仓时记录 initial_30m_st，并对齐精度
         if initial_30m_st <= 0:
-            initial_30m_st = self._round_price(last_30m_st)
+            initial_30m_st = self._round_price(self._reconstruct_initial_30m_st(is_long=True, entry_price=entry_price, last_30m_st=last_30m_st))
 
         # 推导当前阶段和建议的止损，传入历史信息
         phase, recommended_stop = self._infer_phase(entry_price, current_price, qty, 
@@ -993,7 +1047,7 @@ class TradingStrategy:
         
         # 首次开仓时记录 initial_30m_st，并对齐精度
         if initial_30m_st <= 0:
-            initial_30m_st = self._round_price(last_30m_st)
+            initial_30m_st = self._round_price(self._reconstruct_initial_30m_st(is_long=False, entry_price=entry_price, last_30m_st=last_30m_st))
 
         # 推导当前阶段和建议的止损，传入历史信息
         phase, recommended_stop = self._infer_phase(entry_price, current_price, qty, 
