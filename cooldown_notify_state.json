@@ -1,5 +1,5 @@
 {
-  "notified": false,
-  "triggered_at": null,
-  "notify_count": 0
+  "notified": true,
+  "triggered_at": "2026-06-25T02:06:05.834804+00:00",
+  "notify_count": 1
 }

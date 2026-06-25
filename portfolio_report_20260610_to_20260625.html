@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate.io 自动化交易策略组合评估报告</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            bg: '#0e1117',
+                            card: '#1e222b',
+                            primary: '#00cfb4',
+                            danger: '#ff3e60',
+                            warning: '#ffaa00',
+                            btc: '#f7931a',
+                            eth: '#627eea',
+                            textMuted: '#8a99ad'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0e1117;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        /* 隐藏滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0e1117;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #232733;
+            border-radius: 3px;
+        }
+        .tab-btn.active {
+            border-color: #00cfb4;
+            color: #00cfb4;
+            background-color: rgba(0, 207, 180, 0.05);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+    <!-- 顶部导航栏 -->
+    <header class="border-b border-gray-800 bg-brand-card px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">📊</span>
+            <div>
+                <h1 class="text-lg font-bold tracking-wider text-white">Gate.io 自动化交易策略组合评估报告</h1>
+                <p class="text-xs text-brand-textMuted">整合 BTC 与 ETH 实盘平仓记录，多维度深度解析量化策略组合表现</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+                <span class="w-1.5 h-1.5 mr-1.5 bg-green-400 rounded-full animate-ping"></span>
+                实盘双币数据已合并
+            </span>
+        </div>
+    </header>
+
+    <!-- 主体内容 -->
+    <div class="flex flex-1 flex-col lg:flex-row">
+        <!-- 侧边栏配置区 -->
+        <aside class="w-full lg:w-80 bg-brand-card/50 border-r border-gray-800 p-6 flex flex-col space-y-6">
+            <div>
+                <h3 class="text-sm font-semibold text-brand-textMuted uppercase tracking-wider mb-3">📋 组合基本信息</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-brand-textMuted mb-1">评估标的</label>
+                        <div class="flex gap-2">
+                            <span class="flex-1 text-center bg-brand-btc/10 border border-brand-btc/20 rounded py-1 px-2 text-xs font-bold text-brand-btc">BTC_USDT</span>
+                            <span class="flex-1 text-center bg-brand-eth/10 border border-brand-eth/20 rounded py-1 px-2 text-xs font-bold text-brand-eth">ETH_USDT</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-brand-textMuted mb-1">评估时长</label>
+                        <div id="infoDuration" class="w-full bg-brand-bg border border-gray-800 rounded px-3 py-2 text-sm text-white font-bold">
+                            ---
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-brand-textMuted mb-1">时间范围</label>
+                        <div id="infoDateRange" class="w-full bg-brand-bg border border-gray-800 rounded px-3 py-2 text-xs text-white">
+                            ---
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-brand-textMuted mb-1">生成时间 (UTC)</label>
+                        <div id="infoGenTime" class="w-full bg-brand-bg border border-gray-800 rounded px-3 py-2 text-xs text-brand-textMuted">
+                            ---
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="border-gray-800">
+
+            <div class="text-xs text-brand-textMuted leading-relaxed space-y-2">
+                <p>⚠️ **提示**：本报告为自包含的交互式 HTML，由 GitHub Actions 实盘抓取生成，已离线嵌入全部图表数据，可安全转发或保存。</p>
+            </div>
+        </aside>
+
+        <!-- 主展示区 -->
+        <main class="flex-1 p-6 space-y-6 overflow-y-auto">
+            
+            <!-- Combined Portfolio KPI Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- KPI 1 -->
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
+                    <div class="text-xs text-brand-textMuted font-medium">账户组合累计净利润</div>
+                    <div id="kpiNetProfit" class="text-2xl font-bold mt-2 text-white">0.00 U</div>
+                    <div id="kpiFee" class="text-xs text-brand-primary mt-1">手续费已扣除: 0.00 U</div>
+                </div>
+                <!-- KPI 2 -->
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="text-xs text-brand-textMuted font-medium">组合综合胜率 (Win Rate)</div>
+                        <div id="kpiWinRate" class="text-2xl font-bold mt-2 text-white">0.0%</div>
+                    </div>
+                    <div class="mt-2 space-y-1">
+                        <div id="kpiTradesCount" class="text-xs text-brand-textMuted">总笔数: 0 (赢: 0 | 输: 0)</div>
+                        <div id="kpiMaxLosingStreak" class="text-xs text-red-400 font-semibold">最大连亏次数: 0 次</div>
+                    </div>
+                </div>
+                <!-- KPI 3 -->
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="text-xs text-brand-textMuted font-medium">组合获利因子 (Profit Factor)</div>
+                        <div id="kpiPF" class="text-2xl font-bold mt-2 text-white">0.00</div>
+                    </div>
+                    <div class="mt-2 space-y-1">
+                        <div id="kpiRatioWL" class="text-xs text-brand-primary">盈亏比 (Avg W/L): 0.00</div>
+                        <div id="kpiCurrentDD" class="text-xs text-red-400 font-semibold">当前水下深度: 0.00 U (0.0%)</div>
+                    </div>
+                </div>
+                <!-- KPI 4 -->
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
+                    <div class="text-xs text-brand-textMuted font-medium">组合最大回撤率 (Max DD)</div>
+                    <div id="kpiMaxDD" class="text-2xl font-bold mt-2 text-white">0.0%</div>
+                    <div id="kpiSharpe" class="text-xs text-brand-primary mt-1">组合估算夏普比率: 0.00</div>
+                </div>
+            </div>
+
+            <!-- 🔬 组合摩擦损耗审计 (Friction Audit) -->
+            <div class="bg-brand-card rounded-lg p-5 border border-gray-800">
+                <h3 class="text-sm font-semibold text-brand-textMuted uppercase tracking-wider mb-3">🔍 组合摩擦损耗审计 (Friction Audit)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-brand-bg rounded p-4 border border-gray-800/80">
+                        <div class="text-xs text-brand-textMuted">总滑点损耗 (Total Slippage Tax)</div>
+                        <div id="auditSlippage" class="text-xl font-bold mt-1 text-red-400">0.00 U</div>
+                        <div id="auditSlippageTicks" class="text-xs text-brand-textMuted mt-1">BTC 平均: 0.0 Ticks | ETH 平均: 0.0 Ticks</div>
+                    </div>
+                    <div class="bg-brand-bg rounded p-4 border border-gray-800/80">
+                        <div class="text-xs text-brand-textMuted">累计资金费支出 (Total Funding Fees)</div>
+                        <div id="auditFunding" class="text-xl font-bold mt-1 text-red-400">0.00 U</div>
+                        <div id="auditFundingBreakdown" class="text-xs text-brand-textMuted mt-1">BTC: 0.00 U | ETH: 0.00 U</div>
+                    </div>
+                    <div class="bg-brand-bg rounded p-4 border border-gray-800/80">
+                        <div class="text-xs text-brand-textMuted">组合摩擦损耗比 (Friction ratio)</div>
+                        <div id="auditTotalFriction" class="text-xl font-bold mt-1 text-red-400">0.00 U</div>
+                        <div id="auditFrictionPct" class="text-xs text-brand-textMuted mt-1">占总收益损耗比: 0.0%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📊 资产拆分对比分析 (Asset Breakdown & Side-by-Side Comparison) -->
+            <div class="bg-brand-card rounded-lg p-5 border border-gray-800">
+                <h3 class="text-sm font-semibold text-brand-textMuted uppercase tracking-wider mb-4">📊 资产拆分对比分析 (Asset Breakdown)</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs uppercase bg-brand-bg text-brand-textMuted border-b border-gray-800">
+                            <tr>
+                                <th class="px-6 py-3">评估特征 (Features)</th>
+                                <th class="px-6 py-3 text-brand-btc font-bold">BTC_USDT</th>
+                                <th class="px-6 py-3 text-brand-eth font-bold">ETH_USDT</th>
+                                <th class="px-6 py-3 text-brand-primary font-bold">COMBINED (组合)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-800 text-gray-300">
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">累计净利润 (Net Profit)</td>
+                                <td id="btcNetProfit" class="px-6 py-4 font-semibold">---</td>
+                                <td id="ethNetProfit" class="px-6 py-4 font-semibold">---</td>
+                                <td id="combNetProfitVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">总交易笔数 (Trades)</td>
+                                <td id="btcTrades" class="px-6 py-4">---</td>
+                                <td id="ethTrades" class="px-6 py-4">---</td>
+                                <td id="combTrades" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">胜率 (Win Rate)</td>
+                                <td id="btcWinRate" class="px-6 py-4">---</td>
+                                <td id="ethWinRate" class="px-6 py-4">---</td>
+                                <td id="combWinRateVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">盈亏比 (Avg Win/Loss)</td>
+                                <td id="btcWL" class="px-6 py-4">---</td>
+                                <td id="ethWL" class="px-6 py-4">---</td>
+                                <td id="combWL" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">获利因子 (Profit Factor)</td>
+                                <td id="btcPF" class="px-6 py-4">---</td>
+                                <td id="ethPF" class="px-6 py-4">---</td>
+                                <td id="combPFVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">最大单笔盈/亏</td>
+                                <td id="btcMaxWinLoss" class="px-6 py-4">---</td>
+                                <td id="ethMaxWinLoss" class="px-6 py-4">---</td>
+                                <td id="combMaxWinLoss" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">最大连亏次数 (Max Streak)</td>
+                                <td id="btcMaxStreak" class="px-6 py-4">---</td>
+                                <td id="ethMaxStreak" class="px-6 py-4">---</td>
+                                <td id="combMaxStreakVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">平均滑点 (Avg Slippage)</td>
+                                <td id="btcSlippage" class="px-6 py-4">---</td>
+                                <td id="ethSlippage" class="px-6 py-4">---</td>
+                                <td id="combSlippageVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">累计资金费 (Funding Fees)</td>
+                                <td id="btcFundingVal" class="px-6 py-4">---</td>
+                                <td id="ethFundingVal" class="px-6 py-4">---</td>
+                                <td id="combFundingVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                            <tr class="hover:bg-brand-bg/30">
+                                <td class="px-6 py-4 font-medium">平均盈/亏持仓时间</td>
+                                <td id="btcHoldDur" class="px-6 py-4 text-xs">---</td>
+                                <td id="ethHoldDur" class="px-6 py-4 text-xs">---</td>
+                                <td id="combHoldDur" class="px-6 py-4 text-xs font-bold text-white bg-brand-primary/10">---</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 图表与曲线特征 -->
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <!-- 多曲线折线图 -->
+                <div class="xl:col-span-2 bg-brand-card rounded-lg p-5 border border-gray-800">
+                    <h3 class="text-base font-bold text-white mb-4">📈 累计净盈亏曲线图 (Portfolio vs. BTC vs. ETH)</h3>
+                    <div class="h-96 relative">
+                        <canvas id="portfolioChart"></canvas>
+                    </div>
+                </div>
+                <!-- 资产贡献雷达/饼图，或多空类型分布 -->
+                <div class="bg-brand-card rounded-lg p-5 border border-gray-800 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-base font-bold text-white mb-4">💡 组合多空交易类型分布</h3>
+                        <div class="space-y-6">
+                            <div>
+                                <div class="text-xs text-brand-btc font-bold mb-2">BTC_USDT 多空比例</div>
+                                <div class="flex items-center space-x-4">
+                                    <div class="flex-1">
+                                        <div class="flex justify-between text-xs mb-1 text-brand-textMuted">
+                                            <span>平多仓</span>
+                                            <span id="btcLongText">0 次</span>
+                                        </div>
+                                        <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                            <div id="btcLongBar" class="bg-brand-primary h-full" style="width: 0%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex justify-between text-xs mb-1 text-brand-textMuted">
+                                            <span>平空仓</span>
+                                            <span id="btcShortText">0 次</span>
+                                        </div>
+                                        <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                            <div id="btcShortBar" class="bg-brand-danger h-full" style="width: 0%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-brand-eth font-bold mb-2">ETH_USDT 多空比例</div>
+                                <div class="flex items-center space-x-4">
+                                    <div class="flex-1">
+                                        <div class="flex justify-between text-xs mb-1 text-brand-textMuted">
+                                            <span>平多仓</span>
+                                            <span id="ethLongText">0 次</span>
+                                        </div>
+                                        <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                            <div id="ethLongBar" class="bg-brand-primary h-full" style="width: 0%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex justify-between text-xs mb-1 text-brand-textMuted">
+                                            <span>平空仓</span>
+                                            <span id="ethShortText">0 次</span>
+                                        </div>
+                                        <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                                            <div id="ethShortBar" class="bg-brand-danger h-full" style="width: 0%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 pt-4 border-t border-gray-800 text-xs text-brand-textMuted leading-relaxed">
+                        <div class="font-bold text-white mb-1">💡 组合资产收益配比</div>
+                        <p>该板块揭示不同交易资产在当前趋势周期下的获利和避险贡献。如果某一币种亏损偏离过大，建议调整该标的环境变量配置。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 诊断与深度分析报告 -->
+            <div class="bg-brand-card rounded-lg p-6 border border-gray-800 space-y-4">
+                <h3 class="text-lg font-bold text-white">📝 策略诊断与组合深度分析报告</h3>
+                <div class="prose prose-invert max-w-none text-sm text-gray-300 space-y-4">
+                    <div>
+                        <h4 class="text-base font-semibold text-brand-primary mb-2">📊 组合评估诊断报告 (规则引擎)</h4>
+                        <p id="ruleEngineReport">
+                            加载中...
+                        </p>
+                    </div>
+                    <div class="border-t border-gray-800 pt-4">
+                        <h4 class="text-base font-semibold text-brand-primary mb-2">🛡️ 风控与诊断建议</h4>
+                        <ul id="riskAdviceList" class="list-disc pl-5 space-y-1 text-gray-300">
+                            <li>加载中...</li>
+                        </ul>
+                    </div>
+                    <div id="aiReportBox" class="border-t border-gray-800 pt-4" style="display: none;">
+                        <h4 class="text-base font-semibold text-purple-400 mb-2">🤖 AI 智能诊断 (大模型双币资产深度联合分析)</h4>
+                        <p id="aiReportText" class="italic text-gray-400 leading-relaxed font-sans">
+                            未启用 AI 分析。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据明细表格 -->
+            <div class="bg-brand-card rounded-lg p-5 border border-gray-800">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+                    <h3 class="text-base font-bold text-white">🗂️ 组合平仓交易历史明细 (审计流)</h3>
+                    <!-- tab 筛选 -->
+                    <div class="flex bg-brand-bg p-1 rounded border border-gray-800">
+                        <button onclick="filterTrades('ALL')" id="tabBtnALL" class="tab-btn px-3 py-1.5 rounded text-xs font-semibold hover:text-white transition-all active">全部</button>
+                        <button onclick="filterTrades('BTC_USDT')" id="tabBtnBTC" class="tab-btn px-3 py-1.5 rounded text-xs font-semibold hover:text-white transition-all text-brand-textMuted">BTC_USDT</button>
+                        <button onclick="filterTrades('ETH_USDT')" id="tabBtnETH" class="tab-btn px-3 py-1.5 rounded text-xs font-semibold hover:text-white transition-all text-brand-textMuted">ETH_USDT</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs uppercase bg-brand-bg text-brand-textMuted border-b border-gray-800">
+                            <tr>
+                                <th class="px-4 py-3">平仓时间</th>
+                                <th class="px-4 py-3">标的</th>
+                                <th class="px-4 py-3">方向</th>
+                                <th class="px-4 py-3">张数</th>
+                                <th class="px-4 py-3">建仓均价</th>
+                                <th class="px-4 py-3">平仓均价</th>
+                                <th class="px-4 py-3">持仓时间</th>
+                                <th class="px-4 py-3">手续费(U)</th>
+                                <th class="px-4 py-3 text-right">净盈亏(U)</th>
+                                <th class="px-4 py-3 text-right">R 倍数</th>
+                                <th class="px-4 py-3">订单备注/版本</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradesTableBody" class="divide-y divide-gray-800 text-gray-300">
+                            <!-- 数据行动态渲染 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="border-t border-gray-800 bg-brand-card/30 text-center py-4 text-xs text-brand-textMuted">
+        &copy; 2026 ETH Perp Trading Bot Portfolio Strategy Evaluator. 本报告基于 Gate.io 组合平仓数据自动生成。
+    </footer>
+
+    <!-- 图表交互 JS 脚本 -->
+    <script>
+        // 占位符：由 python 代码在生成时做字符串替换为实际的 JSON 对象
+        const reportData = {"days": 14, "start_date": "2026-06-10", "end_date": "2026-06-25", "generation_time": "2026-06-25 02:21:32 UTC", "total_trades": 15, "win_count": 4, "loss_count": 11, "win_rate": 0.26666666666666666, "total_pnl": -111.86803731845099, "total_fee": -19.12273318, "profit_factor": 0.37575728238450984, "ratio_avg_win_loss": 1.033332526557402, "max_drawdown": -0.13112040097173228, "sharpe_ratio": -1.7955902422411911, "current_drawdown": -123.33509202735502, "current_drawdown_pct": -0.13112040097173228, "max_losing_streak": 5, "avg_win_hold_str": "9h 43m", "avg_loss_hold_str": "12h 17m", "total_slippage_tax": 0.0, "total_funding_fee": 0.13409586154900066, "friction_ratio": 0.001962245670492571, "chart_labels": ["开始", "2026-06-14 09:18", "2026-06-14 14:29", "2026-06-15 11:30", "2026-06-15 14:00", "2026-06-15 22:23", "2026-06-15 22:24", "2026-06-19 13:45", "2026-06-19 23:56", "2026-06-20 13:25", "2026-06-22 01:22", "2026-06-23 09:00", "2026-06-24 01:31", "2026-06-24 11:49", "2026-06-24 20:48", "2026-06-24 22:00"], "chart_data": [0.0, -24.862753888, -40.50788990128, -21.319462598679998, 4.3462446013200005, 11.467054708904001, 4.104803838904001, -7.188416061725999, -23.647797823726, -42.692820823725995, -63.23392282372599, -47.870909773726, -60.469699816851, -76.028801618451, -94.164388618451, -111.868037318451], "btc_chart_data": [0.0, 0.0, -15.64513601328, -15.64513601328, -15.64513601328, -8.524325905696, -8.524325905696, -19.817545806326, -19.817545806326, -19.817545806326, -19.817545806326, -19.817545806326, -32.416335849451, -32.416335849451, -50.551922849451, -50.551922849451], "eth_chart_data": [0.0, -24.862753888, -24.862753888, -5.674326585399999, 19.9913806146, 19.9913806146, 12.6291297446, 12.6291297446, -3.8302520173999994, -22.8752750174, -43.416377017399995, -28.053363967399996, -28.053363967399996, -43.612465768999996, -43.612465768999996, -61.316114469], "rule_analysis": "<span class='text-brand-danger font-bold text-lg'>🚨 触发账户连亏熔断阈值！请检查系统运行状态！</span><br>多币种分散化降低了整体波动，双币转换平稳。", "risk_advice": ["✅ <b>BTC 滑点损耗</b>: 平均每单滑点 0.0 Ticks，在正常流动性范围内。", "✅ <b>ETH 滑点损耗</b>: 平均每单滑点 0.0 Ticks，在正常流动性范围内。", "<span class='text-brand-danger font-bold'>💀 组合获利因子评估: 期望值为负 (PF: 0.38)</span> — 策略总盈利未能覆盖总亏损，系统处于实质亏损状态，建议立即停机复盘优化参数。"], "ai_analysis": "", "btc_stats": {"total_pnl": -50.551922849451, "total_trades": 5, "win_count": 1, "loss_count": 4, "win_rate": 0.2, "ratio_avg_win_loss": 0.49387707101647893, "profit_factor": 0.12346926775411973, "max_win": 7.120810107584, "max_loss": -18.135587, "max_losing_streak": 3, "total_slippage_tax": 0.0, "avg_slippage_ticks": 0.0, "total_funding_fee": 0.3219817205490002, "avg_win_hold_str": "22h 53m", "avg_loss_hold_str": "13h 30m", "long_count": 2, "short_count": 3}, "eth_stats": {"total_pnl": -61.316114469, "total_trades": 10, "win_count": 3, "loss_count": 7, "win_rate": 0.3, "ratio_avg_win_loss": 1.1561170603465019, "profit_factor": 0.4954787401485008, "max_win": 25.6657072, "max_loss": -24.862753888, "max_losing_streak": 4, "total_slippage_tax": 0.0, "avg_slippage_ticks": 0.0, "total_funding_fee": -0.18788585899999954, "avg_win_hold_str": "5h 20m", "avg_loss_hold_str": "11h 35m", "long_count": 5, "short_count": 5}, "trades": [{"datetime": "2026-06-24 22:00", "symbol": "ETH_USDT", "side": "short", "pnl": -17.1598, "fee": -0.5438487, "net_pnl": -17.7036487, "entry_price": 1624.79, "close_price": 0.0, "size": 0.0, "duration_str": "2h 29m", "r_multiple": -3.5407297399999997, "text": "ao-2069865870091354112"}, {"datetime": "2026-06-24 20:48", "symbol": "BTC_USDT", "side": "short", "pnl": -17.242, "fee": -0.893587, "net_pnl": -18.135587, "entry_price": 60960.0, "close_price": 0.0, "size": 0.0, "duration_str": "1h 17m", "r_multiple": -3.6271174000000004, "text": "ao-2069865827699523584"}, {"datetime": "2026-06-24 11:49", "symbol": "ETH_USDT", "side": "short", "pnl": -14.7552, "fee": -0.7992432, "net_pnl": -15.5591018016, "entry_price": 1680.46, "close_price": 0.0, "size": 0.0, "duration_str": "26h 43m", "r_multiple": -3.1118203603200003, "text": "ao-2069745035829575680"}, {"datetime": "2026-06-24 01:31", "symbol": "BTC_USDT", "side": "short", "pnl": -11.74316, "fee": -0.89501412, "net_pnl": -12.598790043125, "entry_price": 62999.0, "close_price": 0.0, "size": 0.0, "duration_str": "17h 1m", "r_multiple": -2.5197580086249998, "text": "ao-2069412850450825216"}, {"datetime": "2026-06-23 09:00", "symbol": "ETH_USDT", "side": "short", "pnl": 16.2129, "fee": -0.84988695, "net_pnl": 15.36301305, "entry_price": 1650.55, "close_price": 0.0, "size": 0.0, "duration_str": "1h 0m", "r_multiple": 3.0726026099999997, "text": "t-close________1650.54______16"}, {"datetime": "2026-06-22 01:22", "symbol": "ETH_USDT", "side": "short", "pnl": -18.468, "fee": -2.073102, "net_pnl": -20.541102, "entry_price": 1735.28, "close_price": 0.0, "size": 0.0, "duration_str": "51m", "r_multiple": -4.1082203999999996, "text": "ao-2068854174153441280"}, {"datetime": "2026-06-20 13:25", "symbol": "ETH_USDT", "side": "long", "pnl": -17.0156, "fee": -2.029423, "net_pnl": -19.045023, "entry_price": 1727.06, "close_price": 0.0, "size": 0.0, "duration_str": "2h 54m", "r_multiple": -3.8090046, "text": "ao-2068310552161026048"}, {"datetime": "2026-06-19 23:56", "symbol": "ETH_USDT", "side": "short", "pnl": -15.7148, "fee": -0.780018, "net_pnl": -16.459381762, "entry_price": 1712.772608695652, "close_price": 0.0, "size": 0.0, "duration_str": "29h 55m", "r_multiple": -3.2918763524, "text": "ao-2067948207530311680"}, {"datetime": "2026-06-19 13:45", "symbol": "BTC_USDT", "side": "short", "pnl": -10.23522, "fee": -1.12535689, "net_pnl": -11.29321990063, "entry_price": 63155.0, "close_price": 0.0, "size": 0.0, "duration_str": "19h 44m", "r_multiple": -2.258643980126, "text": "ao-2067910444575621120"}, {"datetime": "2026-06-15 22:24", "symbol": "ETH_USDT", "side": "long", "pnl": -6.448, "fee": -0.9382308, "net_pnl": -7.36225087, "entry_price": 1810.49, "close_price": 0.0, "size": 0.0, "duration_str": "7h 53m", "r_multiple": -1.472450174, "text": "ao-2066566636160155648"}, {"datetime": "2026-06-15 22:23", "symbol": "BTC_USDT", "side": "long", "pnl": 7.96536, "fee": -0.97629976, "net_pnl": 7.120810107584, "entry_price": 65697.1, "close_price": 0.0, "size": 0.0, "duration_str": "22h 53m", "r_multiple": 1.4241620215168, "text": "ao-2066566634771841024"}, {"datetime": "2026-06-15 14:00", "symbol": "ETH_USDT", "side": "long", "pnl": 26.6672, "fee": -1.0014928, "net_pnl": 25.6657072, "entry_price": 1764.57, "close_price": 0.0, "size": 0.0, "duration_str": "2h 0m", "r_multiple": 5.13314144, "text": "t-close________1812.20______17"}, {"datetime": "2026-06-15 11:30", "symbol": "ETH_USDT", "side": "long", "pnl": 20.0685, "fee": -0.88799415, "net_pnl": 19.1884273026, "entry_price": 1721.49, "close_price": 0.0, "size": 0.0, "duration_str": "12h 59m", "r_multiple": 3.8376854605200004, "text": "t-close________1760.84______17"}, {"datetime": "2026-06-14 14:29", "symbol": "BTC_USDT", "side": "long", "pnl": -13.4136, "fee": -2.3150268, "net_pnl": -15.64513601328, "entry_price": 64492.6, "close_price": 0.0, "size": 0.0, "duration_str": "15h 58m", "r_multiple": -3.129027202656, "text": "ao-2066128693213790208"}, {"datetime": "2026-06-14 09:18", "symbol": "ETH_USDT", "side": "long", "pnl": -21.59798, "fee": -3.01420901, "net_pnl": -24.862753888, "entry_price": 1680.56, "close_price": 0.0, "size": 0.0, "duration_str": "10h 17m", "r_multiple": -4.9725507776, "text": "ao-2065932438554542080"}]};
+
+        let myChart = null;
+        let activeFilter = 'ALL';
+
+        // 初始化图表数据
+        function initChart(labels, combData, btcData, ethData) {
+            const ctx = document.getElementById('portfolioChart').getContext('2d');
+            if (myChart) {
+                myChart.destroy();
+            }
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '组合累计净盈亏 (USDT)',
+                            data: combData,
+                            borderColor: '#00cfb4',
+                            backgroundColor: 'rgba(0, 207, 180, 0.05)',
+                            borderWidth: 3.5,
+                            pointBackgroundColor: '#00cfb4',
+                            pointBorderColor: '#1e222b',
+                            pointHoverRadius: 7,
+                            tension: 0.15,
+                            fill: true
+                        },
+                        {
+                            label: 'BTC 贡献额 (USDT)',
+                            data: btcData,
+                            borderColor: '#f7931a',
+                            backgroundColor: 'transparent',
+                            borderWidth: 1.5,
+                            pointBackgroundColor: '#f7931a',
+                            pointBorderColor: '#1e222b',
+                            pointHoverRadius: 4,
+                            tension: 0.1,
+                            fill: false,
+                            borderDash: [5, 5]
+                        },
+                        {
+                            label: 'ETH 贡献额 (USDT)',
+                            data: ethData,
+                            borderColor: '#627eea',
+                            backgroundColor: 'transparent',
+                            borderWidth: 1.5,
+                            pointBackgroundColor: '#627eea',
+                            pointBorderColor: '#1e222b',
+                            pointHoverRadius: 4,
+                            tension: 0.1,
+                            fill: false,
+                            borderDash: [5, 5]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                color: '#8a99ad',
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: '#232733'
+                            },
+                            ticks: {
+                                color: '#8a99ad',
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: '#232733'
+                            },
+                            ticks: {
+                                color: '#8a99ad',
+                                callback: function(value) {
+                                    return value + ' U';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 切换交易对明细过滤器
+        function filterTrades(filter) {
+            activeFilter = filter;
+            
+            // 切换按钮高亮
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.classList.add('text-brand-textMuted');
+            });
+            
+            if (filter === 'ALL') {
+                document.getElementById('tabBtnALL').classList.add('active');
+                document.getElementById('tabBtnALL').classList.remove('text-brand-textMuted');
+            } else if (filter === 'BTC_USDT') {
+                document.getElementById('tabBtnBTC').classList.add('active');
+                document.getElementById('tabBtnBTC').classList.remove('text-brand-textMuted');
+            } else if (filter === 'ETH_USDT') {
+                document.getElementById('tabBtnETH').classList.add('active');
+                document.getElementById('tabBtnETH').classList.remove('text-brand-textMuted');
+            }
+            
+            renderTradesTable();
+        }
+
+        // 渲染交易明细表格
+        function renderTradesTable() {
+            const tableBody = document.getElementById('tradesTableBody');
+            tableBody.innerHTML = '';
+            
+            let filtered = reportData.trades || [];
+            if (activeFilter !== 'ALL') {
+                filtered = filtered.filter(t => t.symbol === activeFilter);
+            }
+            
+            if (filtered.length > 0) {
+                filtered.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-brand-bg/50";
+                    
+                    const isWin = item.net_pnl > 0;
+                    const dirText = item.side === 'long' ? 'Sell (平多)' : item.side === 'short' ? 'Buy (平空)' : item.side;
+                    const dirColor = item.side === 'long' ? 'text-brand-danger' : item.side === 'short' ? 'text-brand-primary' : 'text-white';
+                    const netColor = isWin ? 'text-brand-primary' : 'text-brand-danger';
+                    
+                    const pnlSign = item.pnl > 0 ? "+" : "";
+                    const netPnlSign = item.net_pnl > 0 ? "+" : "";
+
+                    // R 倍数高亮
+                    const rVal = item.r_multiple || 0;
+                    const rSign = rVal > 0 ? "+" : "";
+                    const rColor = rVal > 0 ? 'text-brand-primary' : rVal < 0 ? 'text-brand-danger' : 'text-white';
+
+                    // 标的徽章样式
+                    const isBTC = item.symbol === 'BTC_USDT';
+                    const symBadge = isBTC 
+                        ? '<span class="px-2 py-0.5 rounded text-xs font-bold bg-brand-btc/10 text-brand-btc border border-brand-btc/20">BTC</span>'
+                        : '<span class="px-2 py-0.5 rounded text-xs font-bold bg-brand-eth/10 text-brand-eth border border-brand-eth/20">ETH</span>';
+
+                    const sizeVal = (item.size !== undefined && item.size !== null) ? item.size : 0;
+                    const entryPriceVal = (item.entry_price !== undefined && item.entry_price !== null) ? item.entry_price.toFixed(isBTC ? 1 : 2) : '---';
+                    const closePriceVal = (item.close_price !== undefined && item.close_price !== null) ? item.close_price.toFixed(isBTC ? 1 : 2) : '---';
+
+                    tr.innerHTML = `
+                        <td class="px-4 py-3">${item.datetime}</td>
+                        <td class="px-4 py-3">${symBadge}</td>
+                        <td class="px-4 py-3"><span class="${dirColor}">${dirText}</span></td>
+                        <td class="px-4 py-3">${sizeVal}</td>
+                        <td class="px-4 py-3">${entryPriceVal}</td>
+                        <td class="px-4 py-3">${closePriceVal}</td>
+                        <td class="px-4 py-3">${item.duration_str || '---'}</td>
+                        <td class="px-4 py-3">${item.fee.toFixed(2)}</td>
+                        <td class="px-4 py-3 text-right ${netColor} font-bold">${netPnlSign}${item.net_pnl.toFixed(2)}</td>
+                        <td class="px-4 py-3 text-right ${rColor} font-semibold">${rSign}${rVal.toFixed(2)}R</td>
+                        <td class="px-4 py-3 text-xs text-gray-400">${item.text || ''}</td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+            } else {
+                tableBody.innerHTML = `<tr><td colspan="11" class="px-4 py-8 text-center text-brand-textMuted">暂无平仓历史明细</td></tr>`;
+            }
+        }
+
+        // 更新界面数据
+        function renderDashboard() {
+            if (!reportData) {
+                console.error("No report data loaded");
+                return;
+            }
+
+            // 1. 更新基本信息
+            document.getElementById('infoDuration').innerText = reportData.days + " 天";
+            document.getElementById('infoDateRange').innerText = reportData.start_date + " ~ " + reportData.end_date;
+            document.getElementById('infoGenTime').innerText = reportData.generation_time;
+
+            // 2. 更新组合核心 KPI
+            const pnl_sign = reportData.total_pnl >= 0 ? "+" : "";
+            document.getElementById('kpiNetProfit').innerText = pnl_sign + reportData.total_pnl.toFixed(2) + " U";
+            document.getElementById('kpiFee').innerText = "手续费已扣除: " + Math.abs(reportData.total_fee).toFixed(2) + " U";
+            document.getElementById('kpiWinRate').innerText = (reportData.win_rate * 100).toFixed(1) + "%";
+            document.getElementById('kpiTradesCount').innerText = "总笔数: " + reportData.total_trades + " (赢: " + reportData.win_count + " | 输: " + reportData.loss_count + ")";
+            document.getElementById('kpiMaxLosingStreak').innerText = "最大连亏次数: " + reportData.max_losing_streak + " 次";
+            
+            const pf_str = reportData.profit_factor === null || reportData.profit_factor === Infinity ? "∞" : reportData.profit_factor.toFixed(2);
+            document.getElementById('kpiPF').innerText = pf_str;
+            
+            const wl_str = reportData.ratio_avg_win_loss === null || reportData.ratio_avg_win_loss === Infinity ? "∞" : reportData.ratio_avg_win_loss.toFixed(2);
+            document.getElementById('kpiRatioWL').innerText = "盈亏比 (Avg W/L): " + wl_str;
+            document.getElementById('kpiCurrentDD').innerText = "当前水下深度: " + reportData.current_drawdown.toFixed(2) + " U (" + (reportData.current_drawdown_pct * 100).toFixed(1) + "%)";
+
+            document.getElementById('kpiMaxDD').innerText = (reportData.max_drawdown * 100).toFixed(1) + "%";
+            document.getElementById('kpiSharpe').innerText = "组合估算夏普比率: " + reportData.sharpe_ratio.toFixed(2);
+
+            // 🔬 3. 更新摩擦损耗审计面板
+            document.getElementById('auditSlippage').innerText = reportData.total_slippage_tax.toFixed(2) + " U";
+            document.getElementById('auditSlippageTicks').innerText = "BTC 平均: " + (reportData.btc_stats.avg_slippage_ticks || 0).toFixed(1) + " Ticks | ETH 平均: " + (reportData.eth_stats.avg_slippage_ticks || 0).toFixed(1) + " Ticks";
+            document.getElementById('auditFunding').innerText = reportData.total_funding_fee.toFixed(2) + " U";
+            document.getElementById('auditFundingBreakdown').innerText = "BTC: " + (reportData.btc_stats.total_funding_fee || 0).toFixed(2) + " U | ETH: " + (reportData.eth_stats.total_funding_fee || 0).toFixed(2) + " U";
+            
+            const totalFriction = reportData.total_slippage_tax + reportData.total_funding_fee;
+            document.getElementById('auditTotalFriction').innerText = totalFriction.toFixed(2) + " U";
+            document.getElementById('auditFrictionPct').innerText = "占组合毛利润百分比: " + (reportData.friction_ratio * 100).toFixed(1) + "%";
+
+            // 📊 4. 更新资产拆分并排对比表格
+            const formatAssetCol = (stats, isBTC) => {
+                const prefix = stats.total_pnl >= 0 ? "+" : "";
+                const colorClass = stats.total_pnl >= 0 ? "text-brand-primary" : "text-brand-danger";
+                
+                const wl_val = stats.ratio_avg_win_loss === null || stats.ratio_avg_win_loss === Infinity ? "∞" : stats.ratio_avg_win_loss.toFixed(2);
+                const pf_val = stats.profit_factor === null || stats.profit_factor === Infinity ? "∞" : stats.profit_factor.toFixed(2);
+
+                const holds = `赢: ${stats.avg_win_hold_str || 'N/A'}<br>输: ${stats.avg_loss_hold_str || 'N/A'}`;
+
+                return {
+                    pnl: `<span class="${colorClass}">${prefix}${stats.total_pnl.toFixed(2)} U</span>`,
+                    trades: `${stats.total_trades} (赢 ${stats.win_count} | 输 ${stats.loss_count})`,
+                    winRate: `${(stats.win_rate * 100).toFixed(1)}%`,
+                    wl: wl_val,
+                    pf: pf_val,
+                    maxWinLoss: `赢: +${stats.max_win.toFixed(2)} U<br>亏: ${stats.max_loss.toFixed(2)} U`,
+                    maxStreak: `${stats.max_losing_streak} 连亏`,
+                    slippage: `${stats.total_slippage_tax.toFixed(2)} U (${stats.avg_slippage_ticks.toFixed(1)} Ticks)`,
+                    funding: `${stats.total_funding_fee.toFixed(2)} U`,
+                    hold: holds
+                };
+            };
+
+            const btcCols = formatAssetCol(reportData.btc_stats, true);
+            const ethCols = formatAssetCol(reportData.eth_stats, false);
+
+            document.getElementById('btcNetProfit').innerHTML = btcCols.pnl;
+            document.getElementById('btcTrades').innerText = btcCols.trades;
+            document.getElementById('btcWinRate').innerText = btcCols.winRate;
+            document.getElementById('btcWL').innerText = btcCols.wl;
+            document.getElementById('btcPF').innerText = btcCols.pf;
+            document.getElementById('btcMaxWinLoss').innerHTML = btcCols.maxWinLoss;
+            document.getElementById('btcMaxStreak').innerText = btcCols.maxStreak;
+            document.getElementById('btcSlippage').innerHTML = btcCols.slippage;
+            document.getElementById('btcFundingVal').innerText = btcCols.funding;
+            document.getElementById('btcHoldDur').innerHTML = btcCols.hold;
+
+            document.getElementById('ethNetProfit').innerHTML = ethCols.pnl;
+            document.getElementById('ethTrades').innerText = ethCols.trades;
+            document.getElementById('ethWinRate').innerText = ethCols.winRate;
+            document.getElementById('ethWL').innerText = ethCols.wl;
+            document.getElementById('ethPF').innerText = ethCols.pf;
+            document.getElementById('ethMaxWinLoss').innerHTML = ethCols.maxWinLoss;
+            document.getElementById('ethMaxStreak').innerText = ethCols.maxStreak;
+            document.getElementById('ethSlippage').innerHTML = ethCols.slippage;
+            document.getElementById('ethFundingVal').innerText = ethCols.funding;
+            document.getElementById('ethHoldDur').innerHTML = ethCols.hold;
+
+            // 组合列
+            const combPrefix = reportData.total_pnl >= 0 ? "+" : "";
+            const combColorClass = reportData.total_pnl >= 0 ? "text-brand-primary" : "text-brand-danger";
+            document.getElementById('combNetProfitVal').innerHTML = `<span class="${combColorClass}">${combPrefix}${reportData.total_pnl.toFixed(2)} U</span>`;
+            document.getElementById('combTrades').innerText = reportData.total_trades;
+            document.getElementById('combWinRateVal').innerText = (reportData.win_rate * 100).toFixed(1) + "%";
+            document.getElementById('combWL').innerText = wl_str;
+            document.getElementById('combPFVal').innerText = pf_str;
+            
+            const maxWin_c = reportData.trades.reduce((max, t) => t.net_pnl > max ? t.net_pnl : max, 0);
+            const maxLoss_c = reportData.trades.reduce((min, t) => t.net_pnl < min ? t.net_pnl : min, 0);
+            document.getElementById('combMaxWinLoss').innerHTML = `赢: +${maxWin_c.toFixed(2)} U<br>亏: ${maxLoss_c.toFixed(2)} U`;
+            document.getElementById('combMaxStreakVal').innerText = reportData.max_losing_streak + " 连亏";
+            document.getElementById('combSlippageVal').innerText = reportData.total_slippage_tax.toFixed(2) + " U";
+            document.getElementById('combFundingVal').innerText = reportData.total_funding_fee.toFixed(2) + " U";
+            
+            // 组合持仓时长平均值
+            document.getElementById('combHoldDur').innerHTML = `赢: ${reportData.avg_win_hold_str || 'N/A'}<br>输: ${reportData.avg_loss_hold_str || 'N/A'}`;
+
+            // 5. 更新多空占比饼图/柱状图
+            const updateSideBars = (stats, sideLongId, sideShortId, longBarId, shortBarId) => {
+                const long = stats.long_count || 0;
+                const short = stats.short_count || 0;
+                const tot = long + short;
+                const lp = tot > 0 ? (long / tot * 100) : 0;
+                const sp = tot > 0 ? (short / tot * 100) : 0;
+                document.getElementById(sideLongId).innerText = long + " 次";
+                document.getElementById(sideShortId).innerText = short + " 次";
+                document.getElementById(longBarId).style.width = lp + "%";
+                document.getElementById(shortBarId).style.width = sp + "%";
+            };
+            updateSideBars(reportData.btc_stats, 'btcLongText', 'btcShortText', 'btcLongBar', 'btcShortBar');
+            updateSideBars(reportData.eth_stats, 'ethLongText', 'ethShortText', 'ethLongBar', 'ethShortBar');
+
+            // 6. 初始化组合折线图
+            initChart(reportData.chart_labels, reportData.chart_data, reportData.btc_chart_data, reportData.eth_chart_data);
+
+            // 7. 更新诊断报告
+            document.getElementById('ruleEngineReport').innerHTML = reportData.rule_analysis;
+            
+            // 风险建议列表
+            const adviceBox = document.getElementById('riskAdviceList');
+            adviceBox.innerHTML = '';
+            reportData.risk_advice.forEach(advice => {
+                const li = document.createElement('li');
+                li.innerHTML = advice;
+                adviceBox.appendChild(li);
+            });
+
+            // AI 诊断面板
+            const aiBox = document.getElementById('aiReportBox');
+            if (reportData.ai_analysis) {
+                aiBox.style.display = 'block';
+                document.getElementById('aiReportText').innerText = reportData.ai_analysis;
+            } else {
+                aiBox.style.display = 'none';
+            }
+
+            // 8. 渲染明细表格
+            renderTradesTable();
+        }
+
+        // 默认初始化
+        window.onload = function() {
+            renderDashboard();
+        };
+    </script>
+</body>
+</html>
