@@ -1,5 +1,3 @@
 {
-  "notified": false,
-  "triggered_at": null,
-  "notify_count": 0
+  "last_notified_cooldown_until": null
 }
