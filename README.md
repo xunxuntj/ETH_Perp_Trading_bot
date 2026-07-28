@@ -6,7 +6,14 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-green)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
+💬 **接收实盘交易信号 Telegram 频道**：
+
+<img src="images/telegram_qr.jpg" width="220" alt="Telegram QR Code" />
+
+欢迎加入 Telegram 交流/信号频道：[https://t.me/+I5GaTf2OrChjMzg0](https://t.me/+I5GaTf2OrChjMzg0)
+
 ---
+
 
 ## 📊 Post-ETF 机构化时代 (2024年1月10日至今) Dream Target 实测表现
 
