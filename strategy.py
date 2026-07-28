@@ -870,7 +870,7 @@ class TradingStrategy:
             return finalize(self._manage_long_position(
                 position, df_30m, df_1h, st_30m, st_1h,
                 last_1h_close, last_1h_dema, risk_amount, risk_info,
-                last_adx=last_adx
+                last_adx=last_adx, can_reverse_short=can_short
             ))
         
         # ============ 已持空仓 ============
@@ -892,15 +892,17 @@ class TradingStrategy:
             return finalize(self._manage_short_position(
                 position, df_30m, df_1h, st_30m, st_1h,
                 last_1h_close, last_1h_dema, risk_amount, risk_info,
-                last_adx=last_adx
+                last_adx=last_adx, can_reverse_long=can_long
             ))
+
         
         return finalize(TradeResult(action="none", message="未知状态"))
     
     def _manage_long_position(self, position, df_30m, df_1h, st_30m, st_1h,
                                last_1h_close, last_1h_dema, risk_amount, risk_info,
-                               last_adx: float = None) -> TradeResult:
+                               last_adx: float = None, can_reverse_short: bool = False) -> TradeResult:
         """管理多仓（无状态，每次推导）"""
+
         # 兼容性处理：如果没有传入 last_adx，则动态计算
         if last_adx is None:
             if 'high' in df_30m.columns and 'low' in df_30m.columns:
@@ -962,12 +964,10 @@ class TradingStrategy:
             exit_reason = "30m ST 变红"
 
         if exit_signal:
-            can_reverse = (last_1h_dir == -1 and 
-                          last_1h_close < last_1h_dema and 
-                          last_30m_dir == -1 and
-                          adx_is_trending)
+            can_reverse = can_reverse_short
             
             return self._close_with_reverse_check(
+
                 position, entry_price, current_price, 
                 is_long=True, reason=exit_reason,
                 can_reverse=can_reverse, reverse_direction="short",
@@ -1077,8 +1077,9 @@ class TradingStrategy:
     
     def _manage_short_position(self, position, df_30m, df_1h, st_30m, st_1h,
                                 last_1h_close, last_1h_dema, risk_amount, risk_info,
-                                last_adx: float = None) -> TradeResult:
+                                last_adx: float = None, can_reverse_long: bool = False) -> TradeResult:
         """管理空仓（无状态，每次推导）"""
+
         # 兼容性处理：如果没有传入 last_adx，则动态计算
         if last_adx is None:
             if 'high' in df_30m.columns and 'low' in df_30m.columns:
@@ -1140,12 +1141,10 @@ class TradingStrategy:
             exit_reason = "30m ST 变绿"
 
         if exit_signal:
-            can_reverse = (last_1h_dir == 1 and 
-                          last_1h_close > last_1h_dema and 
-                          last_30m_dir == 1 and
-                          adx_is_trending)
+            can_reverse = can_reverse_long
 
             return self._close_with_reverse_check(
+
                 position, entry_price, current_price,
                 is_long=False, reason=exit_reason,
                 can_reverse=can_reverse, reverse_direction="long",
