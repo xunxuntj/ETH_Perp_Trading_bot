@@ -461,7 +461,21 @@ class TradingStrategy:
         df_1d['ema_50'] = df_1d['close'].ewm(span=50, adjust=False).mean()
         last_1d_close = df_1d['close'].iloc[-2] if len(df_1d) >= 2 else df_1d['close'].iloc[-1]
         last_1d_ema50 = df_1d['ema_50'].iloc[-2] if len(df_1d) >= 2 else df_1d['ema_50'].iloc[-1]
-        macro_1d_dir = 1 if last_1d_close > last_1d_ema50 else -1
+        macro_1d_dir = 1 if last_1d_close >= last_1d_ema50 else -1
+
+        if self.contract.upper() == "BTC_USDT":
+            btc_macro_1d_dir = macro_1d_dir
+        else:
+            try:
+                df_btc_1h = self.client.get_candlesticks("BTC_USDT", "1h", 1000)
+                df_btc_1d = df_btc_1h.resample('1D').agg(agg_dict).dropna()
+                df_btc_1d['ema_50'] = df_btc_1d['close'].ewm(span=50, adjust=False).mean()
+                last_btc_close = df_btc_1d['close'].iloc[-2] if len(df_btc_1d) >= 2 else df_btc_1d['close'].iloc[-1]
+                last_btc_ema50 = df_btc_1d['ema_50'].iloc[-2] if len(df_btc_1d) >= 2 else df_btc_1d['ema_50'].iloc[-1]
+                btc_macro_1d_dir = 1 if last_btc_close >= last_btc_ema50 else -1
+            except Exception:
+                btc_macro_1d_dir = macro_1d_dir
+
 
         last_chop_4h = chop_series_4h.iloc[-2] if len(chop_series_4h) >= 2 else 50.0
         last_er_4h = er_series_4h.iloc[-2] if len(er_series_4h) >= 2 else 0.5
@@ -473,6 +487,7 @@ class TradingStrategy:
         adx_series = calculate_adx(df_adx_source, ADX_LENGTH)
         last_adx = adx_series.iloc[-2]
         adx_is_trending = (not USE_ADX) or (last_adx > ADX_THRESHOLD)
+
 
         # 1H 数据 (上一根完整K线 = iloc[-2])
         last_1h_close = df_1h['close'].iloc[-2]
@@ -624,18 +639,36 @@ class TradingStrategy:
         risk_amount = risk['amount']
         risk_info = risk['message']
         
-        # 开仓条件检查
-        # 开多: 1H绿 + 价格>DEMA + 30m绿 + ADX趋势过滤
-        can_long = (last_1h_dir == 1 and 
-                    last_1h_close > last_1h_dema and 
-                    last_30m_dir == 1 and
-                    adx_is_trending)
+        # V1 Post-ETF 机构化状态分类器判定
+        is_risk = (last_atr_z_1h > 3.0)
+        is_chop = (last_chop_4h > 54.0 or last_er_4h < 0.35)
+
+        # 开多条件: 对应 1D 宏观看多 + 1D BTC看多 + 4H CHOP<51 + 4H ER>0.40 + 30m ST绿 + 30m EMA20踩实 + ADX
+        can_long = (
+            not is_risk and
+            not is_chop and
+            last_chop_4h < 51.0 and
+            last_er_4h > 0.40 and
+            macro_1d_dir == 1 and
+            btc_macro_1d_dir == 1 and
+            last_30m_dir == 1 and
+            current_price >= last_ema20_30m and
+            adx_is_trending
+        )
         
-        # 开空: 1H红 + 价格<DEMA + 30m红 + ADX趋势过滤
-        can_short = (last_1h_dir == -1 and 
-                     last_1h_close < last_1h_dema and 
-                     last_30m_dir == -1 and
-                     adx_is_trending)
+        # 开空条件: 对应 1D 宏观看空 + 1D BTC看空 + 4H CHOP<51 + 4H ER>0.40 + 30m ST红 + 30m EMA20踩实 + ADX
+        can_short = (
+            not is_risk and
+            not is_chop and
+            last_chop_4h < 51.0 and
+            last_er_4h > 0.40 and
+            macro_1d_dir == -1 and
+            btc_macro_1d_dir == -1 and
+            last_30m_dir == -1 and
+            current_price <= last_ema20_30m and
+            adx_is_trending
+        )
+
         
         # 1H 刚变色？（最佳入场点标记）
         h1_just_changed = prev_1h_dir != last_1h_dir

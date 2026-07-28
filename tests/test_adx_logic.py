@@ -77,7 +77,11 @@ class TestADXLogic(unittest.TestCase):
              patch("strategy.save_state"), \
              patch("cooldown.check_cooldown", return_value=CooldownStatus(triggered=False)), \
              patch("strategy.calculate_supertrend") as mock_st, \
+             patch("indicators.calculate_chop", return_value=pd.Series([40.0]*50, index=self.df_trending.index)), \
+             patch("indicators.calculate_kaufman_er", return_value=pd.Series([0.6]*50, index=self.df_trending.index)), \
+             patch("indicators.calculate_atr_zscore", return_value=pd.Series([0.0]*50, index=self.df_trending.index)), \
              patch("strategy.calculate_dema") as mock_dema:
+
 
 
 
