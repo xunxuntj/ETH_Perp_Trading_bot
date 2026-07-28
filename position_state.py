@@ -11,10 +11,14 @@ from dataclasses import dataclass
 
 from config import CONTRACT
 
-if CONTRACT == "ETH_USDT":
-    POSITION_STATE_FILE = "position_state.json"
-else:
-    POSITION_STATE_FILE = f"position_state_{CONTRACT.lower()}.json"
+POSITION_STATE_FILE = "position_state.json" if CONTRACT == "ETH_USDT" else f"position_state_{CONTRACT.lower()}.json"
+
+
+def get_position_state_filename(contract: str = "ETH_USDT") -> str:
+    c_lower = (contract or "ETH_USDT").lower()
+    if c_lower == "eth_usdt" and not os.environ.get("POSITION_STATE_FILE"):
+        return "position_state.json"
+    return os.environ.get("POSITION_STATE_FILE") or f"position_state_{c_lower}.json"
 
 
 @dataclass
@@ -27,64 +31,42 @@ class PositionStateInfo:
     last_update: float  # 最后更新时间戳
 
 
-def load_position_state() -> dict:
+def load_position_state(contract: str = "ETH_USDT") -> dict:
     """
     加载持仓状态文件
-    
-    格式: {
-        "long": {
-            "phase": "LOCKED",                # 当前阶段: SURVIVAL/LOCKED/HOURLY
-            "stop_loss": 2000.5,              # 当前止损
-            "locked_stop_loss": 2024.83,      # 锁利期止损（进入锁利期时的30m ST）
-            "entry_price": 2010.0,
-            "initial_30m_st": 2031.55,        # 开仓时的初始30m ST（用于判断生存期）
-            "last_update": 1234567890
-        }
-    }
     """
-    if os.path.exists(POSITION_STATE_FILE):
+    filename = get_position_state_filename(contract)
+    if os.path.exists(filename):
         try:
-            with open(POSITION_STATE_FILE, 'r') as f:
+            with open(filename, 'r') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"⚠️  加载持仓状态文件失败: {e}")
+            print(f"⚠️  加载持仓状态文件失败 ({filename}): {e}")
             return {}
     return {}
 
 
-def save_position_state(state: dict):
+def save_position_state(state: dict, contract: str = "ETH_USDT"):
     """保存持仓状态"""
+    filename = get_position_state_filename(contract)
     try:
-        with open(POSITION_STATE_FILE, 'w') as f:
+        with open(filename, 'w') as f:
             json.dump(state, f, indent=2)
     except Exception as e:
-        print(f"⚠️  保存持仓状态文件失败: {e}")
+        print(f"⚠️  保存持仓状态文件失败 ({filename}): {e}")
 
 
 def update_position_state(direction: str, phase: str, stop_loss: float, entry_price: float, 
                          current_time: float, initial_30m_st: float = 0, 
-                         locked_stop_loss: float = 0) -> Tuple[bool, str]:
+                         locked_stop_loss: float = 0, contract: str = "ETH_USDT") -> Tuple[bool, str]:
     """
     更新持仓状态，检测是否有变化
-    
-    参数:
-        direction: "long" 或 "short"
-        phase: 当前阶段 "SURVIVAL"/"LOCKED"/"HOURLY"
-        stop_loss: 当前止损价格
-        entry_price: 入场价格
-        current_time: 当前时间戳
-        initial_30m_st: 初始30m ST（入场时）- 仅在新持仓时需要
-        locked_stop_loss: 锁利期止损 - 仅当从SURVIVAL进入LOCKED时需要更新
-    
-    返回: (has_change, change_type)
-    change_type: "", "stop_updated", "enter_locked", "switch_1h", "new_position"
     """
-    state = load_position_state()
+    state = load_position_state(contract)
     
     # 获取前一次的状态
     prev_state = state.get(direction, {})
     prev_phase = prev_state.get('phase', '')
-    # 兼容历史/不同模块使用的大小写阶段值（例如 LOCKED vs locked）。
     current_phase_upper = str(phase).upper()
     prev_phase_upper = str(prev_phase).upper()
     prev_stop_loss = prev_state.get('stop_loss', 0)
@@ -128,23 +110,25 @@ def update_position_state(direction: str, phase: str, stop_loss: float, entry_pr
     
     # 保存当前状态
     state[direction] = new_state
-    save_position_state(state)
+    save_position_state(state, contract=contract)
     
     return (change_type != ""), change_type
 
 
-def clear_position_state(direction: str):
+def clear_position_state(direction: str, contract: str = "ETH_USDT"):
     """清除指定方向的持仓状态（平仓时调用）"""
-    state = load_position_state()
+    state = load_position_state(contract)
     if direction in state:
         del state[direction]
-    save_position_state(state)
+    save_position_state(state, contract=contract)
 
 
-def clear_all_position_state():
+def clear_all_position_state(contract: str = "ETH_USDT"):
     """清除所有持仓状态"""
+    filename = get_position_state_filename(contract)
     try:
-        if os.path.exists(POSITION_STATE_FILE):
-            os.remove(POSITION_STATE_FILE)
+        if os.path.exists(filename):
+            os.remove(filename)
     except Exception as e:
-        print(f"⚠️  清除持仓状态文件失败: {e}")
+        print(f"⚠️  清除持仓状态文件失败 ({filename}): {e}")
+

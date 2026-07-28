@@ -215,8 +215,10 @@ class ExecutionFlow:
                 stop_loss=stop_loss,
                 entry_price=entry,
                 current_time=time.time(),
-                initial_30m_st=stop_loss
+                initial_30m_st=stop_loss,
+                contract=self.contract
             )
+
         
         return {
             "strategy_action": "open_long",
@@ -256,8 +258,10 @@ class ExecutionFlow:
                 stop_loss=stop_loss,
                 entry_price=entry,
                 current_time=time.time(),
-                initial_30m_st=stop_loss
+                initial_30m_st=stop_loss,
+                contract=self.contract
             )
+
         
         return {
             "strategy_action": "open_short",
@@ -354,8 +358,10 @@ class ExecutionFlow:
                 stop_loss=reverse_stop,
                 entry_price=current_price,
                 current_time=time.time(),
-                initial_30m_st=reverse_stop
+                initial_30m_st=reverse_stop,
+                contract=self.contract
             )
+
         
         combined_msg = close_exec["message"] + "\n\n" + reverse_exec["message"]
         

@@ -924,7 +924,8 @@ class TradingStrategy:
         last_1h_dir = int(st_1h['direction'].iloc[-2])
 
         # 读取历史状态并进行舍入以对齐交易所精度，防止浮点微小差异导致频繁调整止损
-        prev_state = load_position_state().get("long", {})
+        prev_state = load_position_state(self.contract).get("long", {})
+
         prev_phase = prev_state.get("phase", "")
         prev_stop_loss = self._round_price(prev_state.get("stop_loss", 0))  # ← 记录旧止损，用于调整时验证
         live_stop_loss = self._round_price(self._get_live_stop_price())
@@ -991,8 +992,10 @@ class TradingStrategy:
             stop_loss=recommended_stop,
             entry_price=entry_price,
             current_time=current_time,
-            initial_30m_st=initial_30m_st
+            initial_30m_st=initial_30m_st,
+            contract=self.contract
         )
+
 
         # 无本地状态（例如定时任务无持久化）时，回退到交易所实时止损做差异判断
         if change_type == "new_position" and baseline_stop_loss > 0 and abs(baseline_stop_loss - recommended_stop) > 0.01:
@@ -1101,7 +1104,8 @@ class TradingStrategy:
         last_1h_dir = int(st_1h['direction'].iloc[-2])
 
         # 读取历史状态并进行舍入以对齐交易所精度，防止浮点微小差异导致频繁调整止损
-        prev_state = load_position_state().get("short", {})
+        prev_state = load_position_state(self.contract).get("short", {})
+
         prev_phase = prev_state.get("phase", "")
         prev_stop_loss = self._round_price(prev_state.get("stop_loss", 0))  # ← 记录旧止损，用于调整时验证
         live_stop_loss = self._round_price(self._get_live_stop_price())
@@ -1169,8 +1173,10 @@ class TradingStrategy:
             stop_loss=recommended_stop,
             entry_price=entry_price,
             current_time=current_time,
-            initial_30m_st=initial_30m_st
+            initial_30m_st=initial_30m_st,
+            contract=self.contract
         )
+
 
         # 无本地状态（例如定时任务无持久化）时，回退到交易所实时止损做差异判断
         if change_type == "new_position" and baseline_stop_loss > 0 and abs(baseline_stop_loss - recommended_stop) > 0.01:
@@ -1340,7 +1346,7 @@ class TradingStrategy:
             self._reset_state()
             # 清除旧持仓状态（平仓时调用，新持仓会在下一个周期生成新状态）
             direction_key = "long" if is_long else "short"
-            clear_position_state(direction_key)
+            clear_position_state(direction_key, contract=self.contract)
             
             return TradeResult(
                 action=f"close_and_reverse_{reverse_direction}",
@@ -1359,7 +1365,8 @@ class TradingStrategy:
             self._reset_state()
             # 清除持仓状态（平仓时调用）
             direction_key = "long" if is_long else "short"
-            clear_position_state(direction_key)
+            clear_position_state(direction_key, contract=self.contract)
+
             
             # 区分不反手的原因
             if cooldown.triggered:
@@ -1406,8 +1413,9 @@ class TradingStrategy:
         )
         self._reset_state()
         # 清除持仓状态（平仓时调用）
-        clear_position_state(direction_key)
+        clear_position_state(direction_key, contract=self.contract)
         return result
+
     
     def _reset_state(self):
         """重置辅助状态（保留交易计数和连续亏损信息）"""
