@@ -68,11 +68,19 @@ class TradeResult:
     details: dict = None
 
 
-def load_state() -> Position:
+def get_state_filename(contract: str = "SOL_USDT") -> str:
+    c_lower = (contract or "SOL_USDT").lower()
+    if c_lower == "eth_usdt" and not os.environ.get("STATE_FILE"):
+        return "trading_state.json"
+    return os.environ.get("STATE_FILE") or f"trading_state_{c_lower}.json"
+
+
+def load_state(contract: str = "SOL_USDT") -> Position:
     """加载辅助状态（仅交易计数和连续亏损）"""
-    if os.path.exists(STATE_FILE):
+    filename = get_state_filename(contract)
+    if os.path.exists(filename):
         try:
-            with open(STATE_FILE, 'r') as f:
+            with open(filename, 'r') as f:
                 data = json.load(f)
                 return Position(
                     trade_count=data.get('trade_count', 0),
@@ -80,20 +88,22 @@ def load_state() -> Position:
                     last_processed_30m_bar_ts=data.get('last_processed_30m_bar_ts', 0),
                     last_processed_30m_bar_iso=data.get('last_processed_30m_bar_iso', "")
                 )
-        except:
+        except Exception:
             pass
     return Position()
 
 
-def save_state(pos: Position):
+def save_state(pos: Position, contract: str = "SOL_USDT"):
     """保存辅助状态（仅交易计数和连续亏损）"""
-    with open(STATE_FILE, 'w') as f:
+    filename = get_state_filename(contract)
+    with open(filename, 'w') as f:
         json.dump({
             'trade_count': pos.trade_count,
             'consecutive_losses': pos.consecutive_losses,
             'last_processed_30m_bar_ts': pos.last_processed_30m_bar_ts,
             'last_processed_30m_bar_iso': pos.last_processed_30m_bar_iso,
         }, f, indent=2)
+
 
 
 def calculate_lock_threshold(entry_price: float, qty: int, is_long: bool, risk_amount: float = 1.0) -> float:
@@ -174,7 +184,8 @@ class TradingStrategy:
         """记录本次已处理的30m已收盘K线，用于高频调度去重。"""
         self.state.last_processed_30m_bar_ts = bar_ts
         self.state.last_processed_30m_bar_iso = bar_iso
-        save_state(self.state)
+        save_state(self.state, self.contract)
+
 
     def _get_live_stop_price(self) -> float:
         """从交易所当前 open 的 price_orders 中提取止损触发价。"""
@@ -373,7 +384,8 @@ class TradingStrategy:
     def __init__(self, client: GateClient, contract: str = "SOL_USDT"):
         self.client = client
         self.contract = contract
-        self.state = load_state()
+        self.state = load_state(contract)
+
     
     def analyze(self) -> TradeResult:
         """
