@@ -201,7 +201,7 @@ def _get_report_start_dt() -> Optional[datetime]:
 
 
 def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime, notify_state: dict) -> CooldownStatus:
-    state = load_cooldown_state()
+    state = load_cooldown_state(contract)
     cooldown_until = _parse_datetime(state.get("cooldown_until"))
     consecutive_losses = int(state.get("consecutive_losses", 0) or 0)
     last_loss_time = _parse_datetime(state.get("last_loss_time"))
@@ -222,7 +222,6 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
                     if start_dt and now >= start_dt and close_time < start_dt:
                         break
 
-
                     if reconstructed_last_loss_time and (reconstructed_last_loss_time - close_time) > timedelta(hours=48):
                         break
                         
@@ -233,7 +232,6 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
                     else:
                         break
 
-                
                 if reconstructed_losses > 0 and reconstructed_last_loss_time:
                     if (now - reconstructed_last_loss_time) <= timedelta(hours=48):
                         state["consecutive_losses"] = reconstructed_losses
@@ -249,7 +247,7 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
                                 state["last_loss_time"] = None
                                 state["cooldown_until"] = None
                         
-                        save_cooldown_state(state)
+                        save_cooldown_state(state, contract=contract)
                         consecutive_losses = state["consecutive_losses"]
                         cooldown_until = _parse_datetime(state.get("cooldown_until"))
                         last_loss_time = _parse_datetime(state.get("last_loss_time"))
@@ -263,7 +261,7 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
             notify_state["notified"] = True
             notify_state["triggered_at"] = now.isoformat()
             notify_state["notify_count"] = 1
-            save_cooldown_notify_state(notify_state)
+            save_cooldown_notify_state(notify_state, contract=contract)
 
         last_loss_str = last_loss_time.strftime('%Y-%m-%d %H:%M UTC') if last_loss_time else '未知'
         return CooldownStatus(
@@ -281,8 +279,8 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
         )
 
     if cooldown_until and now >= cooldown_until:
-        reset_cooldown_state(reset_anchor_time=cooldown_until)
-        reset_cooldown_notify_state()
+        reset_cooldown_state(reset_anchor_time=cooldown_until, contract=contract)
+        reset_cooldown_notify_state(contract=contract)
         return CooldownStatus(
             triggered=False,
             details="48 小时冷静期已结束，连续亏损计数已清零 ✅ 可以开单"
@@ -301,8 +299,8 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
             is_empty = True
 
         if is_empty and (now - last_loss_time) > timedelta(hours=48):
-            reset_cooldown_state(reset_anchor_time=now)
-            reset_cooldown_notify_state()
+            reset_cooldown_state(reset_anchor_time=now, contract=contract)
+            reset_cooldown_notify_state(contract=contract)
             return CooldownStatus(
                 triggered=False,
                 consecutive_losses=0,
@@ -310,13 +308,14 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
             )
 
     if notify_state["notified"]:
-        reset_cooldown_notify_state()
+        reset_cooldown_notify_state(contract=contract)
 
     return _build_consecutive_loss_status(consecutive_losses)
 
 
+
 def _check_cooldown_from_history(client: GateClient, contract: str, now: datetime, notify_state: dict) -> CooldownStatus:
-    state = load_cooldown_state()
+    state = load_cooldown_state(contract)
     cooldown_until = _parse_datetime(state.get("cooldown_until"))
     reset_anchor_time = _parse_datetime(state.get("reset_anchor_time"))
 
@@ -327,7 +326,7 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
             notify_state["notified"] = True
             notify_state["triggered_at"] = now.isoformat()
             notify_state["notify_count"] = 1
-            save_cooldown_notify_state(notify_state)
+            save_cooldown_notify_state(notify_state, contract=contract)
 
         last_loss_time = _parse_datetime(state.get("last_loss_time"))
         last_loss_str = last_loss_time.strftime('%Y-%m-%d %H:%M UTC') if last_loss_time else '未知'
@@ -346,15 +345,15 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
         )
 
     if cooldown_until and now >= cooldown_until:
-        reset_cooldown_state(reset_anchor_time=cooldown_until)
-        reset_cooldown_notify_state()
-        state = load_cooldown_state()
+        reset_cooldown_state(reset_anchor_time=cooldown_until, contract=contract)
+        reset_cooldown_notify_state(contract=contract)
+        state = load_cooldown_state(contract)
         reset_anchor_time = _parse_datetime(state.get("reset_anchor_time"))
 
     closes = client.get_position_closes(contract, limit=30)
     if not closes:
         if notify_state["notified"]:
-            reset_cooldown_notify_state()
+            reset_cooldown_notify_state(contract=contract)
         return CooldownStatus(triggered=False, details="无平仓记录")
 
     # ==== 新增逻辑：若当前空仓，且距离最近的一笔交易已超过 48 小时，则重置连续亏损计数从 0 开始 ====
@@ -372,8 +371,8 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
         # 获取最近的一笔平仓交易时间
         most_recent_close_time = datetime.fromtimestamp(closes[0]['time'], tz=timezone.utc)
         if (now - most_recent_close_time) > timedelta(hours=48):
-            reset_cooldown_state(reset_anchor_time=now)
-            reset_cooldown_notify_state()
+            reset_cooldown_state(reset_anchor_time=now, contract=contract)
+            reset_cooldown_notify_state(contract=contract)
             return CooldownStatus(
                 triggered=False,
                 consecutive_losses=0,
@@ -389,10 +388,8 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
         if start_dt and now >= start_dt and close_time < start_dt:
             break
 
-
         if reset_anchor_time and close_time < reset_anchor_time:
             break
-
 
         pnl = close['pnl']
         if pnl < 0:
@@ -409,14 +406,14 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
         cooldown_until = last_loss_time + timedelta(hours=48)
         if now < cooldown_until:
             state["cooldown_until"] = _serialize_datetime(cooldown_until)
-            save_cooldown_state(state)
+            save_cooldown_state(state, contract=contract)
 
             should_notify = not notify_state["notified"]
             if should_notify:
                 notify_state["notified"] = True
                 notify_state["triggered_at"] = now.isoformat()
                 notify_state["notify_count"] = 1
-                save_cooldown_notify_state(notify_state)
+                save_cooldown_notify_state(notify_state, contract=contract)
 
             remaining_hours = (cooldown_until - now).total_seconds() / 3600
             return CooldownStatus(
@@ -433,20 +430,21 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
                         f"✅ 可开单时间: {cooldown_until.strftime('%Y-%m-%d %H:%M UTC')}"
             )
 
-        reset_cooldown_state(reset_anchor_time=cooldown_until)
-        reset_cooldown_notify_state()
+        reset_cooldown_state(reset_anchor_time=cooldown_until, contract=contract)
+        reset_cooldown_notify_state(contract=contract)
         return CooldownStatus(
             triggered=False,
             details="48 小时冷静期已结束，连续亏损计数已清零 ✅ 可以开单"
         )
 
     state["cooldown_until"] = None
-    save_cooldown_state(state)
+    save_cooldown_state(state, contract=contract)
 
     if notify_state["notified"]:
-        reset_cooldown_notify_state()
+        reset_cooldown_notify_state(contract=contract)
 
     return _build_consecutive_loss_status(consecutive_losses)
+
 
 
 def load_cooldown_notify_state(contract: str = "ETH_USDT") -> dict:
@@ -504,7 +502,8 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
                 notify_state["notified"] = True
                 notify_state["triggered_at"] = now.isoformat()
                 notify_state["notify_count"] = 1
-                save_cooldown_notify_state(notify_state)
+                save_cooldown_notify_state(notify_state, contract=contract)
+
             
             return CooldownStatus(
                 triggered=True,
