@@ -115,7 +115,7 @@ def get_report_time_window() -> Tuple[datetime.datetime, datetime.datetime, int]
     try:
         from config import REPORT_START_TIME
     except ImportError:
-        REPORT_START_TIME = "2026-07-28 20:00"
+        REPORT_START_TIME = "2026-07-28 21:30"
         
     end_dt = datetime.datetime.now(datetime.timezone.utc)
     
@@ -141,9 +141,10 @@ def get_report_time_window() -> Tuple[datetime.datetime, datetime.datetime, int]
         # 将 naive 时间视作东八区本地时间，然后计算对应的带有时区信息的 datetime
         start_dt = dt_naive.replace(tzinfo=tz_utc8)
     except Exception as e:
-        print(f"⚠️ 解析 REPORT_START_TIME '{REPORT_START_TIME}' 失败: {e}，使用默认值 2026-07-28 20:00")
-        dt_naive = datetime.datetime.strptime("2026-07-28 20:00", "%Y-%m-%d %H:%M")
+        print(f"⚠️ 解析 REPORT_START_TIME '{REPORT_START_TIME}' 失败: {e}，使用默认值 2026-07-28 21:30")
+        dt_naive = datetime.datetime.strptime("2026-07-28 21:30", "%Y-%m-%d %H:%M")
         start_dt = dt_naive.replace(tzinfo=tz_utc8)
+
 
 
         

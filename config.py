@@ -111,7 +111,8 @@ LOCK_PROFIT_BUFFER = float(os.environ.get("LOCK_PROFIT_BUFFER", "0.5"))  # 0.5 U
 
 # ============ 报告统计初始时间 ============
 # 启用自动交易的初始时间，精确到小时 (东八区 UTC+8)
-REPORT_START_TIME = os.environ.get("REPORT_START_TIME", "2026-07-28 20:00")
+REPORT_START_TIME = os.environ.get("REPORT_START_TIME", "2026-07-28 21:30")
+
 
 
 
