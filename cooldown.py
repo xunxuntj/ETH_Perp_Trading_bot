@@ -48,15 +48,25 @@ class CooldownStatus:
     should_notify: bool = False  # 是否应该推送通知
 
 
-# 冷静期通知状态文件
 from config import CONTRACT
 
-if CONTRACT == "ETH_USDT":
-    COOLDOWN_STATE_FILE = "cooldown_state.json"
-    COOLDOWN_NOTIFY_STATE_FILE = "cooldown_notify_state.json"
-else:
-    COOLDOWN_STATE_FILE = f"cooldown_state_{CONTRACT.lower()}.json"
-    COOLDOWN_NOTIFY_STATE_FILE = f"cooldown_notify_state_{CONTRACT.lower()}.json"
+COOLDOWN_STATE_FILE = "cooldown_state.json" if CONTRACT == "ETH_USDT" else f"cooldown_state_{CONTRACT.lower()}.json"
+COOLDOWN_NOTIFY_STATE_FILE = "cooldown_notify_state.json" if CONTRACT == "ETH_USDT" else f"cooldown_notify_state_{CONTRACT.lower()}.json"
+
+
+def get_cooldown_filename(contract: str = "ETH_USDT") -> str:
+    c_lower = (contract or "ETH_USDT").lower()
+    if c_lower == "eth_usdt" and not os.environ.get("COOLDOWN_STATE_FILE"):
+        return "cooldown_state.json"
+    return os.environ.get("COOLDOWN_STATE_FILE") or f"cooldown_state_{c_lower}.json"
+
+
+def get_cooldown_notify_filename(contract: str = "ETH_USDT") -> str:
+    c_lower = (contract or "ETH_USDT").lower()
+    if c_lower == "eth_usdt" and not os.environ.get("COOLDOWN_NOTIFY_STATE_FILE"):
+        return "cooldown_notify_state.json"
+    return os.environ.get("COOLDOWN_NOTIFY_STATE_FILE") or f"cooldown_notify_state_{c_lower}.json"
+
 
 
 def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
@@ -77,7 +87,7 @@ def _serialize_datetime(value: Optional[datetime]) -> Optional[str]:
     return value.astimezone(timezone.utc).isoformat()
 
 
-def load_cooldown_state() -> dict:
+def load_cooldown_state(contract: str = "ETH_USDT") -> dict:
     """加载冷静期状态。"""
     default_state = {
         "consecutive_losses": 0,
@@ -85,10 +95,10 @@ def load_cooldown_state() -> dict:
         "last_loss_time": None,
         "reset_anchor_time": None
     }
-
-    if os.path.exists(COOLDOWN_STATE_FILE):
+    filename = get_cooldown_filename(contract)
+    if os.path.exists(filename):
         try:
-            with open(COOLDOWN_STATE_FILE, 'r') as f:
+            with open(filename, 'r') as f:
                 data = json.load(f)
                 default_state.update({
                     "consecutive_losses": int(data.get("consecutive_losses", 0) or 0),
@@ -102,29 +112,30 @@ def load_cooldown_state() -> dict:
     return default_state
 
 
-def save_cooldown_state(state: dict):
+def save_cooldown_state(state: dict, contract: str = "ETH_USDT"):
     """保存冷静期状态。"""
-    with open(COOLDOWN_STATE_FILE, 'w') as f:
+    filename = get_cooldown_filename(contract)
+    with open(filename, 'w') as f:
         json.dump(state, f, indent=2)
 
 
-def reset_cooldown_state(reset_anchor_time: Optional[datetime] = None):
+def reset_cooldown_state(reset_anchor_time: Optional[datetime] = None, contract: str = "ETH_USDT"):
     """重置冷静期状态，冷静期结束后从头开始统计。"""
     save_cooldown_state({
         "consecutive_losses": 0,
         "cooldown_until": None,
         "last_loss_time": None,
         "reset_anchor_time": _serialize_datetime(reset_anchor_time)
-    })
+    }, contract=contract)
 
 
-def record_trade_result(pnl: float, close_time: Optional[datetime] = None):
+def record_trade_result(pnl: float, close_time: Optional[datetime] = None, contract: str = "ETH_USDT"):
     """记录一笔已平仓交易结果，用于自动交易模式下的连续亏损统计。
 
     冷静期内发生的平仓（例如旧仓被止损）不会影响计数或重置计时。
     48 小时自然结束后，计数由 check_cooldown 清零。
     """
-    state = load_cooldown_state()
+    state = load_cooldown_state(contract)
     close_time = close_time or datetime.now(timezone.utc)
 
     cooldown_until = _parse_datetime(state.get("cooldown_until"))
@@ -135,8 +146,8 @@ def record_trade_result(pnl: float, close_time: Optional[datetime] = None):
 
     # 冷静期已结束，先清零再统计新结果
     if cooldown_until and close_time >= cooldown_until:
-        reset_cooldown_state(reset_anchor_time=cooldown_until)
-        state = load_cooldown_state()
+        reset_cooldown_state(reset_anchor_time=cooldown_until, contract=contract)
+        state = load_cooldown_state(contract)
 
     # ==== 额外健壮性检查：若非冷静期，且距离最近一笔亏损交易已超 48 小时，则在记录新交易前将计数清零 ====
     last_loss_time = _parse_datetime(state.get("last_loss_time"))
@@ -159,7 +170,8 @@ def record_trade_result(pnl: float, close_time: Optional[datetime] = None):
     else:
         state["cooldown_until"] = None
 
-    save_cooldown_state(state)
+    save_cooldown_state(state, contract=contract)
+
 
 
 def _build_consecutive_loss_status(consecutive_losses: int) -> CooldownStatus:
@@ -437,26 +449,29 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
     return _build_consecutive_loss_status(consecutive_losses)
 
 
-def load_cooldown_notify_state() -> dict:
+def load_cooldown_notify_state(contract: str = "ETH_USDT") -> dict:
     """加载冷静期通知状态"""
-    if os.path.exists(COOLDOWN_NOTIFY_STATE_FILE):
+    filename = get_cooldown_notify_filename(contract)
+    if os.path.exists(filename):
         try:
-            with open(COOLDOWN_NOTIFY_STATE_FILE, 'r') as f:
+            with open(filename, 'r') as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
     return {"notified": False, "triggered_at": None, "notify_count": 0}
 
 
-def save_cooldown_notify_state(state: dict):
+def save_cooldown_notify_state(state: dict, contract: str = "ETH_USDT"):
     """保存冷静期通知状态"""
-    with open(COOLDOWN_NOTIFY_STATE_FILE, 'w') as f:
+    filename = get_cooldown_notify_filename(contract)
+    with open(filename, 'w') as f:
         json.dump(state, f, indent=2)
 
 
-def reset_cooldown_notify_state():
+def reset_cooldown_notify_state(contract: str = "ETH_USDT"):
     """重置冷静期通知状态（冷静期结束时调用）"""
-    save_cooldown_notify_state({"notified": False, "triggered_at": None, "notify_count": 0})
+    save_cooldown_notify_state({"notified": False, "triggered_at": None, "notify_count": 0}, contract=contract)
+
 
 
 def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownStatus:
@@ -469,8 +484,9 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
     
     返回: CooldownStatus
     """
-    notify_state = load_cooldown_notify_state()
+    notify_state = load_cooldown_notify_state(contract)
     now = datetime.now(timezone.utc)
+
     
     # 1. 检查本金
     try:
