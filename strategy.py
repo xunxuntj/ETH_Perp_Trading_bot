@@ -525,7 +525,7 @@ class TradingStrategy:
         # ==== 风控与冷静期对账逻辑 ====
         # 检测本地状态里记录的持仓是否已在交易所被平仓（例如触及交易所止损条件单）
         try:
-            pos_state = load_position_state()
+            pos_state = load_position_state(self.contract)
             for dir_key in ["long", "short"]:
                 if dir_key in pos_state:
                     still_exists = False
@@ -558,7 +558,8 @@ class TradingStrategy:
                             print(f"[RECONCILE ERROR] 获取或记录平仓历史失败: {close_err}")
                         
                         # 清除本地持仓状态
-                        clear_position_state(dir_key)
+                        clear_position_state(dir_key, contract=self.contract)
+
                         print(f"[RECONCILE] 已清除本地 {dir_key} 仓位状态。")
                         
                         # 清除交易所上所有未成交的止盈限价单和止损条件单
@@ -1419,4 +1420,5 @@ class TradingStrategy:
     
     def _reset_state(self):
         """重置辅助状态（保留交易计数和连续亏损信息）"""
-        save_state(self.state)
+        save_state(self.state, contract=self.contract)
+

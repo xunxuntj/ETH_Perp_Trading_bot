@@ -1,3 +1,5 @@
 {
-  "last_notified_cooldown_until": null
+  "notified": true,
+  "triggered_at": "2026-07-28T15:14:49.151238+00:00",
+  "notify_count": 1
 }
