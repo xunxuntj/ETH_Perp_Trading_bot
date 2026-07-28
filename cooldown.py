@@ -138,7 +138,12 @@ def record_trade_result(pnl: float, close_time: Optional[datetime] = None, contr
     state = load_cooldown_state(contract)
     close_time = close_time or datetime.now(timezone.utc)
 
+    start_dt = _get_report_start_dt()
+    if start_dt and close_time < start_dt:
+        return
+
     cooldown_until = _parse_datetime(state.get("cooldown_until"))
+
 
     # 冷静期仍在进行中 → 本笔交易结果不计入，等待自然结束
     if cooldown_until and close_time < cooldown_until:

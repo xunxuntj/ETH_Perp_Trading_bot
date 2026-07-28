@@ -549,7 +549,8 @@ class TradingStrategy:
                                 close_time = datetime.fromtimestamp(last_close.get('time', 0), tz=timezone.utc)
                                 
                                 from cooldown import record_trade_result
-                                record_trade_result(pnl, close_time)
+                                record_trade_result(pnl, close_time, contract=self.contract)
+
                                 print(f"[RECONCILE] 成功记录已平仓交易：PnL={pnl:+.2f}U, 时间={close_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
                             else:
                                 print("[RECONCILE] 未获取到交易所平仓历史记录")
@@ -1274,7 +1275,8 @@ class TradingStrategy:
         
         # 记录交易结果（用于冷静期计算）
         from cooldown import record_trade_result
-        record_trade_result(pnl)
+        record_trade_result(pnl, contract=self.contract)
+
         
         direction = "多" if is_long else "空"
         
@@ -1388,7 +1390,8 @@ class TradingStrategy:
         
         # 记录交易结果（用于冷静期计算）
         from cooldown import record_trade_result
-        record_trade_result(pnl)
+        record_trade_result(pnl, contract=self.contract)
+
         
         direction = "多" if is_long else "空"
         direction_key = "long" if is_long else "short"
