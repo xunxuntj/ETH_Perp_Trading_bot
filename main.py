@@ -50,11 +50,19 @@ def main():
         # 初始化 Gate.io 客户端
         client = GateClient(GATE_API_KEY, GATE_API_SECRET)
         
-        # 遍历组合中的四大合约进行独立策略计算与交易执行
-        for contract in PORTFOLIO_BASKET:
+        # 支持通过 SYMBOL 环境变量指定单一合约（对应 GitHub Actions Matrix 调度）
+        env_symbol = os.environ.get("SYMBOL", "").strip().upper()
+        if env_symbol and env_symbol in PORTFOLIO_BASKET:
+            target_basket = [env_symbol]
+        else:
+            target_basket = PORTFOLIO_BASKET
+
+        # 遍历目标合约进行策略计算与交易执行
+        for contract in target_basket:
             print(f"\n" + "-" * 50)
             print(f"🔍 [CONTRACT: {contract}] (Weight: {PORTFOLIO_WEIGHTS.get(contract, 0.25)*100:.0f}%)")
             print("-" * 50)
+
 
             flow = ExecutionFlow(client, contract)
             result = flow.execute_strategy_and_trade()
