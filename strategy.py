@@ -428,12 +428,39 @@ class TradingStrategy:
         st_1h = calculate_supertrend(df_1h, SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER)
         dema_1h = calculate_dema(df_1h['close'], DEMA_PERIOD)
         
+        # 4H与1D周期数据重采样 (用于 V1 Post-ETF 机构化状态分类器)
+        from indicators import calculate_chop, calculate_kaufman_er, calculate_atr_zscore, calculate_ema
+        agg_dict = {'high': 'max', 'low': 'min', 'close': 'last'}
+        if 'open' in df_1h.columns:
+            agg_dict['open'] = 'first'
+        if 'volume' in df_1h.columns:
+            agg_dict['volume'] = 'sum'
+
+        df_4h = df_1h.resample('4h').agg(agg_dict).dropna()
+        df_1d = df_1h.resample('1D').agg(agg_dict).dropna()
+
+
+        chop_series_4h = calculate_chop(df_4h, 14)
+        er_series_4h = calculate_kaufman_er(df_4h, 10)
+        atr_z_series_1h = calculate_atr_zscore(df_1h, 14, 100)
+        ema20_series_30m = calculate_ema(df_30m['close'], 20)
+
+        df_1d['ema_50'] = df_1d['close'].ewm(span=50, adjust=False).mean()
+        last_1d_close = df_1d['close'].iloc[-2] if len(df_1d) >= 2 else df_1d['close'].iloc[-1]
+        last_1d_ema50 = df_1d['ema_50'].iloc[-2] if len(df_1d) >= 2 else df_1d['ema_50'].iloc[-1]
+        macro_1d_dir = 1 if last_1d_close > last_1d_ema50 else -1
+
+        last_chop_4h = chop_series_4h.iloc[-2] if len(chop_series_4h) >= 2 else 50.0
+        last_er_4h = er_series_4h.iloc[-2] if len(er_series_4h) >= 2 else 0.5
+        last_atr_z_1h = atr_z_series_1h.iloc[-2] if len(atr_z_series_1h) >= 2 else 0.0
+        last_ema20_30m = ema20_series_30m.iloc[-1]
+
         # 计算 ADX (使用配置的时间周期和周期长度)
         df_adx_source = df_30m if ADX_TIMEFRAME == "30m" else df_1h
         adx_series = calculate_adx(df_adx_source, ADX_LENGTH)
         last_adx = adx_series.iloc[-2]
         adx_is_trending = (not USE_ADX) or (last_adx > ADX_THRESHOLD)
-        
+
         # 1H 数据 (上一根完整K线 = iloc[-2])
         last_1h_close = df_1h['close'].iloc[-2]
         last_1h_dema = dema_1h.iloc[-2]
@@ -444,6 +471,7 @@ class TradingStrategy:
         # 30m 数据 (上一根完整K线 = iloc[-2])
         last_30m_dir = int(st_30m['direction'].iloc[-2])
         last_30m_st = st_30m['supertrend'].iloc[-2]
+
         
         current_price = df_30m['close'].iloc[-1]
         
@@ -604,40 +632,37 @@ class TradingStrategy:
         is_long = has_position and position['size'] > 0
         is_short = has_position and position['size'] < 0
         
-        # 构建过滤条件检查信息（试运行调试用）- 显示真实数据
-        h1_st_color = "🟢绿" if last_1h_dir == 1 else "🔴红"
-        h30m_st_color = "🟢绿" if last_30m_dir == 1 else "🔴红"
-        
-        # 开多条件信息
-        if last_1h_close > last_1h_dema:
-            dema_long = f"1H收盘 {last_1h_close:.2f} > DEMA {last_1h_dema:.2f} ✅"
-        else:
-            dema_long = f"1H收盘 {last_1h_close:.2f} < DEMA {last_1h_dema:.2f} ❌"
-        
-        # 开空条件信息
-        if last_1h_close < last_1h_dema:
-            dema_short = f"1H收盘 {last_1h_close:.2f} < DEMA {last_1h_dema:.2f} ✅"
-        else:
-            dema_short = f"1H收盘 {last_1h_close:.2f} > DEMA {last_1h_dema:.2f} ❌"
-            
+        # V1 Post-ETF 机构化状态分类器与过滤诊断
+        macro_symbol = "🟢看多" if macro_1d_dir == 1 else "🔴看空"
+        chop_pass = last_chop_4h < 51.0
+        er_pass = last_er_4h > 0.40
+        atr_z_pass = last_atr_z_1h < 3.0
+        ema20_long_pass = current_price >= last_ema20_30m
+        ema20_short_pass = current_price <= last_ema20_30m
+
         adx_trend_symbol = '✅' if adx_is_trending else '❌'
         adx_info_line = f"• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f} (阈值: {ADX_THRESHOLD}) {adx_trend_symbol}\n"
-        
+
         filter_info_long = (
-            f"【过滤条件检查】\n"
-            f"• 1H ST: {h1_st_color} {'✅' if last_1h_dir == 1 else '❌'}\n"
-            f"• {dema_long}\n"
-            f"• 30m ST: {h30m_st_color} {'✅' if last_30m_dir == 1 else '❌'}\n"
+            f"━━━━━━━━━━ V1 状态分类器检查 ━━━━━━━━━━\n"
+            f"• 1D 宏观趋势: {macro_symbol} {'✅' if macro_1d_dir == 1 else '❌'}\n"
+            f"• 4H CHOP 维数: {last_chop_4h:.1f} (趋势带 < 51.0): {'✅' if chop_pass else '❌'}\n"
+            f"• 4H Kaufman ER: {last_er_4h:.2f} (效率比 > 0.40): {'✅' if er_pass else '❌'}\n"
+            f"• 1H ATR Z-Score: {last_atr_z_1h:.2f} (未触发闪崩 < 3.0): {'✅' if atr_z_pass else '❌'}\n"
+            f"• 30m EMA(20) 反扫荡确认: {'踩实 ✅' if ema20_long_pass else '未踩实 ❌'}\n"
             f"{adx_info_line}"
         )
-        
+
         filter_info_short = (
-            f"【过滤条件检查】\n"
-            f"• 1H ST: {h1_st_color} {'✅' if last_1h_dir == -1 else '❌'}\n"
-            f"• {dema_short}\n"
-            f"• 30m ST: {h30m_st_color} {'✅' if last_30m_dir == -1 else '❌'}\n"
+            f"━━━━━━━━━━ V1 状态分类器检查 ━━━━━━━━━━\n"
+            f"• 1D 宏观趋势: {macro_symbol} {'✅' if macro_1d_dir == -1 else '❌'}\n"
+            f"• 4H CHOP 维数: {last_chop_4h:.1f} (趋势带 < 51.0): {'✅' if chop_pass else '❌'}\n"
+            f"• 4H Kaufman ER: {last_er_4h:.2f} (效率比 > 0.40): {'✅' if er_pass else '❌'}\n"
+            f"• 1H ATR Z-Score: {last_atr_z_1h:.2f} (未触发闪崩 < 3.0): {'✅' if atr_z_pass else '❌'}\n"
+            f"• 30m EMA(20) 反扫荡确认: {'踩实 ✅' if ema20_short_pass else '未踩实 ❌'}\n"
             f"{adx_info_line}"
         )
+
         
         # ============ 无持仓: 检查开仓条件 ============
         if not has_position:
@@ -655,19 +680,19 @@ class TradingStrategy:
                     action="open_long",
                     message=f"""🟢 开多信号！{timing}
 
-━━━━━━━━━━ 技术指标 ━━━━━━━━━━
-【1小时线】
-• 1H ST: {last_1h_st:.2f} 🟢 绿 ✅
-• 1H 收盘: {last_1h_close:.2f}
-• 1H DEMA200: {last_1h_dema:.2f}
-• 条件: {dema_long} ✅
+━━━━━━━━━━ V1 状态分类器指标 ━━━━━━━━━━
+【1D 宏观与 4H 状态】
+• 1D BTC 宏观: {macro_symbol} ✅
+• 4H CHOP 维数: {last_chop_4h:.1f} (< 51.0 趋势带) ✅
+• 4H Kaufman ER: {last_er_4h:.2f} (> 0.40 效率比) ✅
+• 1H ATR Z-Score: {last_atr_z_1h:.2f} (< 3.0 未离群) ✅
 
-【30分钟线】
-• 30m ST: {rounded_st:.2f} 🟢 绿 ✅
+【30m 信号与反扫荡】
+• 30m ST 轨线: {rounded_st:.2f} 🟢 绿 ✅
+• 30m EMA(20): {last_ema20_30m:.2f} (回踩踩实 ✅)
 
-【ADX 过滤器】
-• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f}
-• 条件: ADX > {ADX_THRESHOLD} (启用: {'是' if USE_ADX else '否'}) ✅
+【ADX 动能】
+• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f} (启用: {'是' if USE_ADX else '否'}) ✅
 
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开多 {pos_info['qty']}张 @ {current_price:.2f}
@@ -708,19 +733,19 @@ class TradingStrategy:
                     action="open_short",
                     message=f"""🔴 开空信号！{timing}
 
-━━━━━━━━━━ 技术指标 ━━━━━━━━━━
-【1小时线】
-• 1H ST: {last_1h_st:.2f} 🔴 红 ✅
-• 1H 收盘: {last_1h_close:.2f}
-• 1H DEMA200: {last_1h_dema:.2f}
-• 条件: {dema_short} ✅
+━━━━━━━━━━ V1 状态分类器指标 ━━━━━━━━━━
+【1D 宏观与 4H 状态】
+• 1D BTC 宏观: {macro_symbol} ✅
+• 4H CHOP 维数: {last_chop_4h:.1f} (< 51.0 趋势带) ✅
+• 4H Kaufman ER: {last_er_4h:.2f} (> 0.40 效率比) ✅
+• 1H ATR Z-Score: {last_atr_z_1h:.2f} (< 3.0 未离群) ✅
 
-【30分钟线】
-• 30m ST: {rounded_st:.2f} 🔴 红 ✅
+【30m 信号与反扫荡】
+• 30m ST 轨线: {rounded_st:.2f} 🔴 红 ✅
+• 30m EMA(20): {last_ema20_30m:.2f} (踩实 ✅)
 
-【ADX 过滤器】
-• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f}
-• 条件: ADX > {ADX_THRESHOLD} (启用: {'是' if USE_ADX else '否'}) ✅
+【ADX 动能】
+• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f} (启用: {'是' if USE_ADX else '否'}) ✅
 
 ━━━━━━━━━━ 行动 ━━━━━━━━━━
 📌 开空 {pos_info['qty']}张 @ {current_price:.2f}
@@ -733,6 +758,7 @@ class TradingStrategy:
 • 风险: {risk_info}
 • 锁利阈值: {lock_threshold:.2f}
 • 限价止盈: {tp_price:.2f}""",
+
                     details={
                         "entry": current_price,
                         "stop_loss": rounded_st,

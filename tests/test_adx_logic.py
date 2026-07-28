@@ -90,7 +90,8 @@ class TestADXLogic(unittest.TestCase):
 
             # Should signal open_long because ADX is high in df_trending
             self.assertEqual(result.action, "open_long")
-            self.assertIn("ADX 过滤器", result.message)
+            self.assertIn("ADX 动能", result.message)
+
 
     def test_adx_filter_in_strategy_analyze_blocks_range(self):
         # Mock GateClient
