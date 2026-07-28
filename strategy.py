@@ -18,8 +18,9 @@ from config import (
     MAX_CONSECUTIVE_LOSSES, STATE_FILE,
     LEVERAGE, CIRCUIT_BREAKER_EQUITY, get_risk_amount,
     LOCK_PROFIT_BUFFER, FACE_VALUE,
-    USE_ADX, ADX_LENGTH, ADX_THRESHOLD, ADX_TIMEFRAME, TP_RATIO
+    USE_ADX, ADX_LENGTH, ADX_THRESHOLD, ADX_TIMEFRAME, TP_RATIO, RISK_PERCENT
 )
+
 from position_state import update_position_state, clear_position_state, load_position_state
 from indicators import calculate_supertrend, calculate_dema, calculate_adx
 from gate_client import GateClient
@@ -640,8 +641,9 @@ class TradingStrategy:
         ema20_long_pass = current_price >= last_ema20_30m
         ema20_short_pass = current_price <= last_ema20_30m
 
-        adx_trend_symbol = '✅' if adx_is_trending else '❌'
+        adx_trend_symbol = '满足 ✅' if adx_is_trending else ('过滤中 ❌' if USE_ADX else '已关闭 ⚠️')
         adx_info_line = f"• ADX ({ADX_TIMEFRAME.upper()}): {last_adx:.2f} (阈值: {ADX_THRESHOLD}) {adx_trend_symbol}\n"
+
 
         filter_info_long = (
             f"━━━━━━━━━━ V1 状态分类器检查 ━━━━━━━━━━\n"
@@ -775,16 +777,8 @@ class TradingStrategy:
             
             else:
                 target_dir_str = "做多 🟢" if last_30m_dir == 1 else "做空 🔴"
-                h1_st_expect = "🟢 绿" if last_30m_dir == 1 else "🔴 红"
-                h1_st_check = "满足 ✅" if (last_30m_dir == 1 and last_1h_dir == 1) or (last_30m_dir == -1 and last_1h_dir == -1) else "阻断 ❌"
-                
-                dema_op = ">" if last_30m_dir == 1 else "<"
-                dema_ok = (last_30m_dir == 1 and last_1h_close > last_1h_dema) or (last_30m_dir == -1 and last_1h_close < last_1h_dema)
-                dema_check = "满足 ✅" if dema_ok else "阻断 ❌"
-                
-                adx_ok = (not USE_ADX) or (last_adx > ADX_THRESHOLD)
-                adx_check = "满足 ✅" if adx_ok else ("过滤中 ❌" if USE_ADX else "已关闭 ⚠️")
-                
+                filter_text = filter_info_long if last_30m_dir == 1 else filter_info_short
+
                 return finalize(TradeResult(
                     action="none",
                     message=f"""📊 无开仓信号
@@ -794,26 +788,23 @@ class TradingStrategy:
 
 🎯 目标方向: {target_dir_str} (基于 30m ST)
 
-━━━━━━━━━━ 过滤条件检查 ━━━━━━━━━━
-• 1H ST 趋势过滤 (1H ST 应为 {h1_st_expect}, 实际为 {'🟢 绿' if last_1h_dir == 1 else '🔴 红'}): {h1_st_check}
-• 1H DEMA 均线过滤 (收盘 {last_1h_close:.2f} {dema_op} DEMA {last_1h_dema:.2f}): {dema_check}
-• {ADX_TIMEFRAME} ADX 动能过滤 (ADX {last_adx:.2f} > 阈值 {ADX_THRESHOLD}): {adx_check}
-
+{filter_text}
 ━━━━━━━━━━ 账户状态 ━━━━━━━━━━
 • 本金: {equity:.2f}U
-• 风险额: {risk_amount:.2f}U""",
+• 风险额: {risk_amount:.2f}U ({RISK_PERCENT*100:.1f}%)""",
                     details={
                         "price": current_price,
-                        "1h_st": last_1h_st,
-                        "1h_st_dir": last_1h_dir,
-                        "1h_close": last_1h_close,
-                        "1h_dema": last_1h_dema,
+                        "1d_macro": macro_1d_dir,
+                        "4h_chop": last_chop_4h,
+                        "4h_er": last_er_4h,
+                        "1h_atr_z": last_atr_z_1h,
                         "30m_st": last_30m_st,
                         "30m_st_dir": last_30m_dir,
                         "adx": last_adx,
                         "equity": equity
                     }
                 ))
+
         
         # ============ 已持多仓 ============
         if is_long:
