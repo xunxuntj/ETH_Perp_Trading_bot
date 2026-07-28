@@ -1,2 +1,6 @@
 {
-  "trade_count": 
+  "trade_count": 0,
+  "consecutive_losses": 0,
+  "last_processed_30m_bar_ts": 1785232800,
+  "last_processed_30m_bar_iso": "2026-07-28 10:00:00"
+}

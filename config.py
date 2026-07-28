@@ -32,6 +32,16 @@ def _get_default_face_value(contract: str) -> float:
 _default_fv = _get_default_face_value(CONTRACT)
 FACE_VALUE = float(os.environ.get("FACE_VALUE", str(_default_fv)))
 
+# ============ Post-ETF 机构化多资产组合配置 ============
+PORTFOLIO_BASKET = ["BTC_USDT", "ETH_USDT", "SOL_USDT", "DOGE_USDT"]
+PORTFOLIO_WEIGHTS = {
+    "BTC_USDT": 0.35,
+    "ETH_USDT": 0.30,
+    "SOL_USDT": 0.25,
+    "DOGE_USDT": 0.10
+}
+
+
 # ============ 指标参数 ============
 SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 3.0
@@ -47,9 +57,9 @@ DEMA_PERIOD = int(os.environ.get("DEMA_PERIOD", str(_get_default_dema_period(CON
 def _get_default_tp_ratio(contract: str) -> float:
     c_upper = contract.upper()
     if "BTC" in c_upper:
-        return 22.0
-    elif "ETH" in c_upper:
         return 5.0
+    elif "ETH" in c_upper:
+        return 6.0
     return 5.0  # 默认回退值
 
 TP_RATIO = float(os.environ.get("TP_RATIO", str(_get_default_tp_ratio(CONTRACT))))
@@ -61,10 +71,10 @@ ADX_LENGTH = int(os.environ.get("ADX_LENGTH", "16"))
 def _get_default_adx_threshold(contract: str) -> float:
     c_upper = contract.upper()
     if "BTC" in c_upper:
-        return 35.0
+        return 45.0
     elif "ETH" in c_upper:
-        return 30.0
-    return 30.0
+        return 40.0
+    return 40.0
 
 ADX_THRESHOLD = float(os.environ.get("ADX_THRESHOLD", str(_get_default_adx_threshold(CONTRACT))))
 # ADX Timeframe: 选项 30min / 1H, 默认 30M -> 映射为 "30m" / "1h"

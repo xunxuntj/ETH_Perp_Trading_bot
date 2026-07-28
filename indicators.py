@@ -310,3 +310,27 @@ def calculate_chop(df: pd.DataFrame, period: int = 14) -> pd.Series:
     chop = 100.0 * np.log10(sum_tr / denom) / np.log10(period)
     return pd.Series(chop, index=df.index)
 
+
+def calculate_kaufman_er(df: pd.DataFrame, period: int = 10) -> pd.Series:
+    """
+    计算 Kaufman Efficiency Ratio (考夫曼效率比)
+    ER = |Close - Close[period]| / Sum(|Close[i] - Close[i-1]|, period)
+    """
+    close = df['close']
+    change = (close - close.shift(period)).abs()
+    volatility = (close - close.shift(1)).abs().rolling(window=period).sum()
+    er = change / volatility.replace(0, np.nan)
+    return er.fillna(0.0)
+
+
+def calculate_atr_zscore(df: pd.DataFrame, period: int = 14, lookback: int = 100) -> pd.Series:
+    """
+    计算 ATR Z-score (异常波动率检测)
+    """
+    atr = calculate_atr(df, period)
+    mean = atr.rolling(window=lookback).mean()
+    std = atr.rolling(window=lookback).std()
+    z_score = (atr - mean) / std.replace(0, np.nan)
+    return z_score.fillna(0.0)
+
+

@@ -40,8 +40,9 @@ def test_main_notification_all_mode(mock_dependencies, monkeypatch):
     with patch('sys.exit') as mock_exit:
         main.main()
         
-    # Since mode is 'all', should send notification even for 'none' action
-    mock_send.assert_called_once_with("[ETH_USDT] Test message: no action")
+    # Since mode is 'all', should send notification for each asset in portfolio
+    assert mock_send.call_count == 4
+    mock_send.assert_any_call("[ETH_USDT] Test message: no action")
 
 
 def test_main_notification_operation_mode_no_action(mock_dependencies, monkeypatch):
@@ -96,8 +97,10 @@ def test_main_notification_operation_mode_with_operation(mock_dependencies, monk
     with patch('sys.exit') as mock_exit:
         main.main()
         
-    # Since mode is 'operation' and action is 'open_long', should send notification
-    mock_send.assert_called_once_with("[ETH_USDT] Test message: open long")
+    # Since mode is 'operation' and action is 'open_long', should send notification for each asset
+    assert mock_send.call_count == 4
+    mock_send.assert_any_call("[ETH_USDT] Test message: open long")
+
 
 
 def test_main_notification_report_mode(mock_dependencies, monkeypatch):

@@ -9,7 +9,9 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from indicators import calculate_adx, calculate_rma
+from cooldown import CooldownStatus
 from strategy import TradingStrategy, TradeResult, Position
+
 from gate_client import GateClient
 
 class TestADXLogic(unittest.TestCase):
@@ -73,8 +75,11 @@ class TestADXLogic(unittest.TestCase):
              patch("strategy.ADX_TIMEFRAME", "1h"), \
              patch("strategy.load_state", return_value=Position()), \
              patch("strategy.save_state"), \
+             patch("cooldown.check_cooldown", return_value=CooldownStatus(triggered=False)), \
              patch("strategy.calculate_supertrend") as mock_st, \
              patch("strategy.calculate_dema") as mock_dema:
+
+
 
             # Mock supertrend to trigger a buy signal (direction=1 for last element)
             mock_st.return_value = pd.DataFrame({"supertrend": [90.0]*50, "direction": [1]*50}, index=self.df_trending.index)
@@ -101,8 +106,11 @@ class TestADXLogic(unittest.TestCase):
              patch("strategy.ADX_TIMEFRAME", "1h"), \
              patch("strategy.load_state", return_value=Position()), \
              patch("strategy.save_state"), \
+             patch("cooldown.check_cooldown", return_value=CooldownStatus(triggered=False)), \
              patch("strategy.calculate_supertrend") as mock_st, \
              patch("strategy.calculate_dema") as mock_dema:
+
+
 
             # Mock supertrend to trigger a buy signal (direction=1)
             mock_st.return_value = pd.DataFrame({"supertrend": [90.0]*50, "direction": [1]*50}, index=self.df_flat.index)
