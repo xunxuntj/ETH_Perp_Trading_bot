@@ -170,11 +170,30 @@ def _build_consecutive_loss_status(consecutive_losses: int) -> CooldownStatus:
     )
 
 
+def _get_report_start_dt() -> Optional[datetime]:
+    """获取 REPORT_START_TIME 对应的 UTC 时间点（作为旧历史擦除界限）"""
+    if "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get("TEST_WITH_REPORT_START_TIME"):
+        return None
+    try:
+        from config import REPORT_START_TIME
+        clean_time_str = REPORT_START_TIME.strip()
+        tz_utc8 = timezone(timedelta(hours=8))
+        if len(clean_time_str) == 13:
+            dt_naive = datetime.strptime(clean_time_str, "%Y-%m-%d %H")
+        else:
+            dt_naive = datetime.strptime(clean_time_str, "%Y-%m-%d %H:%M")
+        return dt_naive.replace(tzinfo=tz_utc8).astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+
 def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime, notify_state: dict) -> CooldownStatus:
     state = load_cooldown_state()
     cooldown_until = _parse_datetime(state.get("cooldown_until"))
     consecutive_losses = int(state.get("consecutive_losses", 0) or 0)
     last_loss_time = _parse_datetime(state.get("last_loss_time"))
+    start_dt = _get_report_start_dt()
 
     # ==== 自动对账逻辑：如果本地记录连续亏损为0且没有冷静期，通过平仓历史重建状态以防状态文件丢失 ====
     if consecutive_losses == 0 and not cooldown_until:
@@ -187,6 +206,11 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
                     pnl = close.get('pnl', 0.0)
                     close_time = datetime.fromtimestamp(close.get('time', 0), tz=timezone.utc)
                     
+                    # 绝不统计系统开启前 (REPORT_START_TIME) 的历史遗留平仓
+                    if start_dt and now >= start_dt and close_time < start_dt:
+                        break
+
+
                     if reconstructed_last_loss_time and (reconstructed_last_loss_time - close_time) > timedelta(hours=48):
                         break
                         
@@ -196,6 +220,7 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
                             reconstructed_last_loss_time = close_time
                     else:
                         break
+
                 
                 if reconstructed_losses > 0 and reconstructed_last_loss_time:
                     if (now - reconstructed_last_loss_time) <= timedelta(hours=48):
@@ -345,10 +370,17 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
 
     consecutive_losses = 0
     last_loss_time = None
+    start_dt = _get_report_start_dt()
+
     for close in closes:
         close_time = datetime.fromtimestamp(close['time'], tz=timezone.utc)
+        if start_dt and now >= start_dt and close_time < start_dt:
+            break
+
+
         if reset_anchor_time and close_time < reset_anchor_time:
             break
+
 
         pnl = close['pnl']
         if pnl < 0:
