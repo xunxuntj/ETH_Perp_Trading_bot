@@ -38,6 +38,8 @@ def get_face_value(contract: str) -> float:
         return 0.0001
     elif "SOL" in c_upper:
         return 1.0
+    elif "DOGE" in c_upper:
+        return 10.0
     return 0.01
 
 def get_tick_size(contract: str) -> float:
@@ -51,7 +53,10 @@ def get_tick_size(contract: str) -> float:
         return 0.1
     elif "SOL" in c_upper:
         return 0.01
+    elif "DOGE" in c_upper:
+        return 0.00005
     return 0.01
+
 
 def get_kline_close(client: GateClient, contract: str, timestamp: int) -> float:
     """
