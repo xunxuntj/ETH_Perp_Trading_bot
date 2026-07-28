@@ -56,16 +56,25 @@ COOLDOWN_NOTIFY_STATE_FILE = "cooldown_notify_state.json" if CONTRACT == "ETH_US
 
 def get_cooldown_filename(contract: str = "ETH_USDT") -> str:
     c_lower = (contract or "ETH_USDT").lower()
-    if c_lower == "eth_usdt" and not os.environ.get("COOLDOWN_STATE_FILE"):
+    if os.environ.get("COOLDOWN_STATE_FILE"):
+        return os.environ.get("COOLDOWN_STATE_FILE")
+    if os.path.exists(f"cooldown_state_{c_lower}.json"):
+        return f"cooldown_state_{c_lower}.json"
+    if c_lower == "eth_usdt":
         return "cooldown_state.json"
-    return os.environ.get("COOLDOWN_STATE_FILE") or f"cooldown_state_{c_lower}.json"
+    return f"cooldown_state_{c_lower}.json"
 
 
 def get_cooldown_notify_filename(contract: str = "ETH_USDT") -> str:
     c_lower = (contract or "ETH_USDT").lower()
-    if c_lower == "eth_usdt" and not os.environ.get("COOLDOWN_NOTIFY_STATE_FILE"):
+    if os.environ.get("COOLDOWN_NOTIFY_STATE_FILE"):
+        return os.environ.get("COOLDOWN_NOTIFY_STATE_FILE")
+    if os.path.exists(f"cooldown_notify_state_{c_lower}.json"):
+        return f"cooldown_notify_state_{c_lower}.json"
+    if c_lower == "eth_usdt":
         return "cooldown_notify_state.json"
-    return os.environ.get("COOLDOWN_NOTIFY_STATE_FILE") or f"cooldown_notify_state_{c_lower}.json"
+    return f"cooldown_notify_state_{c_lower}.json"
+
 
 
 
