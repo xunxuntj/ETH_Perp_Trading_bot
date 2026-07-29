@@ -511,37 +511,36 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
     now = datetime.now(timezone.utc)
 
     
-    # 1. 检查本金
+    # 1. 检查本金（防空/无效账户误判）
     try:
         account = client.get_account()
-        # 熔断检查直接使用账户总资金 total (包含未实现盈亏的本金净值)
-        # 避免因开仓保证金占用导致 available 减少而被误判熔断
-        equity = account.get('total', 0.0)
-        
-        if equity <= CIRCUIT_BREAKER_EQUITY:
-            can_trade_time = now + timedelta(hours=168)
+        if account and isinstance(account, dict) and 'total' in account:
+            equity = float(account.get('total', 0.0) or 0.0)
             
-            # 判断是否需要推送
-            should_notify = not notify_state["notified"]
-            if should_notify:
-                notify_state["notified"] = True
-                notify_state["triggered_at"] = now.isoformat()
-                notify_state["notify_count"] = 1
-                save_cooldown_notify_state(notify_state, contract=contract)
+            if 0 < equity <= CIRCUIT_BREAKER_EQUITY:
+                can_trade_time = now + timedelta(hours=168)
+                
+                # 判断是否需要推送
+                should_notify = not notify_state["notified"]
+                if should_notify:
+                    notify_state["notified"] = True
+                    notify_state["triggered_at"] = now.isoformat()
+                    notify_state["notify_count"] = 1
+                    save_cooldown_notify_state(notify_state, contract=contract)
 
-            
-            return CooldownStatus(
-                triggered=True,
-                reason="capital_circuit_breaker",
-                cooldown_hours=168,  # 1 周
-                can_trade_time=can_trade_time,
-                should_notify=should_notify,
-                details=f"本金 {equity:.2f}U ≤ {CIRCUIT_BREAKER_EQUITY}U，停手 1 周\n"
-                        f"可开单时间: {can_trade_time.strftime('%Y-%m-%d %H:%M UTC')}"
-            )
+                return CooldownStatus(
+                    triggered=True,
+                    reason="capital_circuit_breaker",
+                    cooldown_hours=168,  # 1 周
+                    can_trade_time=can_trade_time,
+                    should_notify=should_notify,
+                    details=f"本金 {equity:.2f}U ≤ {CIRCUIT_BREAKER_EQUITY}U，停手 1 周\n"
+                            f"可开单时间: {can_trade_time.strftime('%Y-%m-%d %H:%M UTC')}"
+                )
     except Exception as e:
         # API 调用失败，继续检查其他条件
         equity = None
+
     
     # 2. 检查连续亏损
     try:
