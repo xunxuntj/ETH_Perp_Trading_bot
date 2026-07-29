@@ -332,6 +332,17 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
     state = load_cooldown_state(contract)
     cooldown_until = _parse_datetime(state.get("cooldown_until"))
     reset_anchor_time = _parse_datetime(state.get("reset_anchor_time"))
+    last_loss_time = _parse_datetime(state.get("last_loss_time"))
+
+    # 若缓存状态中的亏损发生时间早于 REPORT_START_TIME，自动作废重置旧冷静期
+    start_dt = _get_report_start_dt()
+    if start_dt and last_loss_time and last_loss_time < start_dt:
+        reset_cooldown_state(reset_anchor_time=now, contract=contract)
+        reset_cooldown_notify_state(contract=contract)
+        state = load_cooldown_state(contract)
+        cooldown_until = None
+        reset_anchor_time = None
+
 
     if cooldown_until and now < cooldown_until:
         remaining_hours = (cooldown_until - now).total_seconds() / 3600
