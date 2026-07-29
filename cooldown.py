@@ -336,12 +336,16 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
 
     # 若缓存状态中的亏损发生时间早于 REPORT_START_TIME，自动作废重置旧冷静期
     start_dt = _get_report_start_dt()
-    if start_dt and last_loss_time and last_loss_time < start_dt:
-        reset_cooldown_state(reset_anchor_time=now, contract=contract)
-        reset_cooldown_notify_state(contract=contract)
-        state = load_cooldown_state(contract)
-        cooldown_until = None
-        reset_anchor_time = None
+    if start_dt:
+        is_outdated_loss = last_loss_time and last_loss_time < start_dt
+        is_outdated_cooldown = cooldown_until and (cooldown_until - timedelta(hours=48)) < start_dt
+        if is_outdated_loss or is_outdated_cooldown:
+            reset_cooldown_state(reset_anchor_time=now, contract=contract)
+            reset_cooldown_notify_state(contract=contract)
+            state = load_cooldown_state(contract)
+            cooldown_until = None
+            reset_anchor_time = None
+
 
 
     if cooldown_until and now < cooldown_until:
@@ -410,8 +414,9 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
 
     for close in closes:
         close_time = datetime.fromtimestamp(close['time'], tz=timezone.utc)
-        if start_dt and now >= start_dt and close_time < start_dt:
+        if start_dt and close_time < start_dt:
             break
+
 
         if reset_anchor_time and close_time < reset_anchor_time:
             break
