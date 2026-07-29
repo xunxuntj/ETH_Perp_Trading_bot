@@ -221,6 +221,17 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
     last_loss_time = _parse_datetime(state.get("last_loss_time"))
     start_dt = _get_report_start_dt()
 
+    if start_dt:
+        is_outdated_loss = last_loss_time and last_loss_time < start_dt
+        is_outdated_cooldown = cooldown_until and (cooldown_until - timedelta(hours=48)) < start_dt
+        if is_outdated_loss or is_outdated_cooldown:
+            reset_cooldown_state(reset_anchor_time=now, contract=contract)
+            reset_cooldown_notify_state(contract=contract)
+            state = load_cooldown_state(contract)
+            cooldown_until = None
+            consecutive_losses = 0
+            last_loss_time = None
+
     # ==== 自动对账逻辑：如果本地记录连续亏损为0且没有冷静期，通过平仓历史重建状态以防状态文件丢失 ====
     if consecutive_losses == 0 and not cooldown_until:
         try:
@@ -233,8 +244,9 @@ def _check_cooldown_from_state(client: GateClient, contract: str, now: datetime,
                     close_time = datetime.fromtimestamp(close.get('time', 0), tz=timezone.utc)
                     
                     # 绝不统计系统开启前 (REPORT_START_TIME) 的历史遗留平仓
-                    if start_dt and now >= start_dt and close_time < start_dt:
+                    if start_dt and close_time < start_dt:
                         break
+
 
                     if reconstructed_last_loss_time and (reconstructed_last_loss_time - close_time) > timedelta(hours=48):
                         break
@@ -480,13 +492,20 @@ def _check_cooldown_from_history(client: GateClient, contract: str, now: datetim
 def load_cooldown_notify_state(contract: str = "ETH_USDT") -> dict:
     """加载冷静期通知状态"""
     filename = get_cooldown_notify_filename(contract)
+    default_state = {"notified": False, "triggered_at": None, "notify_count": 0}
     if os.path.exists(filename):
         try:
             with open(filename, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict):
+                    default_state.update(data)
+                    if "notified" not in default_state:
+                        default_state["notified"] = bool(data.get("last_notified_cooldown_until"))
+                    return default_state
         except Exception:
             pass
-    return {"notified": False, "triggered_at": None, "notify_count": 0}
+    return default_state
+
 
 
 def save_cooldown_notify_state(state: dict, contract: str = "ETH_USDT"):
