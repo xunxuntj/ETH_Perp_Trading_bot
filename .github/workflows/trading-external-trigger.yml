@@ -51,7 +51,14 @@ jobs:
         run: |
           python -c "
           import os, json
-          for f in ['cooldown_state_${{ matrix.symbol }}.json', 'cooldown_notify_state_${{ matrix.symbol }}.json', 'cooldown_state.json', 'cooldown_notify_state.json']:
+          sym_lower = '${{ matrix.symbol }}'.lower()
+          sym_upper = '${{ matrix.symbol }}'.upper()
+          targets = [
+              f'cooldown_state_{sym_lower}.json', f'cooldown_state_{sym_upper}.json',
+              f'cooldown_notify_state_{sym_lower}.json', f'cooldown_notify_state_{sym_upper}.json',
+              'cooldown_state.json', 'cooldown_notify_state.json'
+          ]
+          for f in targets:
               if os.path.exists(f):
                   try:
                       with open(f, 'r') as fp:
@@ -62,6 +69,7 @@ jobs:
                   except Exception as e:
                       print(f'Error inspecting {f}: {e}')
           "
+
 
       
       - name: Run trading check
