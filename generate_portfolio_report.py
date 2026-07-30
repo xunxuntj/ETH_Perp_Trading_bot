@@ -17,12 +17,17 @@ try:
     from config import (
         RISK_MODE as DEFAULT_RISK_MODE, 
         RISK_FIXED_AMOUNT as DEFAULT_RISK_FIXED_AMOUNT,
-        RISK_PERCENT as DEFAULT_RISK_PERCENT
+        RISK_PERCENT as DEFAULT_RISK_PERCENT,
+        PORTFOLIO_BASKET,
+        PORTFOLIO_WEIGHTS
     )
 except ImportError:
     DEFAULT_RISK_MODE = "fixed"
     DEFAULT_RISK_FIXED_AMOUNT = 5.0
     DEFAULT_RISK_PERCENT = 0.015
+    PORTFOLIO_BASKET = ["BTC_USDT", "ETH_USDT", "SOL_USDT", "DOGE_USDT"]
+    PORTFOLIO_WEIGHTS = {"BTC_USDT": 0.35, "ETH_USDT": 0.30, "SOL_USDT": 0.25, "DOGE_USDT": 0.10}
+
 
 # Global Candlestick cache to avoid duplicate API requests
 kline_cache = {}
@@ -380,8 +385,6 @@ def calculate_single_asset_stats(df: pd.DataFrame, symbol: str, initial_capital:
         "max_win": float(df['pnl'].max() if win_count > 0 else 0.0),
         "max_loss": float(df['pnl'].min() if loss_count > 0 else 0.0),
         "max_losing_streak": int(max_losing_streak),
-        "total_slippage_tax": float(total_slippage_tax),
-        "avg_slippage_ticks": float(avg_slippage_ticks),
         "total_funding_fee": float(total_funding_fee),
         "avg_win_hold_str": format_duration(avg_win_hold),
         "avg_loss_hold_str": format_duration(avg_loss_hold),
@@ -390,8 +393,9 @@ def calculate_single_asset_stats(df: pd.DataFrame, symbol: str, initial_capital:
     }
 
 def generate_portfolio_rules(
+
     total_pnl: float, win_rate: float, wl_ratio: float, max_dd: float, 
-    current_losing_streak: int, btc_stats: dict, eth_stats: dict, 
+    current_losing_streak: int, asset_stats: dict, 
     pf: float, total_trades: int
 ) -> Tuple[str, list]:
     """
@@ -412,14 +416,15 @@ def generate_portfolio_rules(
     if win_rate_pct < 45 and wl_ratio > 1.8:
         rule_text += "本组合体现典型的 <b>趋势跟踪特性</b> (SuperTrend+ADX)，通过高盈亏比弥补低胜率。在长周期内表现稳定。"
     else:
-        rule_text += "多币种分散化降低了整体波动，双币转换平稳。"
+        rule_text += "多资产分散化配置（BTC/ETH/SOL/DOGE）降低了整体波动，资金调配平稳。"
         
     risk_advice = []
     
-    # Asset Specific Warnings
-    for name, stats in [("BTC", btc_stats), ("ETH", eth_stats)]:
-        if stats["total_trades"] > 0:
-            avg_slip_ticks = stats["avg_slippage_ticks"]
+    # Asset Specific Warnings for all portfolio assets
+    for symbol, stats in asset_stats.items():
+        name = symbol.split('_')[0]
+        if stats.get("total_trades", 0) > 0:
+            avg_slip_ticks = stats.get("avg_slippage_ticks", 0.0)
             if avg_slip_ticks > 15.0:
                 risk_advice.append(f"<span class='text-brand-danger font-bold'>⚠️ {name} 异常执行滑点！</span> 平均每单滑点 {avg_slip_ticks:.1f} Ticks，滑点税严重侵蚀预期利润，建议调低单笔仓位或优化触发延迟。")
             else:
@@ -438,7 +443,7 @@ def generate_portfolio_rules(
     elif pf < 2.0:
         risk_advice.append(f"🟢 <b>组合获利因子评估</b>: 良好/稳健特征 (PF: {pf:.2f}) — 盈利能力良好，收益稳健覆盖风险，具备持续实盘运行基础。")
     else:
-        risk_advice.append(f"🚀 <b>组合获利因子评估</b>: 优秀/高效盈利 (PF: {pf:.2f}) — 收益显著优于风险，双资产对冲机制有效运作。")
+        risk_advice.append(f"🚀 <b>组合获利因子评估</b>: 优秀/高效盈利 (PF: {pf:.2f}) — 收益显著优于风险，多资产风险对冲机制有效运作。")
         
     if current_losing_streak > 0 and not is_circuit_broken:
         risk_advice.append(f"⚠️ <b>连亏警报</b>: 组合当前处于 {current_losing_streak} 连亏中，请关注风控水位。")
@@ -446,8 +451,8 @@ def generate_portfolio_rules(
     return rule_text, risk_advice
 
 def fetch_ai_portfolio_report(df_comb: pd.DataFrame, total_trades: int, win_rate: float, total_pnl: float, 
-                             total_fee: float, wl_ratio: float, pf: float, max_dd: float, btc_stats: dict, 
-                             eth_stats: dict) -> str:
+                              total_fee: float, wl_ratio: float, pf: float, max_dd: float, 
+                              asset_stats: dict) -> str:
     """
     AI Portfolio Diagnostics
     """
@@ -458,10 +463,17 @@ def fetch_ai_portfolio_report(df_comb: pd.DataFrame, total_trades: int, win_rate
     api_url = os.environ.get("AI_API_URL", "https://api.openai.com/v1/chat/completions")
     model = os.environ.get("AI_MODEL", "gpt-4o-mini")
     
-    recent_summary = df_comb[['datetime', 'symbol', 'side', 'pnl', 'text']].tail(12).to_string()
+    recent_summary = df_comb[['datetime', 'symbol', 'side', 'pnl', 'text']].tail(12).to_string() if not df_comb.empty else "无"
     
+    asset_lines = []
+    for sym, st in asset_stats.items():
+        pf_val = st.get('profit_factor')
+        pf_str = f"{pf_val:.2f}" if pf_val is not None else 'N/A'
+        asset_lines.append(f"    - {sym}: 净盈亏 {st.get('total_pnl', 0.0):.2f} USDT, 交易数 {st.get('total_trades', 0)}, 胜率 {st.get('win_rate', 0.0)*100:.2f}%, 获利因子 {pf_str}, 滑点 {st.get('avg_slippage_ticks', 0.0):.1f} Ticks")
+    asset_summary_str = "\n".join(asset_lines)
+
     prompt = f"""
-    你是一个资深的数字货币量化交易策略投资经理。下面是某个自动化交易机器人在 Gate.io 的 BTC_USDT 和 ETH_USDT 实盘交易组合评估指标。
+    你是一个资深的数字货币量化交易策略投资经理。下面是某个自动化交易机器人在 Gate.io 的 V1 Post-ETF 多资产组合 ({', '.join(PORTFOLIO_BASKET)}) 实盘交易评估指标。
     
     评估指标:
     - 组合交易笔数: {total_trades} 笔
@@ -472,16 +484,15 @@ def fetch_ai_portfolio_report(df_comb: pd.DataFrame, total_trades: int, win_rate
     - 组合最大回撤: {max_dd*100:.2f}%
     
     分币种表现:
-    - BTC: 净盈亏 {btc_stats['total_pnl']:.2f} USDT, 交易数 {btc_stats['total_trades']}, 胜率 {btc_stats['win_rate']*100:.2f}%, 获利因子 {btc_stats['profit_factor'] or 'N/A'}, 滑点 {btc_stats['avg_slippage_ticks']:.1f} Ticks
-    - ETH: 净盈亏 {eth_stats['total_pnl']:.2f} USDT, 交易数 {eth_stats['total_trades']}, 胜率 {eth_stats['win_rate']*100:.2f}%, 获利因子 {eth_stats['profit_factor'] or 'N/A'}, 滑点 {eth_stats['avg_slippage_ticks']:.1f} Ticks
+{asset_summary_str}
     
     最近12笔交易历史:
     {recent_summary}
     
     请结合上述真实实盘数据，生成一份简明直击痛点的组合诊断报告：
-    1. 指出当前策略在BTC与ETH表现上的优劣异同（例如哪个币种对冲效果好，哪个更适合该策略）；
+    1. 指出当前策略在多资产表现上的优劣异同（例如哪个币种贡献度高，哪个对冲效果好）；
     2. 评估摩擦损耗占比和胜率组合是否合理；
-    3. 给出组合调配或策略参数优化建议。
+    3. 给出组合权重或策略参数优化建议。
     字数限制 350 字以内，语气客观、简练、专业。
     """
     
@@ -494,6 +505,7 @@ def fetch_ai_portfolio_report(df_comb: pd.DataFrame, total_trades: int, win_rate
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3
     }
+
     
     try:
         resp = requests.post(api_url, headers=headers, json=body, timeout=20)
@@ -516,18 +528,25 @@ def main():
         
     start_dt, end_dt, days = get_report_time_window()
     print("=" * 60)
-    print(f"🚀 Rebuilding Portfolio Strategy Report...")
+    print(f"🚀 Rebuilding Portfolio Strategy Report (Basket: {', '.join(PORTFOLIO_BASKET)})...")
     print(f"📅 Evaluation Period: {days} days")
     print(f"⏱ Time Window: {start_dt.strftime('%Y-%m-%d %H:%M %z')} ~ {end_dt.strftime('%Y-%m-%d %H:%M %z')}")
     print("=" * 60)
     
     client = GateClient(api_key, api_secret)
 
+    # Query closed positions for all basket symbols
+    asset_dfs = {}
+    asset_stats = {}
+    all_empty = True
     
-    # Query closed positions for BTC & ETH
-    df_btc = fetch_all_position_closes(client, "BTC_USDT", start_dt, end_dt)
-    df_eth = fetch_all_position_closes(client, "ETH_USDT", start_dt, end_dt)
-    
+    for symbol in PORTFOLIO_BASKET:
+        df_sym = fetch_all_position_closes(client, symbol, start_dt, end_dt)
+        if not df_sym.empty:
+            df_sym['symbol'] = symbol
+            all_empty = False
+        asset_dfs[symbol] = df_sym
+        
     try:
         acct = client.get_account()
         current_equity = acct.get('total', 1000.0)
@@ -535,21 +554,18 @@ def main():
         print(f"⚠️ Failed to fetch current account total balance, fallback to 1000.0 U: {e}")
         current_equity = 1000.0
         
-    # Check if empty
-    btc_empty = df_btc.empty
-    eth_empty = df_eth.empty
-    
-    if btc_empty and eth_empty:
-        print("⚠️ No trading data found for BTC and ETH in this period.")
-        # Fallback empty structures to render
-        btc_stats = calculate_single_asset_stats(pd.DataFrame(), "BTC_USDT", current_equity)
-        eth_stats = calculate_single_asset_stats(pd.DataFrame(), "ETH_USDT", current_equity)
-        
+    if all_empty:
+        print(f"⚠️ No trading data found for any basket symbol in this period.")
+        for symbol in PORTFOLIO_BASKET:
+            asset_stats[symbol] = calculate_single_asset_stats(pd.DataFrame(), symbol, current_equity)
+            
         report_dict = {
             "days": days,
             "start_date": start_dt.strftime('%Y-%m-%d'),
             "end_date": end_dt.strftime('%Y-%m-%d'),
             "generation_time": datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'),
+            "basket": PORTFOLIO_BASKET,
+            "weights": PORTFOLIO_WEIGHTS,
             "total_trades": 0,
             "win_count": 0,
             "loss_count": 0,
@@ -570,29 +586,17 @@ def main():
             "friction_ratio": 0.0,
             "chart_labels": [],
             "chart_data": [],
-            "btc_chart_data": [],
-            "eth_chart_data": [],
-            "rule_analysis": "评估期内 BTC 和 ETH 均无任何平仓记录，无法计算组合表现。",
+            "asset_chart_data": {sym: [] for sym in PORTFOLIO_BASKET},
+            "rule_analysis": f"评估期内 V1 Post-ETF 组合 ({', '.join(PORTFOLIO_BASKET)}) 均无任何平仓记录，无法计算组合表现。",
             "risk_advice": ["请核实机器人在该交易周期的运行日志和 API 连通性。"],
             "ai_analysis": "",
-            "btc_stats": btc_stats,
-            "eth_stats": eth_stats,
+            "asset_stats": asset_stats,
+            "btc_stats": asset_stats.get("BTC_USDT", {}),
+            "eth_stats": asset_stats.get("ETH_USDT", {}),
             "trades": []
         }
     else:
-        # Assign identifiers
-        if not btc_empty:
-            df_btc['symbol'] = 'BTC_USDT'
-        if not eth_empty:
-            df_eth['symbol'] = 'ETH_USDT'
-            
-        # Combine
-        dfs_to_concat = []
-        if not btc_empty:
-            dfs_to_concat.append(df_btc)
-        if not eth_empty:
-            dfs_to_concat.append(df_eth)
-            
+        dfs_to_concat = [df for df in asset_dfs.values() if not df.empty]
         df_comb = pd.concat(dfs_to_concat, ignore_index=True)
         df_comb = df_comb.sort_values('time').reset_index(drop=True)
         
@@ -617,9 +621,12 @@ def main():
         std_return = comb_returns.std()
         sharpe = (comb_returns.mean() / std_return * np.sqrt(len(df_comb))) if std_return > 0 and len(df_comb) > 1 else 0.0
         
-        # Single stats
-        btc_stats = calculate_single_asset_stats(df_btc, "BTC_USDT", initial_capital)
-        eth_stats = calculate_single_asset_stats(df_eth, "ETH_USDT", initial_capital)
+        # Asset stats
+        total_slippage_tax = 0.0
+        for symbol in PORTFOLIO_BASKET:
+            st = calculate_single_asset_stats(asset_dfs[symbol], symbol, initial_capital)
+            asset_stats[symbol] = st
+            total_slippage_tax += st['total_slippage_tax']
         
         total_trades = len(df_comb)
         profitable_trades = df_comb[df_comb['pnl'] > 0]
@@ -638,9 +645,6 @@ def main():
         ratio_avg_win_loss = avg_win / avg_loss if avg_loss > 0 else (float('inf') if avg_win > 0 else 0.0)
         
         total_funding_fee = df_comb['funding_fee'].sum()
-        
-        # Friction taxes
-        total_slippage_tax = btc_stats['total_slippage_tax'] + eth_stats['total_slippage_tax']
         friction_ratio = abs(total_slippage_tax + total_funding_fee) / (total_gains + 1.0)
         
         # Combined streaks
@@ -667,13 +671,12 @@ def main():
         avg_win_hold = win_durations.mean() if len(win_durations) > 0 else 0
         avg_loss_hold = loss_durations.mean() if len(loss_durations) > 0 else 0
         
-        # R multiples - 精准计算：根据每个仓位入场时的账户权益动态计算 R 值，支持重叠仓位
+        # R multiples
         r_multiples = []
         for _, row in df_comb.iterrows():
             pnl = row['pnl']
             duration = row.get('duration_sec', 0)
             entry_time = row['time'] - duration if duration > 0 else row['time']
-            # 找到在该仓位入场之前已经平仓的所有交易的累计盈亏
             prior_pnl_sum = df_comb[df_comb['time'] < entry_time]['pnl'].sum()
             equity_at_entry = initial_capital + prior_pnl_sum
             
@@ -689,26 +692,22 @@ def main():
         # Chart construction (multi-line)
         chart_labels = ["开始"]
         chart_data = [0.0]
-        btc_chart_data = [0.0]
-        eth_chart_data = [0.0]
-        
-        btc_cum = 0.0
-        eth_cum = 0.0
+        asset_cum_pnl = {sym: 0.0 for sym in PORTFOLIO_BASKET}
+        asset_chart_data = {sym: [0.0] for sym in PORTFOLIO_BASKET}
         
         for _, row in df_comb.iterrows():
             pnl = row['pnl']
             symbol = row['symbol']
             dt_str = row['datetime']
             
-            if symbol == 'BTC_USDT':
-                btc_cum += pnl
-            elif symbol == 'ETH_USDT':
-                eth_cum += pnl
+            if symbol in asset_cum_pnl:
+                asset_cum_pnl[symbol] += pnl
                 
             chart_labels.append(dt_str)
-            chart_data.append(btc_cum + eth_cum)
-            btc_chart_data.append(btc_cum)
-            eth_chart_data.append(eth_cum)
+            total_cum = sum(asset_cum_pnl.values())
+            chart_data.append(total_cum)
+            for sym in PORTFOLIO_BASKET:
+                asset_chart_data[sym].append(asset_cum_pnl[sym])
             
         # Unified trades list
         trades_list = []
@@ -731,12 +730,12 @@ def main():
         # Diagnostics
         rule_analysis, risk_advice = generate_portfolio_rules(
             total_pnl, win_rate, ratio_avg_win_loss, max_dd, 
-            current_losing_streak, btc_stats, eth_stats, profit_factor, total_trades
+            current_losing_streak, asset_stats, profit_factor, total_trades
         )
         
         ai_analysis = fetch_ai_portfolio_report(
             df_comb, total_trades, win_rate, total_pnl, total_fee, 
-            ratio_avg_win_loss, profit_factor, max_dd, btc_stats, eth_stats
+            ratio_avg_win_loss, profit_factor, max_dd, asset_stats
         )
         
         pf_val = None if np.isinf(profit_factor) else profit_factor
@@ -747,6 +746,8 @@ def main():
             "start_date": start_dt.strftime('%Y-%m-%d'),
             "end_date": end_dt.strftime('%Y-%m-%d'),
             "generation_time": datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'),
+            "basket": PORTFOLIO_BASKET,
+            "weights": PORTFOLIO_WEIGHTS,
             "total_trades": total_trades,
             "win_count": int(win_count),
             "loss_count": int(loss_count),
@@ -767,13 +768,15 @@ def main():
             "friction_ratio": float(friction_ratio),
             "chart_labels": chart_labels,
             "chart_data": chart_data,
-            "btc_chart_data": btc_chart_data,
-            "eth_chart_data": eth_chart_data,
+            "asset_chart_data": asset_chart_data,
+            "btc_chart_data": asset_chart_data.get("BTC_USDT", []),
+            "eth_chart_data": asset_chart_data.get("ETH_USDT", []),
             "rule_analysis": rule_analysis,
             "risk_advice": risk_advice,
             "ai_analysis": ai_analysis,
-            "btc_stats": btc_stats,
-            "eth_stats": eth_stats,
+            "asset_stats": asset_stats,
+            "btc_stats": asset_stats.get("BTC_USDT", {}),
+            "eth_stats": asset_stats.get("ETH_USDT", {}),
             "trades": trades_list[::-1]  # reverse chron for audit display
         }
         
@@ -803,24 +806,21 @@ def main():
     pnl_sign = "+" if report_dict['total_pnl'] >= 0 else ""
     pf_str = f"{report_dict['profit_factor']:.2f}" if report_dict['profit_factor'] is not None else "∞"
     
-    btc_p_sign = "+" if btc_stats['total_pnl'] >= 0 else ""
-    eth_p_sign = "+" if eth_stats['total_pnl'] >= 0 else ""
-    
     streak_warning = ""
     if report_dict['max_losing_streak'] >= 3:
         streak_warning = f"🔴 触发过连亏熔断阈值！最大连亏: {report_dict['max_losing_streak']} 次"
     else:
         streak_warning = f"🟢 无熔断风险 (最大连亏: {report_dict['max_losing_streak']} 次)"
         
-    diagnostic_summary = "账户双币组合运行正常，滑点与资金费均在预算空间内。"
+    diagnostic_summary = "账户 V1 Post-ETF 多资产组合运行正常，滑点与资金费均在预算空间内。"
     if report_dict['max_losing_streak'] >= 3:
-        diagnostic_summary = "🚨 警告：双币大盘曾触发过熔断阈值，请密切核实订单详情！"
-    elif btc_stats['avg_slippage_ticks'] > 15.0 or eth_stats['avg_slippage_ticks'] > 15.0:
+        diagnostic_summary = "🚨 警告：多资产大盘曾触发过熔断阈值，请密切核实订单详情！"
+    elif any(st.get('avg_slippage_ticks', 0) > 15.0 for st in asset_stats.values()):
         diagnostic_summary = "⚠️ 警告：某一资产滑点偏高，流动性异常，滑点损耗加大。"
     elif report_dict['profit_factor'] is not None and report_dict['profit_factor'] < 1.15 and report_dict['total_trades'] > 10:
         diagnostic_summary = "💀 组合总体期望值为负，获利因子偏低，建议立即停机评估策略参数。"
         
-    tg_caption = f"""📊 <b>[Gate.io 实盘双币战报]</b>
+    tg_caption = f"""📊 <b>[Gate.io 实盘 V1 Post-ETF 多资产战报]</b>
 ⏱ <b>统计周期</b>：自 {start_dt.strftime('%m-%d')} 至 {end_dt.strftime('%m-%d')} ({days} 天)
 
 💰 <b>【组合盈亏大盘】</b>
@@ -831,17 +831,22 @@ def main():
 • 组合估算夏普： <b>{report_dict['sharpe_ratio']:.2f}</b>
 
 📈 <b>【币种表现拆分】</b>
-• <b>BTC_USDT</b>:
-  - 净盈亏: <b>{btc_p_sign}{btc_stats['total_pnl']:.2f} U</b>
-  - 胜率: <b>{btc_stats['win_rate']*100:.1f}%</b> (赢 {btc_stats['win_count']} | 输 {btc_stats['loss_count']} | 交易 {btc_stats['total_trades']} 笔)
-  - 获利因子: <b>{f"{btc_stats['profit_factor']:.2f}" if btc_stats['profit_factor'] is not None else "∞"}</b>
-  - 平均滑点: <b>{btc_stats['total_slippage_tax']/max(1, btc_stats['total_trades']):.2f} U</b> (约 {btc_stats['avg_slippage_ticks']:.1f} Ticks)
-• <b>ETH_USDT</b>:
-  - 净盈亏: <b>{eth_p_sign}{eth_stats['total_pnl']:.2f} U</b>
-  - 胜率: <b>{eth_stats['win_rate']*100:.1f}%</b> (赢 {eth_stats['win_count']} | 输 {eth_stats['loss_count']} | 交易 {eth_stats['total_trades']} 笔)
-  - 获利因子: <b>{f"{eth_stats['profit_factor']:.2f}" if eth_stats['profit_factor'] is not None else "∞"}</b>
-  - 平均滑点: <b>{eth_stats['total_slippage_tax']/max(1, eth_stats['total_trades']):.2f} U</b> (约 {eth_stats['avg_slippage_ticks']:.1f} Ticks)
+"""
 
+    for sym in PORTFOLIO_BASKET:
+        st = asset_stats[sym]
+        weight_pct = int(PORTFOLIO_WEIGHTS.get(sym, 0) * 100)
+        p_sign = "+" if st.get('total_pnl', 0) >= 0 else ""
+        pf_val = f"{st['profit_factor']:.2f}" if st.get('profit_factor') is not None else "∞"
+        t_count = st.get('total_trades', 0)
+        avg_slip = st.get('total_slippage_tax', 0.0) / max(1, t_count)
+        tg_caption += f"• <b>{sym} ({weight_pct}%)</b>:\n"
+        tg_caption += f"  - 净盈亏: <b>{p_sign}{st.get('total_pnl', 0.0):.2f} U</b>\n"
+        tg_caption += f"  - 胜率: <b>{st.get('win_rate', 0.0)*100:.1f}%</b> (赢 {st.get('win_count', 0)} | 输 {st.get('loss_count', 0)} | 交易 {t_count} 笔)\n"
+        tg_caption += f"  - 获利因子: <b>{pf_val}</b>\n"
+        tg_caption += f"  - 平均滑点: <b>{avg_slip:.2f} U</b> (约 {st.get('avg_slippage_ticks', 0.0):.1f} Ticks)\n"
+
+    tg_caption += f"""
 🛡️ <b>【风控与摩擦损耗】</b>
 • 组合连亏水位： <b>{streak_warning}</b>
 • 组合滑点税额： <b>{report_dict['total_slippage_tax']:.2f} U</b>
@@ -851,7 +856,7 @@ def main():
 👮‍♂️ <b>【风控官诊断】</b>
 <i>{diagnostic_summary}</i>
 
-💡 <i>请点击下方 HTML 文件在浏览器中打开，查看双币交互折线图、并排对比表与全部平仓明细。</i>"""
+💡 <i>请点击下方 HTML 文件在浏览器中打开，查看多资产交互折线图、并排对比表与全部平仓明细。</i>"""
 
     success = send_telegram_document(report_filepath, caption=tg_caption)
     if success:
@@ -863,3 +868,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
