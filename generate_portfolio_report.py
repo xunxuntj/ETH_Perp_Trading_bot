@@ -385,12 +385,15 @@ def calculate_single_asset_stats(df: pd.DataFrame, symbol: str, initial_capital:
         "max_win": float(df['pnl'].max() if win_count > 0 else 0.0),
         "max_loss": float(df['pnl'].min() if loss_count > 0 else 0.0),
         "max_losing_streak": int(max_losing_streak),
+        "total_slippage_tax": float(total_slippage_tax),
+        "avg_slippage_ticks": float(avg_slippage_ticks),
         "total_funding_fee": float(total_funding_fee),
         "avg_win_hold_str": format_duration(avg_win_hold),
         "avg_loss_hold_str": format_duration(avg_loss_hold),
         "long_count": int(long_count),
         "short_count": int(short_count)
     }
+
 
 def generate_portfolio_rules(
 

@@ -188,76 +188,99 @@
                     <table class="w-full text-sm text-left">
                         <thead class="text-xs uppercase bg-brand-bg text-brand-textMuted border-b border-gray-800">
                             <tr>
-                                <th class="px-6 py-3">评估特征 (Features)</th>
-                                <th class="px-6 py-3 text-brand-btc font-bold">BTC_USDT</th>
-                                <th class="px-6 py-3 text-brand-eth font-bold">ETH_USDT</th>
-                                <th class="px-6 py-3 text-brand-primary font-bold">COMBINED (组合)</th>
+                                <th class="px-4 py-3">评估特征 (Features)</th>
+                                <th class="px-4 py-3 text-amber-500 font-bold">BTC_USDT (35%)</th>
+                                <th class="px-4 py-3 text-indigo-400 font-bold">ETH_USDT (30%)</th>
+                                <th class="px-4 py-3 text-purple-400 font-bold">SOL_USDT (25%)</th>
+                                <th class="px-4 py-3 text-yellow-400 font-bold">DOGE_USDT (10%)</th>
+                                <th class="px-4 py-3 text-brand-primary font-bold">COMBINED (组合)</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-800 text-gray-300">
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">累计净利润 (Net Profit)</td>
-                                <td id="btcNetProfit" class="px-6 py-4 font-semibold">---</td>
-                                <td id="ethNetProfit" class="px-6 py-4 font-semibold">---</td>
-                                <td id="combNetProfitVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">累计净利润 (Net Profit)</td>
+                                <td id="btcNetProfit" class="px-4 py-3 font-semibold">---</td>
+                                <td id="ethNetProfit" class="px-4 py-3 font-semibold">---</td>
+                                <td id="solNetProfit" class="px-4 py-3 font-semibold">---</td>
+                                <td id="dogeNetProfit" class="px-4 py-3 font-semibold">---</td>
+                                <td id="combNetProfitVal" class="px-4 py-3 font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">总交易笔数 (Trades)</td>
-                                <td id="btcTrades" class="px-6 py-4">---</td>
-                                <td id="ethTrades" class="px-6 py-4">---</td>
-                                <td id="combTrades" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">总交易笔数 (Trades)</td>
+                                <td id="btcTrades" class="px-4 py-3">---</td>
+                                <td id="ethTrades" class="px-4 py-3">---</td>
+                                <td id="solTrades" class="px-4 py-3">---</td>
+                                <td id="dogeTrades" class="px-4 py-3">---</td>
+                                <td id="combTrades" class="px-4 py-3 font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">胜率 (Win Rate)</td>
-                                <td id="btcWinRate" class="px-6 py-4">---</td>
-                                <td id="ethWinRate" class="px-6 py-4">---</td>
-                                <td id="combWinRateVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">胜率 (Win Rate)</td>
+                                <td id="btcWinRate" class="px-4 py-3">---</td>
+                                <td id="ethWinRate" class="px-4 py-3">---</td>
+                                <td id="solWinRate" class="px-4 py-3">---</td>
+                                <td id="dogeWinRate" class="px-4 py-3">---</td>
+                                <td id="combWinRateVal" class="px-4 py-3 font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">盈亏比 (Avg Win/Loss)</td>
-                                <td id="btcWL" class="px-6 py-4">---</td>
-                                <td id="ethWL" class="px-6 py-4">---</td>
-                                <td id="combWL" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">盈亏比 (Avg Win/Loss)</td>
+                                <td id="btcWL" class="px-4 py-3">---</td>
+                                <td id="ethWL" class="px-4 py-3">---</td>
+                                <td id="solWL" class="px-4 py-3">---</td>
+                                <td id="dogeWL" class="px-4 py-3">---</td>
+                                <td id="combWL" class="px-4 py-3 font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">获利因子 (Profit Factor)</td>
-                                <td id="btcPF" class="px-6 py-4">---</td>
-                                <td id="ethPF" class="px-6 py-4">---</td>
-                                <td id="combPFVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">获利因子 (Profit Factor)</td>
+                                <td id="btcPF" class="px-4 py-3">---</td>
+                                <td id="ethPF" class="px-4 py-3">---</td>
+                                <td id="solPF" class="px-4 py-3">---</td>
+                                <td id="dogePF" class="px-4 py-3">---</td>
+                                <td id="combPFVal" class="px-4 py-3 font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">最大单笔盈/亏</td>
-                                <td id="btcMaxWinLoss" class="px-6 py-4">---</td>
-                                <td id="ethMaxWinLoss" class="px-6 py-4">---</td>
-                                <td id="combMaxWinLoss" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">最大单笔盈/亏</td>
+                                <td id="btcMaxWinLoss" class="px-4 py-3">---</td>
+                                <td id="ethMaxWinLoss" class="px-4 py-3">---</td>
+                                <td id="solMaxWinLoss" class="px-4 py-3">---</td>
+                                <td id="dogeMaxWinLoss" class="px-4 py-3">---</td>
+                                <td id="combMaxWinLoss" class="px-4 py-3 font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">最大连亏次数 (Max Streak)</td>
-                                <td id="btcMaxStreak" class="px-6 py-4">---</td>
-                                <td id="ethMaxStreak" class="px-6 py-4">---</td>
-                                <td id="combMaxStreakVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">最大连亏次数 (Max Streak)</td>
+                                <td id="btcMaxStreak" class="px-4 py-3">---</td>
+                                <td id="ethMaxStreak" class="px-4 py-3">---</td>
+                                <td id="solMaxStreak" class="px-4 py-3">---</td>
+                                <td id="dogeMaxStreak" class="px-4 py-3">---</td>
+                                <td id="combMaxStreakVal" class="px-4 py-3 font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">平均滑点 (Avg Slippage)</td>
-                                <td id="btcSlippage" class="px-6 py-4">---</td>
-                                <td id="ethSlippage" class="px-6 py-4">---</td>
-                                <td id="combSlippageVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">平均滑点 (Avg Slippage)</td>
+                                <td id="btcSlippage" class="px-4 py-3">---</td>
+                                <td id="ethSlippage" class="px-4 py-3">---</td>
+                                <td id="solSlippage" class="px-4 py-3">---</td>
+                                <td id="dogeSlippage" class="px-4 py-3">---</td>
+                                <td id="combSlippageVal" class="px-4 py-3 font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">累计资金费 (Funding Fees)</td>
-                                <td id="btcFundingVal" class="px-6 py-4">---</td>
-                                <td id="ethFundingVal" class="px-6 py-4">---</td>
-                                <td id="combFundingVal" class="px-6 py-4 font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">累计资金费 (Funding Fees)</td>
+                                <td id="btcFundingVal" class="px-4 py-3">---</td>
+                                <td id="ethFundingVal" class="px-4 py-3">---</td>
+                                <td id="solFundingVal" class="px-4 py-3">---</td>
+                                <td id="dogeFundingVal" class="px-4 py-3">---</td>
+                                <td id="combFundingVal" class="px-4 py-3 font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                             <tr class="hover:bg-brand-bg/30">
-                                <td class="px-6 py-4 font-medium">平均盈/亏持仓时间</td>
-                                <td id="btcHoldDur" class="px-6 py-4 text-xs">---</td>
-                                <td id="ethHoldDur" class="px-6 py-4 text-xs">---</td>
-                                <td id="combHoldDur" class="px-6 py-4 text-xs font-bold text-white bg-brand-primary/10">---</td>
+                                <td class="px-4 py-3 font-medium">平均盈/亏持仓时间</td>
+                                <td id="btcHoldDur" class="px-4 py-3 text-xs">---</td>
+                                <td id="ethHoldDur" class="px-4 py-3 text-xs">---</td>
+                                <td id="solHoldDur" class="px-4 py-3 text-xs">---</td>
+                                <td id="dogeHoldDur" class="px-4 py-3 text-xs">---</td>
+                                <td id="combHoldDur" class="px-4 py-3 text-xs font-bold text-white bg-brand-primary/10">---</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+
             </div>
 
             <!-- 图表与曲线特征 -->
@@ -669,30 +692,31 @@
 
             const btcStats = statsObj['BTC_USDT'] || reportData.btc_stats || {};
             const ethStats = statsObj['ETH_USDT'] || reportData.eth_stats || {};
+            const solStats = statsObj['SOL_USDT'] || {};
+            const dogeStats = statsObj['DOGE_USDT'] || {};
             const btcCols = formatAssetCol(btcStats);
             const ethCols = formatAssetCol(ethStats);
+            const solCols = formatAssetCol(solStats);
+            const dogeCols = formatAssetCol(dogeStats);
 
-            if (document.getElementById('btcNetProfit')) document.getElementById('btcNetProfit').innerHTML = btcCols.pnl || '---';
-            if (document.getElementById('btcTrades')) document.getElementById('btcTrades').innerText = btcCols.trades || '---';
-            if (document.getElementById('btcWinRate')) document.getElementById('btcWinRate').innerText = btcCols.winRate || '---';
-            if (document.getElementById('btcWL')) document.getElementById('btcWL').innerText = btcCols.wl || '---';
-            if (document.getElementById('btcPF')) document.getElementById('btcPF').innerText = btcCols.pf || '---';
-            if (document.getElementById('btcMaxWinLoss')) document.getElementById('btcMaxWinLoss').innerHTML = btcCols.maxWinLoss || '---';
-            if (document.getElementById('btcMaxStreak')) document.getElementById('btcMaxStreak').innerText = btcCols.maxStreak || '---';
-            if (document.getElementById('btcSlippage')) document.getElementById('btcSlippage').innerHTML = btcCols.slippage || '---';
-            if (document.getElementById('btcFundingVal')) document.getElementById('btcFundingVal').innerText = btcCols.funding || '---';
-            if (document.getElementById('btcHoldDur')) document.getElementById('btcHoldDur').innerHTML = btcCols.hold || '---';
+            const populateCols = (cols, prefix) => {
+                if (document.getElementById(prefix + 'NetProfit')) document.getElementById(prefix + 'NetProfit').innerHTML = cols.pnl || '---';
+                if (document.getElementById(prefix + 'Trades')) document.getElementById(prefix + 'Trades').innerText = cols.trades || '---';
+                if (document.getElementById(prefix + 'WinRate')) document.getElementById(prefix + 'WinRate').innerText = cols.winRate || '---';
+                if (document.getElementById(prefix + 'WL')) document.getElementById(prefix + 'WL').innerText = cols.wl || '---';
+                if (document.getElementById(prefix + 'PF')) document.getElementById(prefix + 'PF').innerText = cols.pf || '---';
+                if (document.getElementById(prefix + 'MaxWinLoss')) document.getElementById(prefix + 'MaxWinLoss').innerHTML = cols.maxWinLoss || '---';
+                if (document.getElementById(prefix + 'MaxStreak')) document.getElementById(prefix + 'MaxStreak').innerText = cols.maxStreak || '---';
+                if (document.getElementById(prefix + 'Slippage')) document.getElementById(prefix + 'Slippage').innerHTML = cols.slippage || '---';
+                if (document.getElementById(prefix + 'FundingVal')) document.getElementById(prefix + 'FundingVal').innerText = cols.funding || '---';
+                if (document.getElementById(prefix + 'HoldDur')) document.getElementById(prefix + 'HoldDur').innerHTML = cols.hold || '---';
+            };
 
-            if (document.getElementById('ethNetProfit')) document.getElementById('ethNetProfit').innerHTML = ethCols.pnl || '---';
-            if (document.getElementById('ethTrades')) document.getElementById('ethTrades').innerText = ethCols.trades || '---';
-            if (document.getElementById('ethWinRate')) document.getElementById('ethWinRate').innerText = ethCols.winRate || '---';
-            if (document.getElementById('ethWL')) document.getElementById('ethWL').innerText = ethCols.wl || '---';
-            if (document.getElementById('ethPF')) document.getElementById('ethPF').innerText = ethCols.pf || '---';
-            if (document.getElementById('ethMaxWinLoss')) document.getElementById('ethMaxWinLoss').innerHTML = ethCols.maxWinLoss || '---';
-            if (document.getElementById('ethMaxStreak')) document.getElementById('ethMaxStreak').innerText = ethCols.maxStreak || '---';
-            if (document.getElementById('ethSlippage')) document.getElementById('ethSlippage').innerHTML = ethCols.slippage || '---';
-            if (document.getElementById('ethFundingVal')) document.getElementById('ethFundingVal').innerText = ethCols.funding || '---';
-            if (document.getElementById('ethHoldDur')) document.getElementById('ethHoldDur').innerHTML = ethCols.hold || '---';
+            populateCols(btcCols, 'btc');
+            populateCols(ethCols, 'eth');
+            populateCols(solCols, 'sol');
+            populateCols(dogeCols, 'doge');
+
 
             // 组合列
             const combPrefix = reportData.total_pnl >= 0 ? "+" : "";
