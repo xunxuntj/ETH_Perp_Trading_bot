@@ -153,12 +153,23 @@ class TradeExecutor:
                     
             if need_update:
                 self._log("SYNC_LEVERAGE", f"🔄 同步交易所杠杆配置 (模式: {pos_margin_mode}): leverage={leverage_param}, cross_leverage_limit={cross_limit_param or 'N/A'}")
-                result = self.client.update_position_leverage(
-                    contract=self.contract,
-                    leverage=leverage_param,
-                    cross_leverage_limit=cross_limit_param
-                )
-                self._log("SYNC_LEVERAGE_SUCCESS", f"✅ 杠杆同步成功: {json.dumps(result)}")
+                try:
+                    result = self.client.update_position_leverage(
+                        contract=self.contract,
+                        leverage=leverage_param,
+                        cross_leverage_limit=cross_limit_param
+                    )
+                    self._log("SYNC_LEVERAGE_SUCCESS", f"✅ 杠杆同步成功: {json.dumps(result)}")
+                except Exception as update_ex:
+                    self._log("SYNC_LEVERAGE_RETRY", f"⚠️ 按模式 {pos_margin_mode} 更新杠杆失败: {str(update_ex)}，尝试反向模式备用同步...")
+                    alt_leverage = str(LEVERAGE) if pos_margin_mode == "cross" else "0"
+                    alt_cross_limit = "" if pos_margin_mode == "cross" else str(LEVERAGE)
+                    result = self.client.update_position_leverage(
+                        contract=self.contract,
+                        leverage=alt_leverage,
+                        cross_leverage_limit=alt_cross_limit
+                    )
+                    self._log("SYNC_LEVERAGE_SUCCESS", f"✅ 备用方式杠杆同步成功: {json.dumps(result)}")
             else:
                 self._log("SYNC_LEVERAGE", f"✅ 交易所杠杆已是最新，无需更新 (模式: {pos_margin_mode}, leverage={current_leverage}, cross_limit={current_cross_limit})")
             return True
@@ -169,20 +180,6 @@ class TradeExecutor:
     def open_long(self, entry_price: float, stop_loss: float, qty: int, tp_price: Optional[float] = None) -> Dict[str, Any]:
         """
         开多仓
-        
-        Args:
-            entry_price: 入场价格
-            stop_loss: 止损价格
-            qty: 张数
-            tp_price: 止盈价格
-        
-        Returns:
-            {
-                "success": bool,
-                "order_id": Optional[str],
-                "message": str,
-                "details": dict
-            }
         """
         # 根据合约精度舍入价格
         entry_price = self._round_price(entry_price)
@@ -210,8 +207,16 @@ class TradeExecutor:
             }
         
         try:
-            # 第1步：同步杠杆到交易所
-            self.sync_leverage()
+            # 第1步：同步杠杆到交易所（硬性检查：必须为 10x 才能开仓）
+            if not self.sync_leverage():
+                self._log("OPEN_LONG_FAIL", f"❌ 开多中断：无法将交易所杠杆同步为 {LEVERAGE}x，拒绝带着高杠杆风险开仓！")
+                return {
+                    "success": False,
+                    "order_id": None,
+                    "message": f"❌ 开多中断：无法将交易所杠杆同步为 {LEVERAGE}x，拒绝带着高杠杆风险开仓！",
+                    "details": {"error": "leverage_sync_failed"}
+                }
+
 
             # 第2步：下开仓单（市价）
             if self._is_dry_run():
@@ -354,8 +359,16 @@ class TradeExecutor:
             }
         
         try:
-            # 第1步：同步杠杆到交易所
-            self.sync_leverage()
+            # 第1步：同步杠杆到交易所（硬性检查：必须为 10x 才能开仓）
+            if not self.sync_leverage():
+                self._log("OPEN_SHORT_FAIL", f"❌ 开空中断：无法将交易所杠杆同步为 {LEVERAGE}x，拒绝带着高杠杆风险开仓！")
+                return {
+                    "success": False,
+                    "order_id": None,
+                    "message": f"❌ 开空中断：无法将交易所杠杆同步为 {LEVERAGE}x，拒绝带着高杠杆风险开仓！",
+                    "details": {"error": "leverage_sync_failed"}
+                }
+
 
             # 第2步：下开仓单（市价）
             if self._is_dry_run():
