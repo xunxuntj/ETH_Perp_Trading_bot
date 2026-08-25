@@ -6,10 +6,7 @@ on:
       days:
         description: '评估的天数（留空则自动计算从 2026年6月2日 到现在的实际天数）'
         required: false
-        default: ''
-  schedule:
-    # 每天 UTC 00:00 (北京时间 08:00) 自动生成推送战报
-    - cron: '0 0 * * *'
+        default: ''    
 
 
 env:
