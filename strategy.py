@@ -522,6 +522,19 @@ class TradingStrategy:
         # 检查持仓状态（无缓存依赖）
         has_api_position = position is not None and position.get('size', 0) != 0
 
+        # 无持仓时的残留遗留挂单防护清理 (Orphan Order Sanitization)
+        if not has_api_position:
+            try:
+                open_limit_orders = self.client.get_orders(self.contract, status="open")
+                open_price_orders = self.client.get_price_orders(self.contract, status="open")
+                if open_limit_orders or open_price_orders:
+                    print(f"\n[ORPHAN CLEANUP] 检测到 [{self.contract}] 无持仓但存在残留订单 (普通单: {len(open_limit_orders)}, 触发单: {len(open_price_orders)})，进行强制清理...")
+                    self.client.cancel_orders(contract=self.contract)
+                    self.client.cancel_price_orders(contract=self.contract)
+                    print(f"[ORPHAN CLEANUP] ✅ 成功清理 [{self.contract}] 残留挂单，确保盘面干净。")
+            except Exception as orphan_err:
+                print(f"[ORPHAN CLEANUP WARNING] 清理 [{self.contract}] 残留挂单异常: {orphan_err}")
+
         # ==== 风控与冷静期对账逻辑 ====
         # 检测本地状态里记录的持仓是否已在交易所被平仓（例如触及交易所止损条件单）
         try:
@@ -571,6 +584,7 @@ class TradingStrategy:
                             print(f"[RECONCILE WARNING] 清理交易所挂单失败: {cancel_err}")
         except Exception as state_err:
             print(f"[RECONCILE ERROR] 读取或处理本地持仓状态失败: {state_err}")
+
 
 
         # 计算账户本金（用于显示和风控判断）:

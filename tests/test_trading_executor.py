@@ -338,7 +338,8 @@ class TestTradeExecutor:
             qty=27
         )
         assert result["success"] is True
-        assert call_sequence == ["create", "cancel"]
+        assert call_sequence == ["cancel", "create", "cancel"]
+
 
     def test_adjust_stop_loss_sequence(self):
         """测试调整止损采用先创后撤的顺序"""

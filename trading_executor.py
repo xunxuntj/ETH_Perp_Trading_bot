@@ -227,7 +227,16 @@ class TradeExecutor:
 
 
 
+            # 第1.5步：下新单前清理当前合约任何可能的旧遗留挂单/触发单
+            if not self._is_dry_run():
+                try:
+                    self.client.cancel_orders(contract=self.contract)
+                    self.client.cancel_price_orders(contract=self.contract)
+                except Exception as clean_err:
+                    self._log("PRE_OPEN_CLEAN_WARNING", f"⚠️ 开仓前清理遗留挂单提示: {clean_err}")
+
             # 第2步：下开仓单（市价）
+
             if self._is_dry_run():
                 main_order = {
                     "id": f"sim_long_{int(time.time())}",
@@ -368,7 +377,16 @@ class TradeExecutor:
 
 
 
+            # 第1.5步：下新单前清理当前合约任何可能的旧遗留挂单/触发单
+            if not self._is_dry_run():
+                try:
+                    self.client.cancel_orders(contract=self.contract)
+                    self.client.cancel_price_orders(contract=self.contract)
+                except Exception as clean_err:
+                    self._log("PRE_OPEN_CLEAN_WARNING", f"⚠️ 开仓前清理遗留挂单提示: {clean_err}")
+
             # 第2步：下开仓单（市价）
+
             if self._is_dry_run():
                 main_order = {
                     "id": f"sim_short_{int(time.time())}",
