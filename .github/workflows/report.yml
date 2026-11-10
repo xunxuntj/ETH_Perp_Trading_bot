@@ -56,3 +56,12 @@ jobs:
           AI_API_URL: ${{ secrets.AI_API_URL }}
           AI_MODEL: ${{ secrets.AI_MODEL }}
         run: python generate_portfolio_report.py
+
+      - name: Upload report html
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-report-html
+          path: portfolio_report_*.html
+          retention-days: 7
+
