@@ -41,6 +41,15 @@ class TestADXLogic(unittest.TestCase):
             "close": closes_flat
         }, index=dates)
 
+        # 200 daily bars ending on the day before decision date to satisfy validate_and_extract_daily_ema50
+        daily_dates = pd.date_range(end="2026-06-01", periods=200, freq="1D", tz="UTC")
+        self.df_daily = pd.DataFrame({
+            "open": [100.0 + i*0.5 for i in range(200)],
+            "high": [105.0 + i*0.5 for i in range(200)],
+            "low": [95.0 + i*0.5 for i in range(200)],
+            "close": [100.0 + i*0.5 for i in range(200)],
+        }, index=daily_dates)
+
     def test_calculate_adx_returns_valid_series(self):
         adx = calculate_adx(self.df_trending, period=16)
         self.assertEqual(len(adx), 50)
@@ -64,8 +73,10 @@ class TestADXLogic(unittest.TestCase):
     def test_adx_filter_in_strategy_analyze_allows_trend(self):
         # Mock GateClient
         client = MagicMock(spec=GateClient)
-        # Mock get_candlesticks to return self.df_trending for both 30m and 1h
-        client.get_candlesticks.return_value = self.df_trending
+        # Mock get_candlesticks to return self.df_trending for 30m/1h and self.df_daily for 1d
+        client.get_candlesticks.side_effect = lambda contract, interval, limit=100: (
+            self.df_daily if interval == "1d" else self.df_trending
+        )
         client.get_account.return_value = {"total": 500, "available": 250, "unrealised_pnl": 0}
         client.get_positions.return_value = None
 
@@ -100,8 +111,10 @@ class TestADXLogic(unittest.TestCase):
     def test_adx_filter_in_strategy_analyze_blocks_range(self):
         # Mock GateClient
         client = MagicMock(spec=GateClient)
-        # Mock get_candlesticks to return self.df_flat for both 30m and 1h
-        client.get_candlesticks.return_value = self.df_flat
+        # Mock get_candlesticks to return self.df_flat for 30m/1h and self.df_daily for 1d
+        client.get_candlesticks.side_effect = lambda contract, interval, limit=100: (
+            self.df_daily if interval == "1d" else self.df_flat
+        )
         client.get_account.return_value = {"total": 500, "available": 250, "unrealised_pnl": 0}
         client.get_positions.return_value = None
 

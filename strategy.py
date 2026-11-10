@@ -458,23 +458,55 @@ class TradingStrategy:
         atr_z_series_1h = calculate_atr_zscore(df_1h, 14, 100)
         ema20_series_30m = calculate_ema(df_30m['close'], 20)
 
-        df_1d['ema_50'] = df_1d['close'].ewm(span=50, adjust=False).mean()
-        last_1d_close = df_1d['close'].iloc[-2] if len(df_1d) >= 2 else df_1d['close'].iloc[-1]
-        last_1d_ema50 = df_1d['ema_50'].iloc[-2] if len(df_1d) >= 2 else df_1d['ema_50'].iloc[-1]
-        macro_1d_dir = 1 if last_1d_close >= last_1d_ema50 else -1
+        # V1 Post-ETF 机构化状态分类器判定: 严密日线 EMA50 计算与数据质量校验 (带安全降级)
+        from daily_ema_validator import validate_and_extract_daily_ema50
+        
+        # 决策时刻严格取当前 30m 收盘时刻 (即当前 K 线开始形成的时刻)
+        decision_time = df_30m.index[-1]
+        if getattr(decision_time, 'tzinfo', None) is None:
+            decision_time = decision_time.replace(tzinfo=timezone.utc)
+        else:
+            decision_time = decision_time.astimezone(timezone.utc)
 
+        # 1. 获取并校验标的日线数据
+        macro_filter_available = True
+        macro_diag_msg = ""
+        try:
+            df_sym_1d = self.client.get_candlesticks(self.contract, "1d", 200)
+            is_valid_sym, last_1d_close, last_1d_ema50, msg_sym = validate_and_extract_daily_ema50(df_sym_1d, decision_time, min_warmup_bars=150)
+            if is_valid_sym:
+                macro_1d_dir = 1 if last_1d_close >= last_1d_ema50 else -1
+            else:
+                macro_filter_available = False
+                macro_1d_dir = 0
+                macro_diag_msg += f"[{self.contract} 1D不可用: {msg_sym}] "
+        except Exception as e:
+            macro_filter_available = False
+            macro_1d_dir = 0
+            macro_diag_msg += f"[{self.contract} 1D获取异常: {e}] "
+
+        # 2. 获取并校验 BTC 大盘日线数据
         if self.contract.upper() == "BTC_USDT":
             btc_macro_1d_dir = macro_1d_dir
+            if not macro_filter_available:
+                btc_macro_diag_msg = macro_diag_msg
         else:
             try:
-                df_btc_1h = self.client.get_candlesticks("BTC_USDT", "1h", 1000)
-                df_btc_1d = df_btc_1h.resample('1D').agg(agg_dict).dropna()
-                df_btc_1d['ema_50'] = df_btc_1d['close'].ewm(span=50, adjust=False).mean()
-                last_btc_close = df_btc_1d['close'].iloc[-2] if len(df_btc_1d) >= 2 else df_btc_1d['close'].iloc[-1]
-                last_btc_ema50 = df_btc_1d['ema_50'].iloc[-2] if len(df_btc_1d) >= 2 else df_btc_1d['ema_50'].iloc[-1]
-                btc_macro_1d_dir = 1 if last_btc_close >= last_btc_ema50 else -1
-            except Exception:
-                btc_macro_1d_dir = macro_1d_dir
+                df_btc_1d = self.client.get_candlesticks("BTC_USDT", "1d", 200)
+                is_valid_btc, last_btc_close, last_btc_ema50, msg_btc = validate_and_extract_daily_ema50(df_btc_1d, decision_time, min_warmup_bars=150)
+                if is_valid_btc:
+                    btc_macro_1d_dir = 1 if last_btc_close >= last_btc_ema50 else -1
+                else:
+                    macro_filter_available = False
+                    btc_macro_1d_dir = 0
+                    macro_diag_msg += f"[BTC 1D不可用: {msg_btc}] "
+            except Exception as e:
+                macro_filter_available = False
+                btc_macro_1d_dir = 0
+                macro_diag_msg += f"[BTC 1D获取异常: {e}] "
+
+        if not macro_filter_available:
+            print(f"[MACRO FILTER PAUSE] ⚠️ 日线数据质量校验未通过，已安全暂停新开仓: {macro_diag_msg}")
 
 
         last_chop_4h = chop_series_4h.iloc[-2] if len(chop_series_4h) >= 2 else 50.0
