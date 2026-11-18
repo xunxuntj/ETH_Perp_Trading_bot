@@ -321,6 +321,7 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
     计算完整策略指标与隐形磨损数据
     """
     if df.empty:
+        initial_capital = float(current_equity) if current_equity > 0 else 1000.0
         return {
             "symbol": symbol,
             "days": days,
@@ -332,6 +333,10 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
             "loss_count": 0,
             "win_rate": 0.0,
             "total_pnl": 0.0,
+            "initial_capital": float(initial_capital),
+            "current_equity": float(current_equity),
+            "return_rate": 0.0,
+            "annualized_return": 0.0,
             "total_fee": 0.0,
             "profit_factor": 0.0,
             "ratio_avg_win_loss": 0.0,
@@ -385,6 +390,9 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
     initial_capital = current_equity - total_pnl
     if initial_capital <= 0:
         initial_capital = 1000.0  # 兜底
+        
+    return_rate = total_pnl / initial_capital if initial_capital > 0 else 0.0
+    annualized_return = return_rate * (365.0 / max(1, days))
         
     cum_pnl = df['pnl'].cumsum()
     capital_curve = initial_capital + cum_pnl
@@ -509,6 +517,10 @@ def calculate_metrics_to_json(df: pd.DataFrame, symbol: str, days: int, start_dt
         "loss_count": int(loss_count),
         "win_rate": float(win_rate),
         "total_pnl": float(total_pnl),
+        "initial_capital": float(initial_capital),
+        "current_equity": float(current_equity),
+        "return_rate": float(return_rate),
+        "annualized_return": float(annualized_return),
         "total_fee": float(total_fee),
         "profit_factor": pf_val,
         "ratio_avg_win_loss": wl_val,
@@ -726,6 +738,8 @@ def main():
 
 💰 *【盈亏速览】*
 • 累计净利： *{pnl_sign}{report_dict['total_pnl']:.2f} U* (已扣手续费/资金费)
+• 收益率： *{pnl_sign}{report_dict['return_rate']*100:.2f}%* (初始本金: {report_dict['initial_capital']:.2f} U)
+• 折算年化： *{pnl_sign}{report_dict['annualized_return']*100:.2f}%*
 • 获利因子： *{pf_str}* (健康阀值 > 1.15)
 • 胜率笔数： *{report_dict['win_rate']*100:.1f}%* (赢: {report_dict['win_count']} | 输: {report_dict['loss_count']})
 
@@ -749,6 +763,8 @@ _{diagnostic_summary}_
 
 💰 <b>【盈亏速览】</b>
 • 累计净利： <b>{pnl_sign}{report_dict['total_pnl']:.2f} U</b> (已扣手续费/资金费)
+• 收益率： <b>{pnl_sign}{report_dict['return_rate']*100:.2f}%</b> (初始本金: {report_dict['initial_capital']:.2f} U)
+• 折算年化： <b>{pnl_sign}{report_dict['annualized_return']*100:.2f}%</b>
 • 获利因子： <b>{pf_str}</b> (健康阀值 &gt; 1.15)
 • 胜率笔数： <b>{report_dict['win_rate']*100:.1f}%</b> (赢: {report_dict['win_count']} | 输: {report_dict['loss_count']})
 

@@ -110,10 +110,15 @@
             <!-- KPI 卡片 -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <!-- KPI 1 -->
-                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg">
-                    <div class="text-xs text-brand-textMuted font-medium">累计净利润 (扣手续费/资金费)</div>
-                    <div id="kpiNetProfit" class="text-2xl font-bold mt-2 text-white">0.00 U</div>
-                    <div id="kpiFee" class="text-xs text-brand-primary mt-1">手续费已扣除: 0.00 U</div>
+                <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg flex flex-col justify-between">
+                    <div>
+                        <div class="text-xs text-brand-textMuted font-medium">累计净利润 (扣手续费/资金费)</div>
+                        <div id="kpiNetProfit" class="text-2xl font-bold mt-2 text-white">0.00 U</div>
+                    </div>
+                    <div class="mt-2 space-y-1">
+                        <div id="kpiReturnRate" class="text-xs text-brand-primary font-semibold">收益率: +0.00% | 折算年化: +0.00%</div>
+                        <div id="kpiFee" class="text-xs text-brand-textMuted">手续费已扣除: 0.00 U</div>
+                    </div>
                 </div>
                 <!-- KPI 2 -->
                 <div class="bg-brand-card rounded-lg p-5 border-l-4 border-brand-primary shadow-lg flex flex-col justify-between">
@@ -381,6 +386,14 @@
             // 2. 更新 KPI
             const pnl_sign = reportData.total_pnl >= 0 ? "+" : "";
             document.getElementById('kpiNetProfit').innerText = pnl_sign + reportData.total_pnl.toFixed(2) + " U";
+            const ret_rate = (reportData.return_rate || 0) * 100;
+            const ann_rate = (reportData.annualized_return || 0) * 100;
+            const ret_sign = ret_rate >= 0 ? "+" : "";
+            const ann_sign = ann_rate >= 0 ? "+" : "";
+            if (document.getElementById('kpiReturnRate')) {
+                document.getElementById('kpiReturnRate').innerText = `收益率: ${ret_sign}${ret_rate.toFixed(2)}% | 折算年化: ${ann_sign}${ann_rate.toFixed(2)}%`;
+                document.getElementById('kpiReturnRate').className = ret_rate >= 0 ? "text-xs text-brand-primary font-semibold" : "text-xs text-red-400 font-semibold";
+            }
             document.getElementById('kpiFee').innerText = "手续费已扣除: " + Math.abs(reportData.total_fee).toFixed(2) + " U";
             document.getElementById('kpiWinRate').innerText = (reportData.win_rate * 100).toFixed(1) + "%";
             document.getElementById('kpiTradesCount').innerText = "总笔数: " + reportData.total_trades + " (赢: " + reportData.win_count + " | 输: " + reportData.loss_count + ")";

@@ -559,8 +559,9 @@ def main():
         
     if all_empty:
         print(f"⚠️ No trading data found for any basket symbol in this period.")
+        initial_capital = float(current_equity) if current_equity > 0 else 1000.0
         for symbol in PORTFOLIO_BASKET:
-            asset_stats[symbol] = calculate_single_asset_stats(pd.DataFrame(), symbol, current_equity)
+            asset_stats[symbol] = calculate_single_asset_stats(pd.DataFrame(), symbol, initial_capital)
             
         report_dict = {
             "days": days,
@@ -574,6 +575,10 @@ def main():
             "loss_count": 0,
             "win_rate": 0.0,
             "total_pnl": 0.0,
+            "initial_capital": float(initial_capital),
+            "current_equity": float(current_equity),
+            "return_rate": 0.0,
+            "annualized_return": 0.0,
             "total_fee": 0.0,
             "profit_factor": 0.0,
             "ratio_avg_win_loss": 0.0,
@@ -610,6 +615,9 @@ def main():
         initial_capital = current_equity - total_pnl
         if initial_capital <= 0:
             initial_capital = 1000.0
+            
+        return_rate = total_pnl / initial_capital if initial_capital > 0 else 0.0
+        annualized_return = return_rate * (365.0 / max(1, days))
             
         cum_pnl = df_comb['pnl'].cumsum()
         capital_curve = initial_capital + cum_pnl
@@ -756,6 +764,10 @@ def main():
             "loss_count": int(loss_count),
             "win_rate": float(win_rate),
             "total_pnl": float(total_pnl),
+            "initial_capital": float(initial_capital),
+            "current_equity": float(current_equity),
+            "return_rate": float(return_rate),
+            "annualized_return": float(annualized_return),
             "total_fee": float(total_fee),
             "profit_factor": pf_val,
             "ratio_avg_win_loss": wl_val,
@@ -828,6 +840,8 @@ def main():
 
 💰 <b>【组合盈亏大盘】</b>
 • 账户组合净利： <b>{pnl_sign}{report_dict['total_pnl']:.2f} U</b> (已扣手续费/资金费)
+• 收益率： <b>{pnl_sign}{report_dict['return_rate']*100:.2f}%</b> (初始本金: {report_dict['initial_capital']:.2f} U)
+• 折算年化： <b>{pnl_sign}{report_dict['annualized_return']*100:.2f}%</b>
 • 组合获利因子： <b>{pf_str}</b> (健康阀值 &gt; 1.15)
 • 组合综合胜率： <b>{report_dict['win_rate']*100:.1f}%</b> (赢: {report_dict['win_count']} | 输: {report_dict['loss_count']} | 共: {report_dict['total_trades']} 笔)
 • 组合最大回撤： <b>{report_dict['max_drawdown']*100:.1f}%</b>
