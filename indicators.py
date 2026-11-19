@@ -185,24 +185,34 @@ def calculate_rma(series: pd.Series, period: int) -> pd.Series:
     return pd.Series(rma, index=series.index)
 
 
-def calculate_adx(df: pd.DataFrame, period: int = 16) -> pd.Series:
-    """
-    计算 ADX (Average Directional Index)，与 TradingView ta.dmi(period, period) 的 ADX 值完全一致
-    """
+def _compute_true_range(df: pd.DataFrame) -> pd.Series:
+    """Compute True Range safely with empty-DataFrame protection."""
+    if df.empty:
+        return pd.Series(dtype=float, index=df.index)
     high = df['high']
     low = df['low']
-    close = df['close']
-    prev_high = high.shift(1)
-    prev_low = low.shift(1)
-    prev_close = close.shift(1)
-    
-    # 1. 计算 True Range (TR)
+    prev_close = df['close'].shift(1)
     tr1 = high - low
     tr2 = (high - prev_close).abs()
     tr3 = (low - prev_close).abs()
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    # 对于第一根K线，TR为high - low
     tr.iloc[0] = high.iloc[0] - low.iloc[0]
+    return tr
+
+
+def calculate_adx(df: pd.DataFrame, period: int = 16) -> pd.Series:
+    """
+    计算 ADX (Average Directional Index)，与 TradingView ta.dmi(period, period) 的 ADX 值完全一致
+    """
+    if df.empty:
+        return pd.Series(dtype=float, index=df.index)
+    high = df['high']
+    low = df['low']
+    prev_high = high.shift(1)
+    prev_low = low.shift(1)
+    
+    # 1. 计算 True Range (TR)
+    tr = _compute_true_range(df)
     
     # 2. 计算 Directional Movement (+DM, -DM)
     up = high - prev_high
@@ -248,17 +258,9 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """
     计算 ATR (Average True Range)
     """
-    high = df['high']
-    low = df['low']
-    close = df['close']
-    prev_close = close.shift(1)
-    
-    tr1 = high - low
-    tr2 = (high - prev_close).abs()
-    tr3 = (low - prev_close).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    tr.iloc[0] = high.iloc[0] - low.iloc[0]
-    
+    if df.empty:
+        return pd.Series(dtype=float, index=df.index)
+    tr = _compute_true_range(df)
     atr = calculate_rma(tr, period)
     return atr
 
@@ -287,17 +289,11 @@ def calculate_chop(df: pd.DataFrame, period: int = 14) -> pd.Series:
     计算 Choppiness Index (混乱指数，完全对齐 TradingView ta.chop)
     CHOP = 100 * log10(sum(TR, period) / (highest(high, period) - lowest(low, period))) / log10(period)
     """
+    if df.empty:
+        return pd.Series(dtype=float, index=df.index)
     high = df['high']
     low = df['low']
-    close = df['close']
-    prev_close = close.shift(1)
-    
-    # 计算 True Range
-    tr1 = high - low
-    tr2 = (high - prev_close).abs()
-    tr3 = (low - prev_close).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    tr.iloc[0] = high.iloc[0] - low.iloc[0]
+    tr = _compute_true_range(df)
     
     sum_tr = tr.rolling(window=period).sum()
     highest_high = high.rolling(window=period).max()

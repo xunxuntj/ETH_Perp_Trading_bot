@@ -7,6 +7,8 @@ import time
 import hashlib
 import hmac
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import json
 from typing import Optional
 import pandas as pd
@@ -20,6 +22,17 @@ class GateClient:
         self.api_key = api_key
         self.api_secret = api_secret
         self.session = requests.Session()
+        # Mount automatic retry adapter for idempotent GET requests (429 / 5xx)
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"],
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
         self.timeout = (5, 15)  # (connect_timeout, read_timeout) seconds
         # Enable debug if parameter True or environment variable GATE_DEBUG is set
         gate_debug = os.getenv('GATE_DEBUG', '').lower()
@@ -188,9 +201,9 @@ class GateClient:
 
         try:
             data = resp.json()
-            # 总是打印原始数据，便于诊断
-            import sys
-            print(f"[GATE RAW ACCOUNT] {data}", file=sys.stderr)
+            if self.debug:
+                import sys
+                print(f"[GATE RAW ACCOUNT] {data}", file=sys.stderr)
         except Exception as e:
             # If JSON decoding fails, log raw text for debugging and re-raise
             if self.debug:
@@ -201,20 +214,38 @@ class GateClient:
                     pass
             raise
 
-        # Gate.io may return a list of account entries (one per currency),
-        # e.g. [{"currency":"USDT","total":"100.0","available":"50.0",...}, ...]
-        # Handle both list and dict responses robustly.
         def _safe_float(value):
             try:
                 return float(value or 0)
             except Exception:
                 return 0.0
 
-        if self.debug:
-            print(f"[GATE DEBUG] get_account raw data: {data}")
+        def _parse_entry(entry: dict) -> dict:
+            cross_margin_balance = _safe_float(entry.get('cross_margin_balance', 0))
+            cross_available = _safe_float(entry.get('cross_available', 0))
+            cross_initial_margin = _safe_float(entry.get('cross_initial_margin', 0))
+            cross_order_margin = _safe_float(entry.get('cross_order_margin', 0))
+
+            available = _safe_float(entry.get('available', entry.get('free', 0)))
+            raw_total = _safe_float(entry.get('total', entry.get('equity', entry.get('wallet_balance', 0))))
+            unrealised_pnl = _safe_float(entry.get('unrealised_pnl', entry.get('unrealized_pnl', entry.get('cross_unrealised_pnl', 0))))
+
+            if cross_margin_balance <= 0 and (cross_available > 0 or cross_initial_margin > 0 or cross_order_margin > 0):
+                cross_margin_balance = cross_available + cross_initial_margin + cross_order_margin
+
+            total = cross_margin_balance if cross_margin_balance > 0 else raw_total
+            final_available = cross_available if cross_available > 0 else available
+
+            if self.debug:
+                print(f"[GATE DEBUG] selected total equity: {total}, available: {final_available}, unrealised_pnl: {unrealised_pnl}")
+
+            return {
+                'total': total,
+                'available': final_available,
+                'unrealised_pnl': unrealised_pnl
+            }
 
         if isinstance(data, list):
-            # prefer USDT entry; fall back to first entry
             entry = None
             for item in data:
                 if str(item.get('currency', '')).upper() in ('USDT', 'USD'):
@@ -222,91 +253,13 @@ class GateClient:
                     break
             if entry is None and len(data) > 0:
                 entry = data[0]
-
             if entry:
-                if self.debug:
-                    print(f"[GATE DEBUG] get_account entry fields: {entry.keys()}")
-                
-                # Fetch cross margin specific fields
-                cross_margin_balance = _safe_float(entry.get('cross_margin_balance', 0))
-                cross_available = _safe_float(entry.get('cross_available', 0))
-                cross_initial_margin = _safe_float(entry.get('cross_initial_margin', 0))
-                cross_order_margin = _safe_float(entry.get('cross_order_margin', 0))
-                
-                available = _safe_float(entry.get('available', entry.get('free', 0)))
-                raw_total = _safe_float(entry.get('total', entry.get('equity', entry.get('wallet_balance', 0))))
-                unrealised_pnl = _safe_float(entry.get('unrealised_pnl', entry.get('unrealized_pnl', entry.get('cross_unrealised_pnl', 0))))
-                
-                # Determine total equity
-                # In cross margin mode, cross_margin_balance is preferred.
-                # If not returned (or 0) but cross margin is active (e.g. cross_available > 0),
-                # we calculate the cross-margin total equity.
-                if cross_margin_balance <= 0 and (cross_available > 0 or cross_initial_margin > 0 or cross_order_margin > 0):
-                    cross_margin_balance = cross_available + cross_initial_margin + cross_order_margin
-                
-                if cross_margin_balance > 0:
-                    total = cross_margin_balance
-                else:
-                    total = raw_total
-                
-                # Determine available margin
-                final_available = cross_available if cross_available > 0 else available
-                
-                if self.debug:
-                    print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, cross_margin_balance={cross_margin_balance}, raw_total={raw_total}, total={total}, unrealised_pnl={unrealised_pnl}")
-                    print(f"[GATE DEBUG] selected total equity: {total}, available: {final_available}")
-                
-                return {
-                    'total': total,
-                    'available': final_available * 0.5,
-                    'unrealised_pnl': unrealised_pnl
-                }
-            else:
-                if self.debug:
-                    print("[GATE DEBUG] get_account: no entry found in list response")
-                return {'total': 0.0, 'available': 0.0, 'unrealised_pnl': 0.0}
+                return _parse_entry(entry)
+            return {'total': 0.0, 'available': 0.0, 'unrealised_pnl': 0.0}
 
-        # If it's a dict, try to parse fields directly
         if isinstance(data, dict):
-            if self.debug:
-                print(f"[GATE DEBUG] get_account dict fields: {data.keys()}")
-            
-            # Fetch cross margin specific fields
-            cross_margin_balance = _safe_float(data.get('cross_margin_balance', 0))
-            cross_available = _safe_float(data.get('cross_available', 0))
-            cross_initial_margin = _safe_float(data.get('cross_initial_margin', 0))
-            cross_order_margin = _safe_float(data.get('cross_order_margin', 0))
-            
-            available = _safe_float(data.get('available', data.get('free', 0)))
-            raw_total = _safe_float(data.get('total', data.get('equity', data.get('wallet_balance', 0))))
-            unrealised_pnl = _safe_float(data.get('unrealised_pnl', data.get('unrealized_pnl', data.get('cross_unrealised_pnl', 0))))
-            
-            # Determine total equity
-            # In cross margin mode, cross_margin_balance is preferred.
-            # If not returned (or 0) but cross margin is active (e.g. cross_available > 0),
-            # we calculate the cross-margin total equity.
-            if cross_margin_balance <= 0 and (cross_available > 0 or cross_initial_margin > 0 or cross_order_margin > 0):
-                cross_margin_balance = cross_available + cross_initial_margin + cross_order_margin
-            
-            if cross_margin_balance > 0:
-                total = cross_margin_balance
-            else:
-                total = raw_total
-            
-            # Determine available margin
-            final_available = cross_available if cross_available > 0 else available
-            
-            if self.debug:
-                print(f"[GATE DEBUG] cross_available={cross_available}, available={available}, cross_margin_balance={cross_margin_balance}, raw_total={raw_total}, total={total}, unrealised_pnl={unrealised_pnl}")
-                print(f"[GATE DEBUG] selected total equity: {total}, available: {final_available}")
-            
-            return {
-                'total': total,
-                'available': final_available * 0.5,
-                'unrealised_pnl': unrealised_pnl
-            }
+            return _parse_entry(data)
 
-        # Unknown shape
         if self.debug:
             print(f"[GATE DEBUG] get_account: unknown response shape: {type(data)}")
         return {'total': 0.0, 'available': 0.0, 'unrealised_pnl': 0.0}

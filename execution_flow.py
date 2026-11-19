@@ -344,26 +344,54 @@ class ExecutionFlow:
                 },
                 "message": close_exec["message"]
             }
+
+        # 校验反手开仓参数（防 0 张或无效止损）
+        if not reverse_qty or int(reverse_qty) <= 0 or not reverse_stop or float(reverse_stop) <= 0:
+            warn_msg = (
+                f"⚠️ 原仓位已平仓，但反手开{reverse_direction}参数无效"
+                f" (qty={reverse_qty}, stop={reverse_stop})，已中止反手开仓"
+            )
+            return {
+                "strategy_action": f"close_and_reverse_{reverse_direction}",
+                "trade_executed": True,
+                "trade_details": {
+                    "close_result": close_exec,
+                    "reverse_result": {"success": False, "error": "invalid_reverse_params"},
+                    "partial_failure": True,
+                    "strategy_details": details
+                },
+                "message": close_exec["message"] + "\n\n" + warn_msg + "\n\n" + strategy_result.message
+            }
+
+        # 计算反手限价止盈价并透传
+        from config import get_tp_ratio
+        tp_ratio = get_tp_ratio(self.contract)
+        sl_dist = abs(current_price - float(reverse_stop))
+        reverse_tp = (current_price + tp_ratio * sl_dist) if reverse_direction == "long" else (current_price - tp_ratio * sl_dist)
         
         # 第2步：反手开仓
         if reverse_direction == "long":
-            reverse_exec = self.executor.open_long(current_price, reverse_stop, reverse_qty)
+            reverse_exec = self.executor.open_long(current_price, float(reverse_stop), int(reverse_qty), tp_price=reverse_tp)
         else:
-            reverse_exec = self.executor.open_short(current_price, reverse_stop, reverse_qty)
+            reverse_exec = self.executor.open_short(current_price, float(reverse_stop), int(reverse_qty), tp_price=reverse_tp)
             
         if reverse_exec["success"]:
             update_position_state(
                 direction=reverse_direction,
                 phase="SURVIVAL",
-                stop_loss=reverse_stop,
+                stop_loss=float(reverse_stop),
                 entry_price=current_price,
                 current_time=time.time(),
-                initial_30m_st=reverse_stop,
+                initial_30m_st=float(reverse_stop),
                 contract=self.contract
             )
-
-        
-        combined_msg = close_exec["message"] + "\n\n" + reverse_exec["message"]
+            combined_msg = close_exec["message"] + "\n\n" + reverse_exec["message"]
+        else:
+            combined_msg = (
+                close_exec["message"]
+                + "\n\n🚨 [半成交告警] 原仓位已成功平仓，但反手开仓失败，当前为空仓：\n"
+                + reverse_exec["message"]
+            )
         
         return {
             "strategy_action": f"close_and_reverse_{reverse_direction}",
@@ -371,6 +399,7 @@ class ExecutionFlow:
             "trade_details": {
                 "close_result": close_exec,
                 "reverse_result": reverse_exec,
+                "partial_failure": close_exec["success"] and (not reverse_exec["success"]),
                 "strategy_details": details
             },
             "message": combined_msg + "\n\n" + strategy_result.message

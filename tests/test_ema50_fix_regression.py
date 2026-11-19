@@ -21,12 +21,24 @@ class TestEMA50WarmupFix(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
-        # Load local 5-year benchmark data
+        # Load local 5-year benchmark data if present; otherwise synthesize deterministic 2000-day series for CI
         btc_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backtest", "data", "BTC_USDT_1h_5y.csv")
-        df_1h = pd.read_csv(btc_file)
-        df_1h['dt'] = pd.to_datetime(df_1h['timestamp'], unit='s', utc=True)
-        df_1h.set_index('dt', inplace=True)
-        cls.df_1d_true = df_1h.resample('1D').agg({'open':'first','high':'max','low':'min','close':'last'}).dropna()
+        if os.path.exists(btc_file):
+            df_1h = pd.read_csv(btc_file)
+            df_1h['dt'] = pd.to_datetime(df_1h['timestamp'], unit='s', utc=True)
+            df_1h.set_index('dt', inplace=True)
+            cls.df_1d_true = df_1h.resample('1D').agg({'open':'first','high':'max','low':'min','close':'last'}).dropna()
+        else:
+            rng = np.random.default_rng(42)
+            dates = pd.date_range(end="2026-11-10", periods=2000, freq="1D", tz="UTC")
+            closes = 20000.0 + np.linspace(0, 60000.0, 2000) + np.cumsum(rng.normal(0, 300.0, 2000))
+            closes = np.maximum(closes, 1000.0)
+            cls.df_1d_true = pd.DataFrame({
+                'open': closes - 100.0,
+                'high': closes + 500.0,
+                'low': closes - 500.0,
+                'close': closes,
+            }, index=dates)
         cls.df_1d_true['ema_50'] = cls.df_1d_true['close'].ewm(span=50, adjust=False).mean()
         
     def test_200_bars_convergence(self):

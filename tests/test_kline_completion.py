@@ -6,8 +6,14 @@
 import os
 import time
 from datetime import datetime, timezone, timedelta
+import pytest
 from gate_client import GateClient
 from config import GATE_API_KEY, GATE_API_SECRET, CONTRACT
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RUN_LIVE_API_TESTS", "false").lower() != "true",
+    reason="Live Gate.io network diagnostic; set RUN_LIVE_API_TESTS=true to run"
+)
 
 def test_kline_completion():
     """
