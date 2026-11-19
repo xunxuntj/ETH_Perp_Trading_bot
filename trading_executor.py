@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 from gate_client import GateClient
 from config import (
     ENABLE_AUTO_TRADING, AUTO_SET_STOP_LOSS, 
-    STOP_LOSS_MODE, CLOSE_MODE, LEVERAGE, TP_RATIO
+    STOP_LOSS_MODE, CLOSE_MODE, LEVERAGE, TP_RATIO,
+    get_tp_ratio, get_default_tick_size
 )
 
 
@@ -40,9 +41,7 @@ class TradeExecutor:
         except Exception as e:
             # 发生异常时根据合约名称给出安全的默认值
             print(f"⚠️ 获取合约 {self.contract} 配置失败, 使用默认精度: {e}")
-            if "BTC" in self.contract.upper():
-                return 0.1
-            return 0.01
+            return get_default_tick_size(self.contract)
 
     def _round_price(self, price: float) -> float:
         """根据合约价格单位对价格进行舍入，避免交易所 API 报错"""
@@ -196,7 +195,7 @@ class TradeExecutor:
             tp_price = self._round_price(tp_price)
         else:
             sl_dist = abs(entry_price - stop_loss)
-            tp_price = self._round_price(entry_price + TP_RATIO * sl_dist)
+            tp_price = self._round_price(entry_price + get_tp_ratio(self.contract) * sl_dist)
 
         if qty <= 0:
             return {
@@ -346,7 +345,7 @@ class TradeExecutor:
             tp_price = self._round_price(tp_price)
         else:
             sl_dist = abs(entry_price - stop_loss)
-            tp_price = self._round_price(entry_price - TP_RATIO * sl_dist)
+            tp_price = self._round_price(entry_price - get_tp_ratio(self.contract) * sl_dist)
 
         if qty <= 0:
             return {
@@ -552,14 +551,26 @@ class TradeExecutor:
                 }
             else:
                 # 实际交易：直接修改现有触发单的触发价（不取消重建）
-                # 第1步：查询现有open的price_orders
+                # 第1步：查询现有open的price_orders，优先筛选持仓止损单
                 existing_orders = self.client.get_price_orders(
                     contract=self.contract, status="open", limit=100
                 )
-                
+                target_stop_order = None
                 if existing_orders:
+                    for o in existing_orders:
+                        initial = o.get("initial", {})
+                        is_ro = initial.get("reduce_only")
+                        if is_ro is None:
+                            is_ro = initial.get("is_reduce_only")
+                        if is_ro and str(initial.get("auto_size", "")).lower() == "close":
+                            target_stop_order = o
+                            break
+                    if target_stop_order is None:
+                        target_stop_order = existing_orders[0]
+
+                if target_stop_order:
                     # 第2步：存在触发单，直接修改触发价
-                    order_id = str(existing_orders[0].get("id"))
+                    order_id = str(target_stop_order.get("id"))
                     updated_order = self.client.update_price_order(order_id, new_stop, self.contract)
                     self._log("ADJUST_STOP", f"✅ 止损已修改 {old_stop_str} → {new_stop:.2f} (order_id={order_id})")
                     
@@ -634,12 +645,12 @@ class TradeExecutor:
             if not self._is_dry_run():
                 try:
                     self.client.cancel_orders(contract=self.contract)
-                except:
-                    pass  # 可能没有现有挂单
+                except Exception as cancel_err:
+                    self._log("CLOSE_CLEAN_WARNING", f"⚠️ 平仓前清理普通挂单提示: {cancel_err}")
                 try:
                     self.client.cancel_price_orders(contract=self.contract)
-                except:
-                    pass  # 可能没有触发单
+                except Exception as cancel_err:
+                    self._log("CLOSE_CLEAN_WARNING", f"⚠️ 平仓前清理触发单提示: {cancel_err}")
             
             # 第2步：下平仓单（市价）
             mode_str = "多" if direction == "long" else "空"

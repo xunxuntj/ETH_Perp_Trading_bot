@@ -520,21 +520,101 @@ def reset_cooldown_notify_state(contract: str = "ETH_USDT"):
     save_cooldown_notify_state({"notified": False, "triggered_at": None, "notify_count": 0}, contract=contract)
 
 
+def get_circuit_breaker_lock_filename() -> str:
+    """Return path to the permanent hard circuit breaker lock file."""
+    return os.environ.get("CIRCUIT_BREAKER_LOCK_FILE", "circuit_breaker_lock.json")
+
+
+def load_circuit_breaker_lock() -> dict:
+    """Load permanent circuit breaker lock state."""
+    default_lock = {
+        "locked": False,
+        "triggered_at": None,
+        "trigger_equity": None,
+        "threshold": CIRCUIT_BREAKER_EQUITY,
+        "reason": ""
+    }
+    # Allow explicit manual reset via env var
+    if os.environ.get("RESET_CIRCUIT_BREAKER", "false").lower() == "true":
+        clear_circuit_breaker_lock()
+        return default_lock
+
+    filename = get_circuit_breaker_lock_filename()
+    if os.path.exists(filename):
+        try:
+            with open(filename, 'r') as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    default_lock.update(data)
+        except Exception:
+            pass
+    return default_lock
+
+
+def activate_circuit_breaker_lock(equity: float, reason: str = "") -> dict:
+    """Persist permanent hard circuit breaker lock until manual reset."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    lock_state = {
+        "locked": True,
+        "triggered_at": now_iso,
+        "trigger_equity": float(equity),
+        "threshold": CIRCUIT_BREAKER_EQUITY,
+        "reason": reason or f"本金 {equity:.2f}U ≤ {CIRCUIT_BREAKER_EQUITY}U，触发永久熔断锁"
+    }
+    filename = get_circuit_breaker_lock_filename()
+    try:
+        with open(filename, 'w') as f:
+            json.dump(lock_state, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"⚠️ 保存永久熔断锁失败 ({filename}): {e}")
+    return lock_state
+
+
+def clear_circuit_breaker_lock():
+    """Remove permanent circuit breaker lock file."""
+    filename = get_circuit_breaker_lock_filename()
+    try:
+        if os.path.exists(filename):
+            os.remove(filename)
+    except Exception as e:
+        print(f"⚠️ 清除永久熔断锁失败 ({filename}): {e}")
+
+
 
 def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownStatus:
     """
-    检查是否处于冷静期
+    检查是否处于冷静期或永久熔断锁
     
     规则:
-    1. 连续 3 笔止损亏损离场 → 强制休息 48 小时
-    2. 本金 ≤ 350U → 停手 1 周
+    1. 永久本金熔断锁（本金 ≤ 450U → 永久锁定，需人工复位）
+    2. 连续 3 笔止损亏损离场 → 强制休息 48 小时
     
     返回: CooldownStatus
     """
     notify_state = load_cooldown_notify_state(contract)
     now = datetime.now(timezone.utc)
 
-    
+    # 0. 检查已激活的永久本金熔断锁
+    cb_lock = load_circuit_breaker_lock()
+    if cb_lock.get("locked"):
+        should_notify = not notify_state["notified"]
+        if should_notify:
+            notify_state["notified"] = True
+            notify_state["triggered_at"] = now.isoformat()
+            notify_state["notify_count"] = 1
+            save_cooldown_notify_state(notify_state, contract=contract)
+        return CooldownStatus(
+            triggered=True,
+            reason="capital_circuit_breaker",
+            cooldown_hours=0,
+            should_notify=should_notify,
+            details=(
+                f"🚨 永久熔断锁生效中！{cb_lock.get('reason', '')}\n"
+                f"触发时间: {cb_lock.get('triggered_at', '未知')}\n"
+                f"如需解除，请人工确认后设置 RESET_CIRCUIT_BREAKER=true"
+            )
+        )
+
     # 1. 检查本金（防空/无效账户误判）
     try:
         account = client.get_account()
@@ -542,7 +622,10 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
             equity = float(account.get('total', 0.0) or 0.0)
             
             if 0 < equity <= CIRCUIT_BREAKER_EQUITY:
-                can_trade_time = now + timedelta(hours=168)
+                activate_circuit_breaker_lock(
+                    equity=equity,
+                    reason=f"本金 {equity:.2f}U ≤ {CIRCUIT_BREAKER_EQUITY}U，触发永久熔断锁"
+                )
                 
                 # 判断是否需要推送
                 should_notify = not notify_state["notified"]
@@ -555,11 +638,12 @@ def check_cooldown(client: GateClient, contract: str = "ETH_USDT") -> CooldownSt
                 return CooldownStatus(
                     triggered=True,
                     reason="capital_circuit_breaker",
-                    cooldown_hours=168,  # 1 周
-                    can_trade_time=can_trade_time,
+                    cooldown_hours=0,
                     should_notify=should_notify,
-                    details=f"本金 {equity:.2f}U ≤ {CIRCUIT_BREAKER_EQUITY}U，停手 1 周\n"
-                            f"可开单时间: {can_trade_time.strftime('%Y-%m-%d %H:%M UTC')}"
+                    details=(
+                        f"🚨 本金 {equity:.2f}U ≤ {CIRCUIT_BREAKER_EQUITY}U，触发永久熔断锁！\n"
+                        f"已停止所有标的开仓，如需恢复请人工设置 RESET_CIRCUIT_BREAKER=true"
+                    )
                 )
     except Exception as e:
         # API 调用失败，继续检查其他条件

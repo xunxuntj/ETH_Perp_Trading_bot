@@ -18,7 +18,7 @@ CONTRACT = os.environ.get("CONTRACT", SYMBOL)  # 永续合约
 
 # 合约面值 (不同币种面值不同，可根据 CONTRACT 自动匹配默认值，或通过环境变量覆盖)
 def _get_default_face_value(contract: str) -> float:
-    c_upper = contract.upper()
+    c_upper = (contract or "").upper()
     if "ETH" in c_upper:
         return 0.01
     elif "BTC" in c_upper:
@@ -27,6 +27,21 @@ def _get_default_face_value(contract: str) -> float:
         return 1.0
     elif "DOGE" in c_upper:
         return 10.0
+    return 0.01
+
+def get_face_value(contract: str) -> float:
+    """Resolve face value dynamically per contract (env FACE_VALUE overrides)."""
+    if os.environ.get("FACE_VALUE"):
+        return float(os.environ["FACE_VALUE"])
+    return _get_default_face_value(contract)
+
+def get_default_tick_size(contract: str) -> float:
+    """Fallback tick size per contract when exchange metadata API is unavailable."""
+    c_upper = (contract or "").upper()
+    if "BTC" in c_upper:
+        return 0.1
+    elif "DOGE" in c_upper:
+        return 0.00005
     return 0.01
 
 _default_fv = _get_default_face_value(CONTRACT)
@@ -40,6 +55,13 @@ PORTFOLIO_WEIGHTS = {
     "SOL_USDT": 0.25,
     "DOGE_USDT": 0.10
 }
+APPLY_PORTFOLIO_WEIGHTS = os.environ.get("APPLY_PORTFOLIO_WEIGHTS", "true").lower() == "true"
+
+def get_portfolio_weight(contract: str) -> float:
+    """Return portfolio allocation weight for a contract (defaults to 1.0 if disabled or unknown)."""
+    if not APPLY_PORTFOLIO_WEIGHTS or not contract:
+        return 1.0
+    return float(PORTFOLIO_WEIGHTS.get(contract.upper(), 1.0))
 
 
 # ============ 指标参数 ============
@@ -47,34 +69,46 @@ SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 3.0
 
 def _get_default_dema_period(contract: str) -> int:
-    c_upper = contract.upper()
+    c_upper = (contract or "").upper()
     if "ETH" in c_upper:
         return 150
     return 200  # BTC and others default to 200
 
+def get_dema_period(contract: str) -> int:
+    if os.environ.get("DEMA_PERIOD"):
+        return int(os.environ["DEMA_PERIOD"])
+    return _get_default_dema_period(contract)
+
 DEMA_PERIOD = int(os.environ.get("DEMA_PERIOD", str(_get_default_dema_period(CONTRACT))))
 
 def _get_default_tp_ratio(contract: str) -> float:
-    c_upper = contract.upper()
-    if "BTC" in c_upper:
-        return 5.0
-    elif "ETH" in c_upper:
-        return 6.0
-    return 5.0  # 默认回退值
+    # Aligned with V1 Post-ETF Trading Card: unified 5.0R initial take profit
+    return 5.0
+
+def get_tp_ratio(contract: str) -> float:
+    if os.environ.get("TP_RATIO"):
+        return float(os.environ["TP_RATIO"])
+    return _get_default_tp_ratio(contract)
 
 TP_RATIO = float(os.environ.get("TP_RATIO", str(_get_default_tp_ratio(CONTRACT))))
 
 # ============ ADX 信号过滤配置 ============
-USE_ADX = os.environ.get("USE_ADX", "true").lower() == "true"
+# Aligned with V1 Post-ETF Trading Card: disabled by default (can be enabled via env USE_ADX=true)
+USE_ADX = os.environ.get("USE_ADX", "false").lower() == "true"
 ADX_LENGTH = int(os.environ.get("ADX_LENGTH", "16"))
 
 def _get_default_adx_threshold(contract: str) -> float:
-    c_upper = contract.upper()
+    c_upper = (contract or "").upper()
     if "BTC" in c_upper:
         return 45.0
     elif "ETH" in c_upper:
         return 40.0
     return 40.0
+
+def get_adx_threshold(contract: str) -> float:
+    if os.environ.get("ADX_THRESHOLD"):
+        return float(os.environ["ADX_THRESHOLD"])
+    return _get_default_adx_threshold(contract)
 
 ADX_THRESHOLD = float(os.environ.get("ADX_THRESHOLD", str(_get_default_adx_threshold(CONTRACT))))
 # ADX Timeframe: 选项 30min / 1H, 默认 30M -> 映射为 "30m" / "1h"
@@ -91,11 +125,11 @@ LEVERAGE = 10
 # 模式: "fixed" = 固定金额, "percent" = 账户百分比
 RISK_MODE = os.environ.get("RISK_MODE", "fixed")
 
-# 固定模式: 单笔风险固定金额 (USDT)
+# 固定模式: 全组合单笔风险预算 (USDT，按权重拆分给各标的)
 RISK_FIXED_AMOUNT = float(os.environ.get("RISK_FIXED_AMOUNT", "5"))
 
-# 百分比模式: 单笔风险占账户资产的百分比
-RISK_PERCENT = float(os.environ.get("RISK_PERCENT", "0.02"))  # 2%
+# 百分比模式: 单笔风险占账户资产的百分比 (按权重拆分给各标的，默认对齐交易卡片 0.8%)
+RISK_PERCENT = float(os.environ.get("RISK_PERCENT", "0.008"))  # 0.8%
 
 # ============ 熔断规则 ============
 # 本金低于此值停止交易
@@ -167,37 +201,44 @@ NOTIFY_DETAILS = os.environ.get("NOTIFY_DETAILS", "true").lower() == "true"
 SIGNAL_NOTIFY_MODE = os.environ.get("SIGNAL_NOTIFY_MODE", "operation").lower()
 
 
-def get_risk_amount(equity: float) -> dict:
+def get_risk_amount(equity: float, contract: str = None) -> dict:
     """
-    根据配置计算单笔风险金额
-    
-    返回: {
-        "amount": 风险金额,
-        "mode": "fixed" 或 "percent",
-        "status": "normal" / "circuit_breaker"
-    }
+    Calculate per-trade risk budget (USDT) with optional portfolio weight allocation.
+    Supports both 'percent' and 'fixed' modes (Option A: both modes split by PORTFOLIO_WEIGHTS).
     """
-    # 熔断检查
+    # Hard circuit breaker check
     if equity <= CIRCUIT_BREAKER_EQUITY:
         return {
             "amount": 0,
             "mode": RISK_MODE,
             "status": "circuit_breaker",
+            "weight": get_portfolio_weight(contract) if contract else 1.0,
+            "allocated_equity": 0.0,
             "message": f"本金 {equity:.2f}U ≤ {CIRCUIT_BREAKER_EQUITY}U，熔断"
         }
-    
+
+    weight = get_portfolio_weight(contract) if contract else 1.0
+    allocated_equity = equity * weight
+
     if RISK_MODE == "percent":
-        amount = equity * RISK_PERCENT
+        amount = allocated_equity * RISK_PERCENT
+        weight_str = f" × 权重{weight*100:.0f}%" if contract and APPLY_PORTFOLIO_WEIGHTS else ""
         return {
             "amount": amount,
             "mode": "percent",
             "status": "normal",
-            "message": f"账户 {equity:.2f}U × {RISK_PERCENT*100:.1f}% = {amount:.2f}U"
+            "weight": weight,
+            "allocated_equity": allocated_equity,
+            "message": f"账户 {equity:.2f}U{weight_str} × {RISK_PERCENT*100:.2f}% = {amount:.2f}U"
         }
-    else:  # fixed
+    else:  # fixed (Option A: total fixed budget split by portfolio weight)
+        amount = RISK_FIXED_AMOUNT * weight
+        weight_str = f" × 权重{weight*100:.0f}%" if contract and APPLY_PORTFOLIO_WEIGHTS else ""
         return {
-            "amount": RISK_FIXED_AMOUNT,
+            "amount": amount,
             "mode": "fixed",
             "status": "normal",
-            "message": f"固定风险 {RISK_FIXED_AMOUNT:.2f}U"
+            "weight": weight,
+            "allocated_equity": allocated_equity,
+            "message": f"固定风险 {RISK_FIXED_AMOUNT:.2f}U{weight_str} = {amount:.2f}U"
         }

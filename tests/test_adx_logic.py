@@ -97,7 +97,8 @@ class TestADXLogic(unittest.TestCase):
 
 
             # Mock supertrend to trigger a buy signal (direction=1 for last element)
-            mock_st.return_value = pd.DataFrame({"supertrend": [90.0]*50, "direction": [1]*50}, index=self.df_trending.index)
+            # Keep stop distance close enough to price (~171.5) so weighted risk yields qty >= 1
+            mock_st.return_value = pd.DataFrame({"supertrend": [171.0]*50, "direction": [1]*50}, index=self.df_trending.index)
             mock_dema.return_value = pd.Series([80.0]*50, index=self.df_trending.index)
 
             strategy = TradingStrategy(client, contract="SOL_USDT")

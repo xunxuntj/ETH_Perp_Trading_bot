@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 from dataclasses import dataclass
 
 
-from config import CONTRACT
+from config import CONTRACT, get_default_tick_size
 
 POSITION_STATE_FILE = "position_state.json" if CONTRACT == "ETH_USDT" else f"position_state_{CONTRACT.lower()}.json"
 
@@ -58,7 +58,8 @@ def save_position_state(state: dict, contract: str = "ETH_USDT"):
 
 def update_position_state(direction: str, phase: str, stop_loss: float, entry_price: float, 
                          current_time: float, initial_30m_st: float = 0, 
-                         locked_stop_loss: float = 0, contract: str = "ETH_USDT") -> Tuple[bool, str]:
+                         locked_stop_loss: float = 0, contract: str = "ETH_USDT",
+                         tick_size: Optional[float] = None) -> Tuple[bool, str]:
     """
     更新持仓状态，检测是否有变化
     """
@@ -72,6 +73,10 @@ def update_position_state(direction: str, phase: str, stop_loss: float, entry_pr
     prev_stop_loss = prev_state.get('stop_loss', 0)
     prev_locked_stop_loss = prev_state.get('locked_stop_loss', 0)
     prev_initial_30m_st = prev_state.get('initial_30m_st', 0)
+
+    # Resolve tick-aware stop change threshold (prevents low-price assets like DOGE from being ignored)
+    eff_tick = float(tick_size) if (tick_size is not None and tick_size > 0) else get_default_tick_size(contract)
+    stop_diff_threshold = eff_tick - 1e-12
     
     change_type = ""
     
@@ -84,8 +89,8 @@ def update_position_state(direction: str, phase: str, stop_loss: float, entry_pr
     # 检查阶段变化：LOCKED/SURVIVAL → HOURLY
     elif current_phase_upper == "HOURLY" and prev_phase_upper in ["SURVIVAL", "LOCKED"]:
         change_type = "switch_1h"
-    # 检查止损是否有变化（差异 > 0.01）
-    elif abs(prev_stop_loss - stop_loss) > 0.01:
+    # 检查止损是否有变化（按合约 tick_size 动态判断）
+    elif abs(prev_stop_loss - stop_loss) > stop_diff_threshold:
         change_type = "stop_updated"
     
     # 构建新状态

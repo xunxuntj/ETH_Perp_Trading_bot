@@ -20,6 +20,7 @@ class GateClient:
         self.api_key = api_key
         self.api_secret = api_secret
         self.session = requests.Session()
+        self.timeout = (5, 15)  # (connect_timeout, read_timeout) seconds
         # Enable debug if parameter True or environment variable GATE_DEBUG is set
         gate_debug = os.getenv('GATE_DEBUG', '').lower()
         self.debug = bool(debug or (gate_debug not in ('', '0', 'false', 'no', 'off')))
@@ -84,7 +85,7 @@ class GateClient:
             "limit": limit
         }
         
-        resp = self.session.get(url, params=params)
+        resp = self.session.get(url, params=params, timeout=self.timeout)
         resp.raise_for_status()
         data = resp.json()
         
@@ -115,7 +116,7 @@ class GateClient:
         full_url = f"{BASE_URL}/futures/usdt/positions/{contract}"
         
         headers = self._sign("GET", url_path, "", "")
-        resp = self.session.get(full_url, headers=headers)
+        resp = self.session.get(full_url, headers=headers, timeout=self.timeout)
         if self.debug:
             try:
                 print(f"[GATE DEBUG] GET {full_url} status={resp.status_code} text={resp.text[:1000]}")
@@ -167,7 +168,7 @@ class GateClient:
         full_url = f"{BASE_URL}/futures/usdt/accounts"
         
         headers = self._sign("GET", url_path, "", "")
-        resp = self.session.get(full_url, headers=headers)
+        resp = self.session.get(full_url, headers=headers, timeout=self.timeout)
         # Debug: print request/response info to trace behavior in CI/actions
         if self.debug:
             try:
@@ -315,7 +316,7 @@ class GateClient:
         url = f"{BASE_URL}/futures/usdt/tickers"
         params = {"contract": contract}
         
-        resp = self.session.get(url, params=params)
+        resp = self.session.get(url, params=params, timeout=self.timeout)
         resp.raise_for_status()
         data = resp.json()
         
@@ -336,7 +337,7 @@ class GateClient:
         query_string = f"contract={contract}&limit={limit}"
         
         headers = self._sign("GET", url_path, query_string, "")
-        resp = self.session.get(full_url, params={"contract": contract, "limit": limit}, headers=headers)
+        resp = self.session.get(full_url, params={"contract": contract, "limit": limit}, headers=headers, timeout=self.timeout)
         
         if resp.status_code != 200:
             return []
@@ -366,7 +367,7 @@ class GateClient:
         query_string = f"contract={contract}&limit={limit}"
         
         headers = self._sign("GET", url_path, query_string, "")
-        resp = self.session.get(full_url, params={"contract": contract, "limit": limit}, headers=headers)
+        resp = self.session.get(full_url, params={"contract": contract, "limit": limit}, headers=headers, timeout=self.timeout)
         
         if resp.status_code != 200:
             return []
@@ -426,7 +427,7 @@ class GateClient:
         body = json.dumps(order)
         headers = self._sign("POST", url_path, "", body)
         
-        resp = self.session.post(full_url, data=body, headers=headers)
+        resp = self.session.post(full_url, data=body, headers=headers, timeout=self.timeout)
         try:
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
@@ -458,7 +459,7 @@ class GateClient:
         query_string = "&".join(query_parts)
 
         headers = self._sign("GET", url_path, query_string, "")
-        resp = self.session.get(full_url, params=params, headers=headers)
+        resp = self.session.get(full_url, params=params, headers=headers, timeout=self.timeout)
         if resp.status_code != 200:
             return []
         data = resp.json()
@@ -511,7 +512,7 @@ class GateClient:
 
         body = json.dumps(body_obj)
         headers = self._sign("POST", url_path, "", body)
-        resp = self.session.post(full_url, data=body, headers=headers)
+        resp = self.session.post(full_url, data=body, headers=headers, timeout=self.timeout)
         try:
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
@@ -534,7 +535,7 @@ class GateClient:
         full_url = f"{BASE_URL}/futures/usdt/price_orders/{order_id}"
 
         headers = self._sign("DELETE", url_path, "", "")
-        resp = self.session.delete(full_url, headers=headers)
+        resp = self.session.delete(full_url, headers=headers, timeout=self.timeout)
         try:
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
@@ -596,7 +597,7 @@ class GateClient:
             full_url = f"{BASE_URL}/futures/usdt/price_orders"
             body = json.dumps(new_body)
             headers = self._sign("POST", url_path, "", body)
-            resp = self.session.post(full_url, data=body, headers=headers)
+            resp = self.session.post(full_url, data=body, headers=headers, timeout=self.timeout)
             try:
                 resp.raise_for_status()
             except requests.exceptions.HTTPError as e:
@@ -673,7 +674,7 @@ class GateClient:
         query_string = "&".join(query_parts)
         
         headers = self._sign("DELETE", url_path, query_string, "")
-        resp = self.session.delete(full_url, params=params, headers=headers)
+        resp = self.session.delete(full_url, params=params, headers=headers, timeout=self.timeout)
         try:
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
@@ -708,7 +709,7 @@ class GateClient:
         query_string = "&".join(query_parts)
         
         headers = self._sign("GET", url_path, query_string, "")
-        resp = self.session.get(full_url, params=params, headers=headers)
+        resp = self.session.get(full_url, params=params, headers=headers, timeout=self.timeout)
         
         if resp.status_code != 200:
             return []
@@ -734,7 +735,7 @@ class GateClient:
         body = json.dumps({"change": str(change)})
         headers = self._sign("POST", url_path, "", body)
         
-        resp = self.session.post(full_url, data=body, headers=headers)
+        resp = self.session.post(full_url, data=body, headers=headers, timeout=self.timeout)
         resp.raise_for_status()
         
         return resp.json()
@@ -747,7 +748,7 @@ class GateClient:
         full_url = f"{BASE_URL}/futures/usdt/positions/{contract}"
         
         headers = self._sign("GET", url_path, "", "")
-        resp = self.session.get(full_url, headers=headers)
+        resp = self.session.get(full_url, headers=headers, timeout=self.timeout)
         if self.debug:
             try:
                 print(f"[GATE DEBUG] GET {full_url} status={resp.status_code} text={resp.text[:1000]}")
@@ -783,7 +784,7 @@ class GateClient:
         body = json.dumps(body_obj)
         headers = self._sign("POST", url_path, "", body)
         
-        resp = self.session.post(full_url, data=body, headers=headers)
+        resp = self.session.post(full_url, data=body, headers=headers, timeout=self.timeout)
         resp.raise_for_status()
         
         return resp.json()
@@ -801,7 +802,7 @@ class GateClient:
             return self._contract_cache[cache_key]
             
         full_url = f"{BASE_URL}/futures/{settle}/contracts/{contract}"
-        resp = self.session.get(full_url)
+        resp = self.session.get(full_url, timeout=self.timeout)
         resp.raise_for_status()
         data = resp.json()
         self._contract_cache[cache_key] = data
@@ -818,8 +819,11 @@ class GateClient:
             tick_size = float(contract_info.get("order_price_round", "0.01"))
         except Exception as e:
             # 异常时进行安全兜底
-            if "BTC" in contract.upper():
+            c_upper = contract.upper()
+            if "BTC" in c_upper:
                 tick_size = 0.1
+            elif "DOGE" in c_upper:
+                tick_size = 0.00005
             else:
                 tick_size = 0.01
                 

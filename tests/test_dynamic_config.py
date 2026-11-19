@@ -226,7 +226,7 @@ def test_dynamic_tp_and_adx_thresholds(monkeypatch):
     monkeypatch.delenv("DEMA_PERIOD", raising=False)
     monkeypatch.delenv("ADX_TIMEFRAME", raising=False)
     importlib.reload(config)
-    assert config.TP_RATIO == 6.0
+    assert config.TP_RATIO == 5.0
     assert config.ADX_THRESHOLD == 40.0
     assert config.DEMA_PERIOD == 150
     assert config.ADX_TIMEFRAME == "30m"

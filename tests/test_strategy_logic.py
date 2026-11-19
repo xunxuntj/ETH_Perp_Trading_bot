@@ -455,7 +455,9 @@ class TestLiveStopFallback(unittest.TestCase):
 
         self.assertEqual(result.action, "stop_updated")
         self.assertEqual(result.details["old_stop"], 3000.0)
-        self.assertAlmostEqual(result.details["stop_loss"], 2063.0, places=2)
+        # entry=2062.17, initial_30m_st=2063.0 -> r_dist=0.83; current=2060.0 (> 1.0R) unlocks Stage 2
+        # With LOCK_PROFIT_BUFFER=1.0 in this test module, locked stop = 2062.17 - 1.0 * 0.83 = 2061.34
+        self.assertAlmostEqual(result.details["stop_loss"], 2061.34, places=2)
 
     def test_infer_phase_uses_actual_stop_for_locked_long(self):
         strategy = TradingStrategy(DummyStrategyClient())
@@ -476,6 +478,7 @@ class TestLiveStopFallback(unittest.TestCase):
     def test_infer_phase_uses_actual_stop_for_survival_short(self):
         strategy = TradingStrategy(DummyStrategyClient())
 
+        # initial_30m_st=2030 -> r_dist=30; current=1980 -> +0.67R (< 1.0R) remains in SURVIVAL
         phase, stop_loss = strategy._infer_phase(
             entry_price=2000.0,
             current_price=1980.0,
@@ -483,6 +486,7 @@ class TestLiveStopFallback(unittest.TestCase):
             last_30m_st=2010.0,
             last_1h_st=2020.0,
             is_long=False,
+            initial_30m_st=2030.0,
             prev_stop_loss=2008.0,
         )
 
