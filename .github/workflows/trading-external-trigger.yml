@@ -79,6 +79,9 @@ jobs:
           RESET_CIRCUIT_BREAKER: ${{ secrets.RESET_CIRCUIT_BREAKER || vars.RESET_CIRCUIT_BREAKER || 'false' }}
           LOCK_PROFIT_BUFFER: ${{ secrets.LOCK_PROFIT_BUFFER || vars.LOCK_PROFIT_BUFFER || '0.5' }}
           MAX_CONSECUTIVE_LOSSES: ${{ secrets.MAX_CONSECUTIVE_LOSSES || vars.MAX_CONSECUTIVE_LOSSES || '3' }}
+          MIN_SL_DISTANCE_PCT: ${{ secrets.MIN_SL_DISTANCE_PCT || vars.MIN_SL_DISTANCE_PCT || '0.002' }}
+          MAX_SINGLE_MARGIN_RATIO: ${{ secrets.MAX_SINGLE_MARGIN_RATIO || vars.MAX_SINGLE_MARGIN_RATIO || '0.30' }}
+          MAX_TOTAL_MARGIN_RATIO: ${{ secrets.MAX_TOTAL_MARGIN_RATIO || vars.MAX_TOTAL_MARGIN_RATIO || '0.60' }}
 
           # 策略过滤与止盈配置 (对齐 V1 交易卡片)
           USE_ADX: ${{ secrets.USE_ADX || vars.USE_ADX || 'false' }}

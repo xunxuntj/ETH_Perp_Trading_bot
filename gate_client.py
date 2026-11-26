@@ -235,13 +235,20 @@ class GateClient:
 
             total = cross_margin_balance if cross_margin_balance > 0 else raw_total
             final_available = cross_available if cross_available > 0 else available
+            initial_margin = cross_initial_margin + cross_order_margin
+            if initial_margin <= 0 and total > 0 and final_available >= 0 and total > final_available:
+                initial_margin = max(0.0, total - final_available)
 
             if self.debug:
-                print(f"[GATE DEBUG] selected total equity: {total}, available: {final_available}, unrealised_pnl: {unrealised_pnl}")
+                print(
+                    f"[GATE DEBUG] selected total equity: {total}, available: {final_available}, "
+                    f"initial_margin: {initial_margin}, unrealised_pnl: {unrealised_pnl}"
+                )
 
             return {
                 'total': total,
                 'available': final_available,
+                'initial_margin': initial_margin,
                 'unrealised_pnl': unrealised_pnl
             }
 
@@ -255,14 +262,14 @@ class GateClient:
                 entry = data[0]
             if entry:
                 return _parse_entry(entry)
-            return {'total': 0.0, 'available': 0.0, 'unrealised_pnl': 0.0}
+            return {'total': 0.0, 'available': 0.0, 'initial_margin': 0.0, 'unrealised_pnl': 0.0}
 
         if isinstance(data, dict):
             return _parse_entry(data)
 
         if self.debug:
             print(f"[GATE DEBUG] get_account: unknown response shape: {type(data)}")
-        return {'total': 0.0, 'available': 0.0, 'unrealised_pnl': 0.0}
+        return {'total': 0.0, 'available': 0.0, 'initial_margin': 0.0, 'unrealised_pnl': 0.0}
     
     def get_ticker(self, contract: str) -> dict:
         """获取最新价格"""

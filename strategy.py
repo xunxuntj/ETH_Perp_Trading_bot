@@ -19,6 +19,7 @@ from config import (
     LEVERAGE, CIRCUIT_BREAKER_EQUITY, get_risk_amount,
     LOCK_PROFIT_BUFFER, FACE_VALUE,
     USE_ADX, ADX_LENGTH, ADX_THRESHOLD, ADX_TIMEFRAME, TP_RATIO, RISK_PERCENT,
+    MIN_SL_DISTANCE_PCT, MAX_SINGLE_MARGIN_RATIO, MAX_TOTAL_MARGIN_RATIO,
     get_face_value, get_tp_ratio, get_adx_threshold, get_dema_period, get_default_tick_size
 )
 
@@ -127,31 +128,50 @@ def calculate_lock_threshold(entry_price: float, qty: int, is_long: bool, risk_a
 
 
 def calculate_position_size(risk_amount: float, entry_price: float, stop_loss: float,
-                            face_value: Optional[float] = None) -> dict:
+                            face_value: Optional[float] = None,
+                            max_margin: Optional[float] = None) -> dict:
     """
-    计算开仓张数
-    
-    公式: Qty = R / |Entry - SL| / face_value (向下取整)
+    Calculate order contract quantity from risk budget with optional margin cap.
+
+    Formula: Qty = floor(R / |Entry - SL| / face_value)
+    If max_margin is provided, Qty is further capped so that
+    margin_required = (Qty * face_value * entry_price) / LEVERAGE <= max_margin.
     """
     fv = face_value if face_value is not None else FACE_VALUE
     sl_distance = abs(entry_price - stop_loss)
-    if sl_distance == 0 or risk_amount <= 0 or fv <= 0:
-        return {"qty": 0, "sl_distance": 0, "position_eth": 0, 
-                "position_value": 0, "margin_required": 0, "actual_risk": 0}
-    
-    qty = int(risk_amount / sl_distance / fv)  # 向下取整
+    if sl_distance == 0 or risk_amount <= 0 or fv <= 0 or entry_price <= 0:
+        return {"qty": 0, "sl_distance": 0, "position_eth": 0,
+                "position_value": 0, "margin_required": 0, "actual_risk": 0, "capped": False}
+
+    qty = int(risk_amount / sl_distance / fv)  # Floor to whole contracts
+    capped = False
+
+    if max_margin is not None:
+        if max_margin <= 0:
+            if qty > 0:
+                capped = True
+            qty = 0
+        else:
+            raw_margin = (qty * fv * entry_price) / LEVERAGE
+            if raw_margin > max_margin:
+                max_qty = int((max_margin * LEVERAGE) / (entry_price * fv))
+                if max_qty < qty:
+                    qty = max(0, max_qty)
+                    capped = True
+
     position_eth = qty * fv
     position_value = position_eth * entry_price
     margin_required = position_value / LEVERAGE
     actual_risk = qty * fv * sl_distance
-    
+
     return {
         "qty": qty,
         "sl_distance": sl_distance,
         "position_eth": position_eth,
         "position_value": position_value,
         "margin_required": margin_required,
-        "actual_risk": actual_risk
+        "actual_risk": actual_risk,
+        "capped": capped
     }
 
 
@@ -216,7 +236,13 @@ class TradingStrategy:
         """获取当前合约的价格单位 (order_price_round)"""
         try:
             contract_info = self.client.get_futures_contract(settle="usdt", contract=self.contract)
-            return float(contract_info.get("order_price_round", "0.01"))
+            if isinstance(contract_info, dict):
+                raw_tick = contract_info.get("order_price_round")
+                if isinstance(raw_tick, (int, float, str)):
+                    tick = float(raw_tick)
+                    if tick > 0:
+                        return tick
+            return get_default_tick_size(self.contract)
         except Exception:
             # 发生异常时根据合约名称给出安全的默认值
             return get_default_tick_size(self.contract)
@@ -230,6 +256,39 @@ class TradingStrategy:
         tick_str = f"{tick_size:.10f}".rstrip('0')
         decimals = len(tick_str.split('.')[1]) if '.' in tick_str else 0
         return round(rounded, decimals)
+
+    def _get_effective_max_margin(self, account: Optional[dict], equity: float) -> tuple:
+        """
+        Compute effective single-trade margin cap considering both single-position
+        cap (MAX_SINGLE_MARGIN_RATIO) and portfolio-wide margin cap (MAX_TOTAL_MARGIN_RATIO).
+
+        Returns:
+            (effective_max_margin, used_margin, used_ratio, portfolio_blocked)
+        """
+        if equity <= 0:
+            return 0.0, 0.0, 1.0, True
+
+        used_margin = 0.0
+        if isinstance(account, dict):
+            if account.get("initial_margin") is not None:
+                try:
+                    used_margin = max(0.0, float(account.get("initial_margin") or 0.0))
+                except Exception:
+                    used_margin = 0.0
+            elif account.get("available") is not None:
+                try:
+                    avail = float(account.get("available") or 0.0)
+                    used_margin = max(0.0, equity - avail)
+                except Exception:
+                    used_margin = 0.0
+
+        used_ratio = used_margin / equity
+        single_cap = equity * MAX_SINGLE_MARGIN_RATIO
+        total_cap = equity * MAX_TOTAL_MARGIN_RATIO
+        remaining_portfolio_margin = max(0.0, total_cap - used_margin)
+        portfolio_blocked = (used_ratio >= MAX_TOTAL_MARGIN_RATIO) or (remaining_portfolio_margin <= 0.0)
+        effective_max_margin = 0.0 if portfolio_blocked else min(single_cap, remaining_portfolio_margin)
+        return effective_max_margin, used_margin, used_ratio, portfolio_blocked
 
     def _infer_phase(self, entry_price: float, current_price: float, qty: int, 
                      last_30m_st: float, last_1h_st: float, is_long: bool,
@@ -697,7 +756,14 @@ class TradingStrategy:
         risk_amount = risk['amount']
         risk_info = risk['message']
 
-        # 开多条件: 1D 标的+BTC双重看多 + 4H CHOP<51 + 4H ER>0.40 + 30m ST绿 + 已收盘30m EMA20踩实 + (可选ADX)
+        # 实时价格与 30m ST 防倒挂及最小止损距离校验（防止未收盘K线反穿轨道导致 SL 倒挂或极窄止损放大张数）
+        tick_size = self._get_tick_size()
+        rounded_30m_st = self._round_price(last_30m_st)
+        min_sl_distance = max(tick_size * 2.0, current_price * MIN_SL_DISTANCE_PCT)
+        sl_valid_long = (rounded_30m_st is not None) and ((current_price - rounded_30m_st) >= min_sl_distance)
+        sl_valid_short = (rounded_30m_st is not None) and ((rounded_30m_st - current_price) >= min_sl_distance)
+
+        # 开多条件: 1D 标的+BTC双重看多 + 4H CHOP<51 + 4H ER>0.40 + 30m ST绿 + 已收盘30m EMA20踩实 + 实时价未穿轨 + (可选ADX)
         can_long = (
             account_available and
             not is_circuit_broken and
@@ -709,10 +775,11 @@ class TradingStrategy:
             btc_macro_1d_dir == 1 and
             last_30m_dir == 1 and
             last_30m_close >= last_ema20_30m and
+            sl_valid_long and
             adx_is_trending
         )
         
-        # 开空条件: 1D 标的+BTC双重看空 + 4H CHOP<51 + 4H ER>0.40 + 30m ST红 + 已收盘30m EMA20踩实 + (可选ADX)
+        # 开空条件: 1D 标的+BTC双重看空 + 4H CHOP<51 + 4H ER>0.40 + 30m ST红 + 已收盘30m EMA20踩实 + 实时价未穿轨 + (可选ADX)
         can_short = (
             account_available and
             not is_circuit_broken and
@@ -724,6 +791,7 @@ class TradingStrategy:
             btc_macro_1d_dir == -1 and
             last_30m_dir == -1 and
             last_30m_close <= last_ema20_30m and
+            sl_valid_short and
             adx_is_trending
         )
 
@@ -749,6 +817,7 @@ class TradingStrategy:
             f"• 4H Kaufman ER: {last_er_4h:.2f} (效率比 > 0.40): {'✅' if er_pass else '❌'}\n"
             f"• 1H ATR Z-Score: {last_atr_z_1h:.2f} (未触发闪崩 <= 3.0): {'✅' if atr_z_pass else '❌'}\n"
             f"• 30m EMA(20) 反扫荡确认 (已收盘): {'踩实 ✅' if ema20_long_pass else '未踩实 ❌'}\n"
+            f"• 实时价与 30m ST 防倒挂: {current_price:.4f} vs {rounded_30m_st:.4f} (最小间距 {min_sl_distance:.4f}): {'✅' if sl_valid_long else '❌'}\n"
             f"{adx_info_line}"
         )
 
@@ -759,6 +828,7 @@ class TradingStrategy:
             f"• 4H Kaufman ER: {last_er_4h:.2f} (效率比 > 0.40): {'✅' if er_pass else '❌'}\n"
             f"• 1H ATR Z-Score: {last_atr_z_1h:.2f} (未触发闪崩 <= 3.0): {'✅' if atr_z_pass else '❌'}\n"
             f"• 30m EMA(20) 反扫荡确认 (已收盘): {'踩实 ✅' if ema20_short_pass else '未踩实 ❌'}\n"
+            f"• 实时价与 30m ST 防倒挂: {current_price:.4f} vs {rounded_30m_st:.4f} (最小间距 {min_sl_distance:.4f}): {'✅' if sl_valid_short else '❌'}\n"
             f"{adx_info_line}"
         )
 
@@ -766,18 +836,44 @@ class TradingStrategy:
         # ============ 无持仓: 检查开仓条件 ============
         if not has_position:
             if can_long:
-                rounded_st = self._round_price(last_30m_st)
-                pos_info = calculate_position_size(risk_amount, current_price, rounded_st, face_value=contract_fv)
-                if pos_info['qty'] <= 0:
+                effective_max_margin, used_margin, used_ratio, portfolio_blocked = self._get_effective_max_margin(account, equity)
+                if portfolio_blocked:
                     return finalize(TradeResult(
                         action="none",
-                        message=f"⚠️ 开多信号满足但计算张数为 0（风险额 {risk_amount:.2f}U 不足 1 张合约，止损距离 {pos_info['sl_distance']:.4f}），跳过开仓",
-                        details={"entry": current_price, "stop_loss": rounded_st, "qty": 0, "risk_amount": risk_amount}
+                        message=(
+                            f"⚠️ 组合总保证金占用率已达 {used_ratio*100:.1f}% "
+                            f"(已用 {used_margin:.2f}U / 上限 {MAX_TOTAL_MARGIN_RATIO*100:.0f}%)，"
+                            f"拦截新开多仓以保护 IMR"
+                        ),
+                        details={
+                            "portfolio_margin_blocked": True,
+                            "used_margin": used_margin,
+                            "used_margin_ratio": used_ratio,
+                            "max_total_margin_ratio": MAX_TOTAL_MARGIN_RATIO,
+                            "equity": equity
+                        }
+                    ))
+
+                rounded_st = rounded_30m_st
+                pos_info = calculate_position_size(
+                    risk_amount, current_price, rounded_st,
+                    face_value=contract_fv, max_margin=effective_max_margin
+                )
+                if pos_info['qty'] <= 0:
+                    cap_note = "（受保证金上限约束）" if pos_info.get('capped') else ""
+                    return finalize(TradeResult(
+                        action="none",
+                        message=f"⚠️ 开多信号满足但计算张数为 0{cap_note}（风险额 {risk_amount:.2f}U，可用保证金上限 {effective_max_margin:.2f}U，止损距离 {pos_info['sl_distance']:.4f}），跳过开仓",
+                        details={
+                            "entry": current_price, "stop_loss": rounded_st, "qty": 0,
+                            "risk_amount": risk_amount, "margin_capped": pos_info.get('capped', False)
+                        }
                     ))
                 sl_dist = abs(current_price - rounded_st)
                 lock_threshold = self._round_price(current_price + LOCK_PROFIT_BUFFER * sl_dist)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
                 tp_price = self._round_price(current_price + contract_tp_ratio * sl_dist)
+                cap_suffix = " (已触发保证金上限缩容)" if pos_info.get('capped') else ""
                 
                 return finalize(TradeResult(
                     action="open_long",
@@ -804,7 +900,7 @@ class TradingStrategy:
 
 ━━━━━━━━━━ 仓位计算 ━━━━━━━━━━
 • 止损距离: {pos_info['sl_distance']:.4f}点
-• 保证金: {pos_info['margin_required']:.2f}U ({LEVERAGE}x)
+• 保证金: {pos_info['margin_required']:.2f}U ({LEVERAGE}x){cap_suffix}
 • 风险: {risk_info}
 • 锁利目标 (0.5R): {lock_threshold:.4f}
 • 限价止盈: {tp_price:.4f}""",
@@ -813,6 +909,8 @@ class TradingStrategy:
                         "stop_loss": rounded_st,
                         "qty": pos_info['qty'],
                         "actual_risk": pos_info['actual_risk'],
+                        "margin_required": pos_info['margin_required'],
+                        "margin_capped": pos_info.get('capped', False),
                         "1h_st": last_1h_st,
                         "1h_close": last_1h_close,
                         "1h_dema": last_1h_dema,
@@ -823,18 +921,44 @@ class TradingStrategy:
                 ))
             
             elif can_short:
-                rounded_st = self._round_price(last_30m_st)
-                pos_info = calculate_position_size(risk_amount, current_price, rounded_st, face_value=contract_fv)
-                if pos_info['qty'] <= 0:
+                effective_max_margin, used_margin, used_ratio, portfolio_blocked = self._get_effective_max_margin(account, equity)
+                if portfolio_blocked:
                     return finalize(TradeResult(
                         action="none",
-                        message=f"⚠️ 开空信号满足但计算张数为 0（风险额 {risk_amount:.2f}U 不足 1 张合约，止损距离 {pos_info['sl_distance']:.4f}），跳过开仓",
-                        details={"entry": current_price, "stop_loss": rounded_st, "qty": 0, "risk_amount": risk_amount}
+                        message=(
+                            f"⚠️ 组合总保证金占用率已达 {used_ratio*100:.1f}% "
+                            f"(已用 {used_margin:.2f}U / 上限 {MAX_TOTAL_MARGIN_RATIO*100:.0f}%)，"
+                            f"拦截新开空仓以保护 IMR"
+                        ),
+                        details={
+                            "portfolio_margin_blocked": True,
+                            "used_margin": used_margin,
+                            "used_margin_ratio": used_ratio,
+                            "max_total_margin_ratio": MAX_TOTAL_MARGIN_RATIO,
+                            "equity": equity
+                        }
+                    ))
+
+                rounded_st = rounded_30m_st
+                pos_info = calculate_position_size(
+                    risk_amount, current_price, rounded_st,
+                    face_value=contract_fv, max_margin=effective_max_margin
+                )
+                if pos_info['qty'] <= 0:
+                    cap_note = "（受保证金上限约束）" if pos_info.get('capped') else ""
+                    return finalize(TradeResult(
+                        action="none",
+                        message=f"⚠️ 开空信号满足但计算张数为 0{cap_note}（风险额 {risk_amount:.2f}U，可用保证金上限 {effective_max_margin:.2f}U，止损距离 {pos_info['sl_distance']:.4f}），跳过开仓",
+                        details={
+                            "entry": current_price, "stop_loss": rounded_st, "qty": 0,
+                            "risk_amount": risk_amount, "margin_capped": pos_info.get('capped', False)
+                        }
                     ))
                 sl_dist = abs(current_price - rounded_st)
                 lock_threshold = self._round_price(current_price - LOCK_PROFIT_BUFFER * sl_dist)
                 timing = " ⚡最佳入场!" if h1_just_changed else ""
                 tp_price = self._round_price(current_price - contract_tp_ratio * sl_dist)
+                cap_suffix = " (已触发保证金上限缩容)" if pos_info.get('capped') else ""
                 
                 return finalize(TradeResult(
                     action="open_short",
@@ -861,7 +985,7 @@ class TradingStrategy:
 
 ━━━━━━━━━━ 仓位计算 ━━━━━━━━━━
 • 止损距离: {pos_info['sl_distance']:.4f}点
-• 保证金: {pos_info['margin_required']:.2f}U ({LEVERAGE}x)
+• 保证金: {pos_info['margin_required']:.2f}U ({LEVERAGE}x){cap_suffix}
 • 风险: {risk_info}
 • 锁利目标 (0.5R): {lock_threshold:.4f}
 • 限价止盈: {tp_price:.4f}""",
@@ -870,6 +994,8 @@ class TradingStrategy:
                         "stop_loss": rounded_st,
                         "qty": pos_info['qty'],
                         "actual_risk": pos_info['actual_risk'],
+                        "margin_required": pos_info['margin_required'],
+                        "margin_capped": pos_info.get('capped', False),
                         "1h_st": last_1h_st,
                         "1h_close": last_1h_close,
                         "1h_dema": last_1h_dema,
@@ -916,7 +1042,8 @@ class TradingStrategy:
                 position, df_30m, df_1h, st_30m, st_1h,
                 last_1h_close, last_1h_dema, risk_amount, risk_info,
                 last_adx=last_adx, can_reverse_short=can_short,
-                is_risk=is_risk, last_1h_atr=last_1h_atr
+                is_risk=is_risk, last_1h_atr=last_1h_atr,
+                equity=equity
             ), mark_bar=False)
         
         # ============ 已持空仓（每次 5 分钟巡检实时监控，不受 30m 去重阻塞）============
@@ -925,7 +1052,8 @@ class TradingStrategy:
                 position, df_30m, df_1h, st_30m, st_1h,
                 last_1h_close, last_1h_dema, risk_amount, risk_info,
                 last_adx=last_adx, can_reverse_long=can_long,
-                is_risk=is_risk, last_1h_atr=last_1h_atr
+                is_risk=is_risk, last_1h_atr=last_1h_atr,
+                equity=equity
             ), mark_bar=False)
 
         
@@ -934,7 +1062,8 @@ class TradingStrategy:
     def _manage_long_position(self, position, df_30m, df_1h, st_30m, st_1h,
                                last_1h_close, last_1h_dema, risk_amount, risk_info,
                                last_adx: float = None, can_reverse_short: bool = False,
-                               is_risk: bool = False, last_1h_atr: float = 0.0) -> TradeResult:
+                               is_risk: bool = False, last_1h_atr: float = 0.0,
+                               equity: float = 0.0) -> TradeResult:
         """管理多仓（无状态，每次推导）"""
         contract_fv = get_face_value(self.contract)
         contract_tp_ratio = get_tp_ratio(self.contract)
@@ -1020,7 +1149,7 @@ class TradingStrategy:
                 reverse_stop=last_30m_st, risk_amount=risk_amount, risk_info=risk_info,
                 last_1h_close=last_1h_close, last_1h_dema=last_1h_dema,
                 last_1h_dir=last_1h_dir, last_30m_dir=last_30m_dir,
-                last_adx=last_adx
+                last_adx=last_adx, equity=equity
             )
 
         # 计算浮盈
@@ -1125,7 +1254,8 @@ class TradingStrategy:
     def _manage_short_position(self, position, df_30m, df_1h, st_30m, st_1h,
                                 last_1h_close, last_1h_dema, risk_amount, risk_info,
                                 last_adx: float = None, can_reverse_long: bool = False,
-                                is_risk: bool = False, last_1h_atr: float = 0.0) -> TradeResult:
+                                is_risk: bool = False, last_1h_atr: float = 0.0,
+                                equity: float = 0.0) -> TradeResult:
         """管理空仓（无状态，每次推导）"""
         contract_fv = get_face_value(self.contract)
         contract_tp_ratio = get_tp_ratio(self.contract)
@@ -1211,7 +1341,7 @@ class TradingStrategy:
                 reverse_stop=last_30m_st, risk_amount=risk_amount, risk_info=risk_info,
                 last_1h_close=last_1h_close, last_1h_dema=last_1h_dema,
                 last_1h_dir=last_1h_dir, last_30m_dir=last_30m_dir,
-                last_adx=last_adx
+                last_adx=last_adx, equity=equity
             )
 
         # 计算浮盈
@@ -1319,7 +1449,7 @@ class TradingStrategy:
                                    reverse_stop: float, risk_amount: float, risk_info: str,
                                    last_1h_close: float, last_1h_dema: float,
                                    last_1h_dir: int, last_30m_dir: int,
-                                   last_adx: float = 0.0) -> TradeResult:
+                                   last_adx: float = 0.0, equity: float = 0.0) -> TradeResult:
         """平仓并检查反手条件"""
         contract_fv = get_face_value(self.contract)
         qty = abs(position['size'])
@@ -1355,7 +1485,22 @@ class TradingStrategy:
         # 检查反手条件（需要同时满足技术条件 + 不在冷静期）
         if can_reverse and not cooldown.triggered:
             reverse_dir_cn = "多" if reverse_direction == "long" else "空"
-            pos_info = calculate_position_size(risk_amount, current_price, reverse_stop, face_value=contract_fv)
+            rounded_reverse_stop = self._round_price(reverse_stop)
+            reverse_max_margin = (equity * MAX_SINGLE_MARGIN_RATIO) if equity > 0 else None
+            pos_info = calculate_position_size(
+                risk_amount, current_price, rounded_reverse_stop,
+                face_value=contract_fv, max_margin=reverse_max_margin
+            )
+            if pos_info['qty'] <= 0:
+                self._reset_state()
+                direction_key = "long" if is_long else "short"
+                clear_position_state(direction_key, contract=self.contract)
+                return TradeResult(
+                    action="close",
+                    message=close_msg + "\n(反手计算张数为 0，仅执行平仓)",
+                    details={"pnl": pnl, "reason": reason, "reverse": False, "cooldown": False}
+                )
+            reverse_stop = rounded_reverse_stop
             lock_threshold = calculate_lock_threshold(
                 current_price, pos_info['qty'], 
                 is_long=(reverse_direction == "long"),

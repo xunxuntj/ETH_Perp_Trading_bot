@@ -131,6 +131,14 @@ RISK_FIXED_AMOUNT = float(os.environ.get("RISK_FIXED_AMOUNT", "5"))
 # 百分比模式: 单笔风险占账户资产的百分比 (按权重拆分给各标的，默认对齐交易卡片 0.8%)
 RISK_PERCENT = float(os.environ.get("RISK_PERCENT", "0.008"))  # 0.8%
 
+# 开仓与组合保证金防呆上限
+# 最小止损距离占当前价格的比例（防止未收盘K线反穿30m ST或极窄止损导致张数失控）
+MIN_SL_DISTANCE_PCT = float(os.environ.get("MIN_SL_DISTANCE_PCT", "0.002"))  # 0.2%
+# 单笔开仓最大保证金占账户权益比例（10x杠杆下 0.30 等价于单笔名义价值 <= 3.0x 权益）
+MAX_SINGLE_MARGIN_RATIO = float(os.environ.get("MAX_SINGLE_MARGIN_RATIO", "0.30"))
+# 组合总占用保证金上限（防止多币同向满仓时 IMR 逼近 100%）
+MAX_TOTAL_MARGIN_RATIO = float(os.environ.get("MAX_TOTAL_MARGIN_RATIO", "0.60"))
+
 # ============ 熔断规则 ============
 # 本金低于此值停止交易
 CIRCUIT_BREAKER_EQUITY = float(os.environ.get("CIRCUIT_BREAKER_EQUITY", "450"))
