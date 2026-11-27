@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 5
     strategy:
       fail-fast: false
+      # 严格串行巡检（按权重优先级 BTC -> ETH -> SOL -> DOGE），彻底消除多币种同时开仓的 IMR/保证金 TOCTOU 竞态
+      max-parallel: 1
       matrix:
         symbol: [BTC_USDT, ETH_USDT, SOL_USDT, DOGE_USDT]
 
@@ -46,8 +48,25 @@ jobs:
         run: |
           SYM_LOWER=$(echo "${{ matrix.symbol }}" | tr '[:upper:]' '[:lower:]')
           echo "SYM_LOWER=${SYM_LOWER}" >> $GITHUB_ENV
-          # 从 artifact 下载上次的状态（含持仓、冷静期与永久熔断锁）
-          gh run download --name trading-state-${{ matrix.symbol }} --dir . 2>/dev/null || echo '{"trade_count":0,"consecutive_losses":0}' > trading_state_${SYM_LOWER}.json
+          # 仅从本 workflow 最近完成且未被取消的 run 中定位状态 artifact，避免 ci.yml/report.yml 干扰
+          DOWNLOADED=false
+          CANDIDATE_RUNS=$(gh run list \
+            --workflow trading-external-trigger.yml \
+            --status completed \
+            --limit 10 \
+            --json databaseId,conclusion \
+            --jq ".[] | select(.databaseId != ${GITHUB_RUN_ID} and (.conclusion == \"success\" or .conclusion == \"failure\")) | .databaseId" 2>/dev/null || true)
+          for RUN_ID in $CANDIDATE_RUNS; do
+            if gh run download "$RUN_ID" --name "trading-state-${{ matrix.symbol }}" --dir . 2>/dev/null; then
+              echo "✅ Downloaded trading-state-${{ matrix.symbol }} from run ${RUN_ID}"
+              DOWNLOADED=true
+              break
+            fi
+          done
+          if [ "$DOWNLOADED" = "false" ]; then
+            echo "⚠️ No prior artifact found for trading-state-${{ matrix.symbol }}, initializing clean state"
+            echo '{"trade_count":0,"consecutive_losses":0}' > trading_state_${SYM_LOWER}.json
+          fi
           # 兼容历史大写状态文件名，统一规范为小写
           if [ -f "trading_state_${{ matrix.symbol }}.json" ] && [ ! -f "trading_state_${SYM_LOWER}.json" ]; then
             mv "trading_state_${{ matrix.symbol }}.json" "trading_state_${SYM_LOWER}.json"
